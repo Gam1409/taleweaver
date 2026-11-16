@@ -93,7 +93,9 @@ def check_story_fields(ctx: ValidationContext) -> list[ValidationFinding]:
     return findings
 
 
-def _coverage_finding(code: str, label: str, items: list[dict[str, Any]], id_of: Any):
+def _coverage_finding(
+    code: str, label: str, items: list[dict[str, Any]], id_of: Any
+) -> ValidationFinding | None:
     missing = [i for i in items if not (i.get("image_url") or "").strip()]
     if not missing:
         return None

@@ -14,6 +14,7 @@ import { ref, computed, toRef } from 'vue'
 import type { ChatMessage } from '@/types'
 import type { ConnectionStatus } from '@/composables/useGameSocket'
 import { getImageUrl } from '@/utils/game_icons'
+import { pagePortraitCues, portraitPreferences } from '@/utils/npcPresentation'
 import { useComicTurns } from '@/composables/useComicTurns'
 import ImmersiveHeader from './immersive/ImmersiveHeader.vue'
 import ImmersiveCharacterStage from './immersive/ImmersiveCharacterStage.vue'
@@ -47,6 +48,7 @@ const props = defineProps<{
   inputLocked?: boolean
   sheet?: any
   gameId?: string
+  systemDebugEnabled?: boolean
   currentSceneImage?: string | null
   adventureImage?: string | null
   currentSceneName?: string | null
@@ -86,6 +88,7 @@ const emit = defineEmits<{
   openMemories: []
   openCharacters: []
   openSettings: []
+  openWorldInfo: []
   openDebug: []
   openWalkthrough: []
   npcHover: [entityOrName: any, event: MouseEvent]
@@ -166,6 +169,9 @@ const {
   sheet: toRef(props, 'sheet'),
 })
 
+const portraitCues = computed(() => pagePortraitCues(activeTurn.value?.exchanges || []))
+const portraitOptions = computed(() => portraitPreferences(props.sheet?.portrait_preferences))
+
 // Mobile Hotspot Drawer
 const showMobileInteract = ref(false)
 
@@ -231,7 +237,7 @@ defineExpose({
     <ImmersiveHeader
       :scene-name="props.currentSceneName || props.sheet?.current_scene"
       :active-sequence="props.activeSequence"
-      :adventure-title="props.sheet?.adventure_title"
+      :adventure-title="props.sheet?.adventure_title || props.adventureTitle"
       :creator="props.sheet?.creator"
       :copyright="props.sheet?.copyright"
       :tracked-quest="props.trackedQuest"
@@ -240,24 +246,29 @@ defineExpose({
       :exp="props.exp"
       :mode="props.mode"
       :debug-mode="!!props.sheet?.debug_mode"
+      :system-debug-enabled="!!props.systemDebugEnabled"
+      :session-id="props.gameId"
       @open-chronicles="emit('openChronicles')"
       @open-quests="emit('openQuests')"
       @open-memories="emit('openMemories')"
         @open-characters="emit('openCharacters')"
       @open-settings="emit('openSettings')"
+      @open-world-info="emit('openWorldInfo')"
       @open-debug="emit('openDebug')"
       @toggle-mobile-interact="showMobileInteract = !showMobileInteract"
       @exit-session="emit('exitSession')"
     />
 
     <!-- 3. MAIN INTERACTIVE STAGE AREA -->
-    <div class="relative z-10 flex-grow min-h-0 flex flex-row gap-2 sm:gap-4 p-2 sm:p-4 lg:p-6 overflow-hidden">
+    <div class="relative z-10 flex-grow min-h-0 flex flex-col sm:flex-row gap-2 sm:gap-4 p-2 sm:p-4 lg:p-6 overflow-hidden">
       <!-- 3A. LEFT / CHARACTER STAGE -->
       <ImmersiveCharacterStage
           :mode="props.mode"
         :npcs="npcs"
         :active-speakers="activeSpeakers"
         :active-turn-index="activeTurnIndex"
+        :portrait-cues="portraitCues"
+        :portrait-preferences="portraitOptions"
         @npc-click="handleNpcClick"
         @portrait="(npc) => emit('npcPortrait', npc)"
         @npc-hover="(npc, event) => emit('npcHover', getEntityForHover(npc), event)"
@@ -266,7 +277,7 @@ defineExpose({
       />
 
       <!-- 3B. CENTER / STORY AREA WITH SCENE HOTSPOTS & COMIC FEED -->
-      <main class="flex-1 flex flex-col justify-between min-h-0 relative overflow-hidden">
+      <main class="flex-1 min-w-0 flex flex-col justify-between min-h-0 relative overflow-hidden">
         <ImmersiveSceneHotspots
           :scene-exits="props.sceneExits"
           :scene-switches="props.sceneSwitches"
@@ -333,8 +344,10 @@ defineExpose({
     </div>
 
     <!-- 4. BOTTOM ACTION BAR & USER INPUT -->
-    <footer class="relative z-20 flex flex-col bg-slate-950/95 backdrop-blur-xl border-t border-slate-800/90 shadow-[0_-10px_30px_rgba(0,0,0,0.8)] shrink-0">
+    <footer class="relative z-20 flex flex-col pb-[env(safe-area-inset-bottom)] bg-slate-950/95 backdrop-blur-xl border-t border-slate-800/90 shadow-[0_-10px_30px_rgba(0,0,0,0.8)] shrink-0">
       <ImmersiveActionBar
+        :game-id="props.gameId"
+        :is-evaluating="isEvaluating"
         :mode="props.mode"
         :inventory="props.inventory"
         :tracked-quest="props.trackedQuest"
@@ -362,6 +375,7 @@ defineExpose({
 
       <ImmersiveInputBar
         ref="inputBarRef"
+        :session-id="props.gameId"
         :can-send-input="canSendInput"
         :is-evaluating="isEvaluating"
         :status-text="props.statusText"

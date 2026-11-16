@@ -1,3 +1,4 @@
+import inspect
 import logging
 import uuid
 from collections.abc import Awaitable, Callable
@@ -76,7 +77,7 @@ class AdventureGeneratorService:
         if not catalog:
             catalog = default_image_styles_catalog()
         # Return names/IDs of styles
-        return [s.get("id") or s.get("name") for s in catalog if s.get("id") or s.get("name")]
+        return [str(s.get("id") or s.get("name")) for s in catalog if s.get("id") or s.get("name")]
 
     @staticmethod
     async def get_available_tones(user: User) -> list[str]:
@@ -94,27 +95,34 @@ class AdventureGeneratorService:
                 "Cyberpunk",
                 "Post-Apocalyptic",
             ]
-        return [t.get("id") or t.get("name") for t in catalog if t.get("id") or t.get("name")]
+        return [str(t.get("id") or t.get("name")) for t in catalog if t.get("id") or t.get("name")]
 
     @staticmethod
     async def generate_adventure(
         db: AsyncSession,
         user: User,
         request: AdventureGenerationRequest,
-        progress_callback: Callable[[str], Optional[Awaitable[None]]] = None,
+        progress_callback: Callable[[str], Awaitable[None] | None] | None = None,
     ) -> str:
         """
         Triggers the world generation and saves the new template to the user's library.
         Returns the ID of the new adventure.
         """
+
+        async def notify_progress(message: str) -> None:
+            if progress_callback is None:
+                return
+            result = progress_callback(message)
+            if inspect.isawaitable(result):
+                await result
+
         images_enabled = bool(request.generate_scene_images)
         new_id = str(uuid.uuid4())
         new_template = _create_initial_template(new_id, user, request, images_enabled)
         db.add(new_template)
         await db.flush()
 
-        if progress_callback:
-            await progress_callback("Initializing adventure generation...")
+        await notify_progress("Initializing adventure generation...")
 
         logger.info(f"Starting background generation for adventure '{request.title}' ({new_id})")
 
@@ -156,7 +164,7 @@ class AdventureGeneratorService:
                 max_sequences=getattr(request, "max_sequences", None),
                 selected_image_styles=request.selected_image_styles,
                 selected_tone=new_template.selected_tone,
-                status_callback=progress_callback,
+                status_callback=notify_progress,
             )
 
             # Re-fetch or refresh to ensure we have the latest state before final update
@@ -165,8 +173,7 @@ class AdventureGeneratorService:
             new_template.creation_status = "Ready"
             await db.flush()
 
-            if progress_callback:
-                await progress_callback("Adventure generation complete. Finalizing...")
+            await notify_progress("Adventure generation complete. Finalizing...")
 
             logger.info(f"Adventure generation successful: {new_id}")
             return new_id
@@ -183,12 +190,10 @@ class AdventureGeneratorService:
                     "You can regenerate them later in the editor."
                 )
                 await db.flush()
-                if progress_callback:
-                    await progress_callback("Adventure generation complete with image warnings.")
+                await notify_progress("Adventure generation complete with image warnings.")
                 return new_id
 
-            if progress_callback:
-                await progress_callback(f"Adventure generation failed: {e}")
+            await notify_progress(f"Adventure generation failed: {e}")
             # Ensure we update the template status so the user doesn't see it hanging
             try:
                 await db.refresh(new_template)

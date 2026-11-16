@@ -20,7 +20,12 @@ Editing the global Ollama API Host in Intelligence settings copies that URL into
 
 Model discovery is cached by effective URL. Refresh in a role queries that URL. Manual model names remain available, including for compression. Test sends the selected role and its unsaved URL, model, timeout, context size and API mode; the server restores the original settings after the request and performs no commit. New role URLs and submitted test URLs pass the existing provider URL validation, including the private-network policy.
 
-Timeout is per attempt; failed requests are retried up to 3 times. With the existing retry policy, the total can approach `4 × timeout + 4.5 seconds`. The bundled nginx proxy has a 300-second read timeout, and editor AI-fix has a separate `AI_FIX_SUGGEST_TIMEOUT_SECONDS` watchdog (90 seconds by default).
+Timeout is per attempt. Guarded self-hosted requests do not automatically retry an
+unconfirmed transport failure. Other provider paths may retry transient failures;
+see [inference queue](inference-queue.md). A proxy can impose a shorter timeout.
+Editor AI Fix inherits the selected role's timeout by default. An explicitly set
+`AI_FIX_SUGGEST_TIMEOUT_SECONDS` remains a separate watchdog; remove a legacy
+`=90` entry from your environment to inherit the configured role deadline.
 
 ## Routing and compatibility
 
@@ -105,7 +110,7 @@ The specification's 30 original locations map to the following current code. Sev
 
 ## Remaining limitations
 
-The global legacy `ollama_url` still lacks save-time and router-time SSRF validation. This task validates the new role URLs and submitted test URLs without changing that older policy. `AI_FIX_FALLBACK_PROVIDER=openai` with the default `gpt-4o-mini` can send adventure content to a cloud service after a local failure if an OpenAI key is configured; setting the fallback provider to an empty value disables that environment fallback. Image, TTS and STT providers are unchanged. No dependency lock files were modified.
+The global legacy `ollama_url` still lacks save-time and router-time SSRF validation. This task validates the new role URLs and submitted test URLs without changing that older policy. The additional AI-Fix environment fallback is now disabled by default. Explicitly setting `AI_FIX_FALLBACK_PROVIDER=openai` can send adventure content to that service; see [AI-Fix provider policy](ai-fix-providers.md). Image, TTS and STT providers are unchanged. No dependency lock files were modified.
 
 ## Discovering models for a role URL
 

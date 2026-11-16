@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from backend.engine.memory_rag import scheduling, worker
+from backend.engine.memory_rag import dirty_queue, scheduling, worker
 from backend.engine.memory_rag.scheduling import IdleScheduler, foreground_turn
 from backend.models.memory_rag import MemoryIndexState
 from tests.conftest import TestSessionLocal
@@ -65,8 +65,8 @@ async def test_foreground_never_waits_for_active_job_or_remaining_backlog():
 async def test_stream_failure_releases_foreground_and_queues_canonical_update(monkeypatch):
     scheduler = IdleScheduler(grace_seconds=0)
     monkeypatch.setattr(scheduling, "scheduler", scheduler)
-    update = AsyncMock()
-    monkeypatch.setattr(worker, "request_update", update)
+    update = MagicMock()
+    monkeypatch.setattr(dirty_queue, "queue_refresh", update)
     manager = SimpleNamespace(
         game_id="session",
         state=SimpleNamespace(session_id="session"),
@@ -83,10 +83,12 @@ async def test_stream_failure_releases_foreground_and_queues_canonical_update(mo
         async for _ in stream(manager):
             pass
     assert scheduler.active_turns == 0
-    update.assert_awaited_once_with("session", "owner")
+    update.assert_called_once_with("session", "owner")
 
 
 async def test_memory_database_failure_does_not_fail_foreground_stream(monkeypatch):
+    queue = MagicMock()
+    monkeypatch.setattr(dirty_queue, "queue_refresh", queue)
     scheduler = IdleScheduler(grace_seconds=0)
     monkeypatch.setattr(scheduling, "scheduler", scheduler)
     monkeypatch.setattr(
@@ -105,6 +107,8 @@ async def test_memory_database_failure_does_not_fail_foreground_stream(monkeypat
         yield "final"
 
     assert [chunk async for chunk in stream(manager)] == ["final"]
+    queue.assert_called_once_with("session", "owner")
+    await worker.request_update("session", "owner")
     assert scheduler.active_turns == 0
 
 
@@ -118,8 +122,8 @@ async def test_memory_database_failure_does_not_fail_foreground_stream(monkeypat
 async def test_uninitialized_turn_skips_maintenance_and_releases_priority(monkeypatch, state, user):
     scheduler = IdleScheduler(grace_seconds=0)
     monkeypatch.setattr(scheduling, "scheduler", scheduler)
-    update = AsyncMock()
-    monkeypatch.setattr(worker, "request_update", update)
+    update = MagicMock()
+    monkeypatch.setattr(dirty_queue, "queue_refresh", update)
     manager = SimpleNamespace(game_id="session", state=state, user=user)
 
     @foreground_turn
@@ -127,7 +131,7 @@ async def test_uninitialized_turn_skips_maintenance_and_releases_priority(monkey
         yield "error"
 
     assert [chunk async for chunk in stream(manager)] == ["error"]
-    update.assert_not_awaited()
+    update.assert_not_called()
     assert scheduler.active_turns == 0
 
 
@@ -222,3 +226,34 @@ async def test_paused_worker_runs_chronicle_without_embedding(journal_world, mon
     assert not await worker._step(claim)
     index.assert_not_awaited()
     summarize.assert_awaited_once_with(claim, chronicle=True)
+
+
+@pytest.mark.parametrize("uncertain", [True, False])
+async def test_inference_admission_defers_memory_without_failure_backoff(
+    journal_world, monkeypatch, uncertain
+):
+    from backend.core.inference.registry import InferenceQueueError, InferenceUncertainError
+
+    owner, _ = journal_world
+    async with TestSessionLocal() as db:
+        await worker.mark_dirty(db, "portrait-session", owner, None)
+        await db.commit()
+    claim = await worker._claim("portrait-session", owner)
+    error = InferenceUncertainError("blocked") if uncertain else InferenceQueueError("busy")
+    monkeypatch.setattr(worker, "_step", AsyncMock(side_effect=error))
+    failed = AsyncMock()
+    monkeypatch.setattr(worker, "_failed", failed)
+    assert not await worker._process_claim(claim)
+    failed.assert_not_awaited()
+    async with TestSessionLocal() as db:
+        row = await db.get(MemoryIndexState, "portrait-session")
+        assert row.status == "pending"
+        assert row.lease_token is None and row.lease_until is None
+        assert "Waiting for inference queue" in row.last_error
+        assert row.indexed_revision < row.desired_revision
+    # Once admission is available, the next idle schedule can claim the pending work.
+    resumed = await worker._claim("portrait-session", owner)
+    assert resumed is not None
+    monkeypatch.setattr(worker, "_step", AsyncMock(return_value=False))
+    assert not await worker._process_claim(resumed)
+    await worker._release(resumed)

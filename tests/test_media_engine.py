@@ -8,6 +8,9 @@ from backend.core import prompts
 from backend.engine import bfl_payloads
 from backend.engine import media_engine as media_engine_module
 from backend.engine.media_engine import MediaEngine
+from tests.test_comfyui import workflow
+
+__all__ = ["workflow"]
 
 pytestmark = pytest.mark.asyncio
 
@@ -478,3 +481,98 @@ async def test_generate_thumbnail_handles_svg_with_png_extension(tmp_path, monke
     assert thumb_path.endswith("_thumb.png")
     with open(thumb_path, encoding="utf-8") as f:
         assert "<svg" in f.read()
+
+
+@pytest.mark.parametrize("image_format", ["png", "jpeg"])
+async def test_image_decode_and_save_runs_off_event_loop(tmp_path, monkeypatch, image_format):
+    import base64
+    import io
+    import threading
+
+    from PIL import Image
+
+    from backend.engine import media_file_operations
+
+    monkeypatch.setattr("backend.engine.media_engine.settings.DATA_DIR", str(tmp_path))
+    buffer = io.BytesIO()
+    with Image.new("RGBA", (24, 16), (10, 20, 30, 255)) as source:
+        source.save(buffer, "PNG")
+    payload = base64.b64encode(buffer.getvalue()).decode()
+    loop_thread = threading.get_ident()
+    original_open = media_file_operations.Image.open
+    worker_threads = []
+
+    def open_image(*args, **kwargs):
+        worker_threads.append(threading.get_ident())
+        return original_open(*args, **kwargs)
+
+    monkeypatch.setattr(media_file_operations.Image, "open", open_image)
+    result = await MediaEngine._save_b64_image(
+        payload, str(tmp_path / "images"), filename="test", image_format=image_format
+    )
+    assert result
+    extension = "jpg" if image_format == "jpeg" else "png"
+    image_path = tmp_path / "images" / f"test.{extension}"
+    assert image_path.is_file()
+    assert image_path.with_name(f"test_thumb.{extension}").is_file()
+    assert worker_threads and all(thread != loop_thread for thread in worker_threads)
+    with original_open(image_path) as saved:
+        assert saved.size == (24, 16)
+
+
+def _comfy_options(workflow, rules, prepared=True):
+    return {
+        "comfyui_profile": "advanced",
+        "comfyui_presets": {
+            "story-art": {
+                "name": "Story",
+                "generate": workflow,
+                "prompt_rules": rules,
+            }
+        },
+        "comfyui_assignments": {"advanced": "story-art"},
+        "_prompt_prepared": prepared,
+    }
+
+
+def test_prepare_prompt_appends_style_to_manual_tags_body(workflow):
+    """A distilled NSFW frame must still carry the selected style for ComfyUI tags."""
+    from backend.engine.media_generation import _prepare_prompt
+
+    options = _comfy_options(workflow, {"format": "tags", "language": "English"})
+    result = _prepare_prompt(
+        MediaEngine, "1 people, Лина, red coat", "comfyui", options, "soft watercolor style"
+    )
+    assert result == "1 people, Лина, red coat, soft watercolor style"
+
+
+def test_prepare_prompt_appends_style_to_manual_description_body(workflow):
+    from backend.engine.media_generation import _prepare_prompt
+
+    options = _comfy_options(workflow, {"format": "description", "language": "English"})
+    result = _prepare_prompt(
+        MediaEngine,
+        "Anna rests on the bed.",
+        "comfyui",
+        options,
+        "soft watercolor style",
+    )
+    assert result == "Anna rests on the bed. Style: soft watercolor style."
+
+
+def test_prepare_prompt_does_not_duplicate_existing_style(workflow):
+    from backend.engine.media_generation import _prepare_prompt
+
+    options = _comfy_options(workflow, {"format": "tags", "language": "English"})
+    body = "1 people, Лина, red coat, Soft Watercolor Style"
+    assert (
+        _prepare_prompt(MediaEngine, body, "comfyui", options, "soft watercolor style") == body
+    )
+
+
+def test_prepare_prompt_without_style_stays_unchanged(workflow):
+    from backend.engine.media_generation import _prepare_prompt
+
+    options = _comfy_options(workflow, {"format": "tags", "language": "English"})
+    body = "1 people, Лина, red coat"
+    assert _prepare_prompt(MediaEngine, body, "comfyui", options, "") == body

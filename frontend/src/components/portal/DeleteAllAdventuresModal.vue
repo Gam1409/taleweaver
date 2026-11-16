@@ -11,8 +11,8 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-    <div class="w-full max-w-md rounded-2xl bg-slate-900 border border-white/10 shadow-2xl overflow-hidden" @click.stop>
+  <div class="workspace-dialog-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+    <div class="workspace-dialog w-full max-w-md rounded-2xl bg-slate-900 border border-white/10 shadow-2xl overflow-hidden" @click.stop>
       <div class="px-6 py-5 border-b border-white/10">
         <h3 class="text-lg font-black text-white font-display">Delete all adventures</h3>
         <p class="text-sm text-slate-300 mt-1">This action cannot be undone.</p>

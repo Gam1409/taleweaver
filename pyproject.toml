@@ -1,17 +1,17 @@
 [project]
 name = "taleweaver"
-version = "0.5.0"
+version = "0.7.1b0"
 description = "AI-powered text and role-playing adventure game engine"
 authors = [
     {name = "Jean Schmitz"}
 ]
 readme = "README.md"
-requires-python = ">=3.10,<3.14"
+requires-python = ">=3.11,<3.14"
 dependencies = [
-    "fastapi>=0.115.0",
+    "fastapi>=0.118.0",
     "uvicorn[standard]>=0.30.0",
     "gunicorn>=22.0.0",
-    "sqlalchemy>=2.0.0",
+    "sqlalchemy[asyncio]>=2.0.0",
     "aiosqlite>=0.20.0",
     "uuid6>=2024.0.0",
     "pydantic>=2.7.0",
@@ -19,20 +19,32 @@ dependencies = [
     "cryptography>=42.0.0",
     "litellm>=1.88.6",
     "alembic>=1.13.0",
-    "pillow>=10.0.0",
+    "pillow>=13.0.0",
     "python-multipart>=0.0.9",
     "passlib[bcrypt]>=1.7.4",
     "pyjwt>=2.8.0",
     "httpx>=0.27.0",
+    "httpcore>=1.0.9,<2",
     "lancedb>=0.40.0",
     "faster-whisper (>=1.0.0)",
+    "defusedxml (>=0.7.1,<0.8)",
+]
+
+[project.optional-dependencies]
+concordia = ["gdm-concordia==2.4.0; python_version >= '3.12'"]
+desktop = [
+    "pystray>=0.19.5,<0.20",
+    "platformdirs>=4.3",
+    "filelock>=4.2.1",
+    "PyGObject>=3.48,<3.51; sys_platform == 'linux'",
 ]
 
 [project.scripts]
+taleweaver-desktop = "desktop.entrypoint:main"
 taleweaver = "backend.main:start"
 
 [tool.poetry]
-packages = [{include = "backend"}]
+packages = [{include = "backend"}, {include = "desktop"}, {include = "scripts"}]
 
 [tool.poetry.group.dev.dependencies]
 pytest = ">=8.0.0"
@@ -44,6 +56,14 @@ flake8 = ">=7.0.0"
 types-pillow = ">=10.0.0"
 types-python-jose = ">=3.3.0"
 types-cryptography = ">=3.3.0"
+pyarrow-stubs = ">=20.0.0"
+
+[tool.poetry.group.packaging]
+optional = true
+
+[tool.poetry.group.packaging.dependencies]
+pyinstaller = ">=6.18,<7"
+psutil = ">=7.0"
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
@@ -78,7 +98,8 @@ exclude = [
 # C90: mccabe (cyclomatic complexity)
 # S: flake8-bandit (security checks: injections, shell executions, unsafe deserialization)
 # SIM: flake8-simplify (clean control flow, eliminating nested ifs and redundant boolean logic)
-select = ["E", "W", "F", "B", "I", "N", "UP", "PL", "C90", "S", "SIM"]
+# ASYNC230/ASYNC240: keep blocking file operations out of async request handlers
+select = ["E", "W", "F", "B", "I", "N", "UP", "PL", "C90", "S", "SIM", "ASYNC230", "ASYNC240"]
 
 # Streamlined ignores to eliminate noisy/superficial warnings and reduce false positives:
 # E501: line-too-long (handled by ruff formatter / soft wrap)
@@ -107,8 +128,9 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 # Tests allow assert, hardcoded test passwords/tokens, and unused fixture args
 "tests/*" = ["S101", "S105", "S106", "ARG001", "F841", "PLR0133", "N802", "N806"]
+"desktop/tests/*" = ["S101", "S105", "S106", "ARG001", "F841", "PLR0133", "N802", "N806"]
 "alembic/*" = ["C901", "PLR0912", "PLR0915", "UP007", "UP035"]
-"backend/api/routes/adventures/gameplay_logic.py" = ["E701", "I001", "C901", "PLR0911", "PLR0912", "PLR0915", "PLR1714"]
+"backend/engine/gameplay/manager.py" = ["E701", "I001", "C901", "PLR0911", "PLR0912", "PLR0915", "PLR1714"]
 "backend/engine/scripting/sandbox.py" = ["N802", "N815", "C901", "PLR0911"]
 "backend/core/prompts.py" = ["S608"]
 "scripts/*" = ["C901", "PLR0912", "PLR0915", "E402", "S603", "S607"]
@@ -127,6 +149,7 @@ max-returns = 6
 max-statements = 50
 
 [tool.mypy]
+mypy_path = "typings"
 python_version = "3.10"
 exclude = [
     "venv",

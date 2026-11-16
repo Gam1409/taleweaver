@@ -4,6 +4,7 @@
  * with optional TTS and inline Retry/Cancel actions for failed turns.
  */
 import { computed } from 'vue'
+import { proseDirection } from '@/utils/sessionTypography'
 import { configState } from '@/store/config'
 import { renderFormattedHtml } from '@/composables/useComicTurns'
 import { useStoryBubbleAudio } from '@/composables/useStoryBubbleAudio'
@@ -90,7 +91,7 @@ const cleanContent = computed(() => {
           {{ isError ? 'Error' : isDebug ? 'Debug' : 'System' }}
         </span>
         <pre v-if="isDebug && (props.msg.content.includes('\n') || props.msg.content.length > 90)" class="mt-2 p-3 rounded-xl bg-black/60 border border-cyan-500/20 text-cyan-300/90 text-xs font-mono whitespace-pre-wrap break-all custom-scrollbar">{{ props.msg.content }}</pre>
-        <span v-else class="italic font-medium" :class="{ 'font-mono text-xs text-cyan-200/90 not-italic': isDebug }" v-html="renderFormattedHtml(cleanContent)"></span>
+        <span v-else class="italic font-medium" :dir="isDebug ? 'ltr' : proseDirection(cleanContent)" :class="isDebug ? 'font-mono text-xs text-cyan-200/90 not-italic' : 'comic-bubble-text'" v-html="renderFormattedHtml(cleanContent)"></span>
       </div>
 
       <!-- Inline Action Buttons (Retry & Cancel) -->
@@ -119,7 +120,7 @@ const cleanContent = computed(() => {
 
 <style scoped>
 .comic-narration-text {
-  font-family: 'Acme', sans-serif;
+  font-family: var(--session-font, 'Alegreya Sans'), sans-serif;
   letter-spacing: 0.02em;
 }
 

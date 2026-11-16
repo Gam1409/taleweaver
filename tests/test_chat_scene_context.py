@@ -36,7 +36,9 @@ async def test_new_chat_messages_get_current_scene_and_sequence(setup_test_db):
         await db.flush()
         state.current_scene_id = "BASEMENT"
         state.active_sequence_id = "SEQ_2"
-        second = ChatMessage(session_id=state.session_id, role="assistant", content="Dark basement.")
+        second = ChatMessage(
+            session_id=state.session_id, role="assistant", content="Dark basement."
+        )
         db.add(second)
         await db.flush()
 
@@ -47,8 +49,11 @@ async def test_new_chat_messages_get_current_scene_and_sequence(setup_test_db):
             "id": second.id,
             "role": "assistant",
             "content": "Dark basement.",
+            "is_debug": False,
             "scene_id": "BASEMENT",
             "sequence_id": "SEQ_2",
+            "revision_id": second.revision_id,
+            "portrait_state": None,
         }
 
 

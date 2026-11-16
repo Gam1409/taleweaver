@@ -11,12 +11,48 @@ In **Admin → Intelligence → Local Endpoints & Memory → Local & Custom API 
 3. For loopback/LAN endpoints, explicitly set `ALLOW_PRIVATE_NETWORK_MODELS=true` in the server environment or `.env`, then restart TaleWeaver. Custom endpoints require this explicit opt-in even though legacy local providers may allow private networks by default. Metadata/link-local destinations and redirects are rejected even with this setting enabled. Public deployments should keep private-network access disabled.
 4. Leave the API key unset for an unauthenticated server. For a protected server, use **Add optional API key in Provider Vault**, save the key under **OpenAI-Compatible API**, then return to Intelligence. Keys use the existing encrypted vault and do not belong in the Base URL.
 5. Choose **Detect Models**, or enter the exact **Custom Model ID** in each pass. Detection uses `<base>/models`; servers without that endpoint still support manual selection. Model IDs retain vendor slashes, including IDs starting with `openai/`.
-6. Select **OpenAI-Compatible API** for mechanics, narrative, worldbuilder, play agent, and/or compression. Save the settings before clicking **Test Model**. Testing sends a small real structured completion to the saved endpoint, using the selected output mode, and validates a JSON object containing a message. This checks the JSON path used by mechanics rather than only text connectivity.
+6. Select **OpenAI-Compatible API** for mechanics, narrative, worldbuilder, play agent, and/or compression. Discovery and **Test Model** use the current URL and model fields, including unsaved role overrides. Testing sends a small real structured completion and validates a JSON object containing a message. Save changes to the API key, timeout or structured output mode before testing those options. Save routing before playing with the new configuration.
+
+## Shared address and individual roles
+
+The shared **Base URL** is the default for all five roles. Each role using
+**OpenAI-Compatible API** has a collapsible **API URL for this role** field:
+
+- Leave it blank to follow the shared address.
+- Enter a different `/v1` address to use another server for that role. For example,
+  use a technical model for mechanics and a prose model for the narrator.
+- Changing the shared address preserves explicit role overrides. **Use shared API
+  URL for all roles** clears those overrides while preserving each selected
+  provider and model. Roles using another provider retain that provider.
+
+Discovery results and loading indicators belong to each endpoint, so one role
+cannot accidentally show another server's model list. A manual model ID works
+when discovery is unavailable. The connection test uses that same effective role
+URL; an unsaved test does not persist it. Normal generation uses saved routing.
+All these servers share the existing `custom_openai` vault key, timeout and output
+mode; per-server keys and separate output modes are not part of this change.
+Other provider configurations, including official OpenAI, remain separate.
 
 In Docker, `127.0.0.1` is the container itself. Use `host.docker.internal` where supported, or a deliberately configured host gateway/container network address. Ensure the inference server listens on an interface reachable from TaleWeaver. Restrict its exposure using firewall rules and authentication.
 
 The request timeout defaults to 300 seconds and is editable up to 3600 seconds; it also controls the initial and idle streaming timeouts. Existing per-pass output token settings remain in effect. The server determines the actual context limit.
 
-Custom structured requests always include the JSON schema in the prompt. **Structured output support** defaults to **Prompt only** for compatibility. If your server supports it, choose **JSON object** to request JSON syntax or **JSON schema** to request the complete schema through `response_format`. The latter can improve reliability for mechanics and worldbuilding. Unsupported selected modes produce a server error; change back to Prompt only rather than assuming support from `/models`. No tool-calling support is required. TaleWeaver still parses and validates the response using the requested Pydantic schema, and reports invalid output as an error. This improves compatibility but does not guarantee that every local model can satisfy complex tasks.
+**Structured output support** defaults to **Prompt only** for compatibility. Prompt only and **JSON object** include the complete canonical schema in the prompt; JSON object also requests JSON syntax through `response_format`. If your server supports **JSON schema**, TaleWeaver sends a structural decoder schema through `response_format` and keeps canonical descriptions, defaults, examples and deferred validation rules in the prompt. Identical schema nodes can share local `$defs` references to reduce duplication. Scoped, recursive or unrecognized contracts retain the complete canonical prompt when a smaller representation cannot be proven safe. No narrative, source data or domain instructions are removed.
+
+Native schema mode requires the server to support the schema keywords and local `$defs` references it receives. Token and context accounting varies by server; native mode does not establish the available context. Where a prepared-request character limit is configured, it conservatively counts both messages and the response schema. Unsupported selected modes produce a server error; change back to Prompt only rather than assuming support from `/models`. NPC Personality technical requests honor the same selection, including observer-specific identifier constraints. Freeform narration does not send `response_format`, and structured output does not require tool-calling support. TaleWeaver still parses and validates the response using the canonical Pydantic schema. Schema equivalence and transport tests do not establish a model's semantic accuracy or ability to follow complex instructions.
+
+NPC requests expand finite dictionary keys into explicit optional properties in
+the transport schema because some grammar backends ignore `propertyNames`.
+The prompt retains its canonical field guidance and its existing input budget.
+Backend validation still checks candidate counts, unique motives, source ownership
+and literal evidence; a server grammar does not establish semantic correctness.
+
+Before requesting a model retry, the NPC parser can correct a known singular
+`choice.motive_id` into `choice.motive_ids` when the canonical field is absent
+and the exact ID occurs in the observer's current motive catalogue. The correction
+copies the same value into a one-element list and changes no story content.
+Conflicting fields, unknown IDs, malformed JSON and missing decisions are rejected.
+Corrections are logged without story text and counted separately as **Local format
+corrections**; all normal schema and semantic checks still apply afterwards.
 
 Detection errors distinguish authentication failure, missing `/models`, timeout, and invalid/unreachable endpoints. Check the Base URL, the server log, the optional vault key, and container networking before retrying. Detection failure does not disable manual IDs. Requests never fall back to cloud OpenAI or OpenRouter.

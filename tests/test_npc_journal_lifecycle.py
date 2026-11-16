@@ -198,7 +198,7 @@ async def test_extraction_timeout_is_recoverable(journal_world, monkeypatch, aut
         finally:
             cancelled.set()
 
-    monkeypatch.setattr(worker, "EXTRACTION_TIMEOUT", 0.02)
+    monkeypatch.setattr(worker, "role_timeout", lambda *_: 0.02)
     monkeypatch.setattr(worker, "extract", slow)
     assert not await worker.process_message(message_id, owner)
     assert cancelled.is_set()

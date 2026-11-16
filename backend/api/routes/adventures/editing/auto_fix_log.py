@@ -82,4 +82,4 @@ def append_validation_log(adventure: AdventureTemplate, entry: dict[str, Any]) -
     """Append the entry to the template's generation log (caller commits)."""
     logs = list(adventure.generation_logs or [])
     logs.append(entry)
-    adventure.generation_logs = logs  # type: ignore[assignment]
+    adventure.generation_logs = logs

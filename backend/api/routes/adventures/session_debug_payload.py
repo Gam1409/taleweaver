@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from typing import Any
 
 from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.elements import ColumnElement
 
+from backend.engine.debug_npc_tools import wardrobe_info
+from backend.engine.physical_conditions.debug import view as condition_view
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.avatar import Avatar
 from backend.models.session_state import SessionState
@@ -27,7 +31,7 @@ _NPC_RESOURCE_DEFAULTS = (
 _STAT_FIELDS = ("strength", "dexterity", "intelligence", "wisdom", "charisma", "armor_class")
 
 
-def _session_or_template(model: Any, state: SessionState):
+def _session_or_template(model: Any, state: SessionState) -> ColumnElement[bool]:
     """Rows of the session plus the template rows not shadowed by a session copy."""
     return or_(
         model.session_id == state.session_id,
@@ -35,7 +39,9 @@ def _session_or_template(model: Any, state: SessionState):
     )
 
 
-def _prefer_session_rows(rows: list[Any], key_fn, session_id: str) -> dict[str, Any]:
+def _prefer_session_rows(
+    rows: list[Any], key_fn: Callable[[Any], Any], session_id: str
+) -> dict[str, Any]:
     lookup: dict[str, Any] = {}
     for row in rows:
         key = key_fn(row)
@@ -102,16 +108,27 @@ def _build_npc_info(
         "inventory": override.get("inventory", getattr(ent, "inventory", None) or []),
         "notes": override.get("notes") or getattr(ent, "notes", None) or "",
         "moveable": _npc_is_moveable(ent, override),
-        "allowed_scenes": override.get("allowed_scenes") or getattr(ent, "allowed_scenes", None) or [],
+        "allowed_scenes": override.get("allowed_scenes")
+        or getattr(ent, "allowed_scenes", None)
+        or [],
         "is_in_current_scene": loc_id == current_scene_id,
-        "stats": {
-            stat: getattr(ent, f"stat_modifier_{stat}", 0) or 10 for stat in _STAT_FIELDS
-        },
+        "stats": {stat: getattr(ent, f"stat_modifier_{stat}", 0) or 10 for stat in _STAT_FIELDS},
     }
 
 
 def _scene_npc_summary(npc: dict[str, Any]) -> dict[str, Any]:
-    keys = ("id", "name", "image_url", "hp", "max_hp", "is_alive", "is_hidden", "notes", "moveable", "allowed_scenes")
+    keys = (
+        "id",
+        "name",
+        "image_url",
+        "hp",
+        "max_hp",
+        "is_alive",
+        "is_hidden",
+        "notes",
+        "moveable",
+        "allowed_scenes",
+    )
     return {key: npc[key] for key in keys}
 
 
@@ -202,7 +219,9 @@ def _build_items_matrix(
     return items
 
 
-def _build_exits_data(exit_lookup: dict[str, WorldExit], exit_overrides: dict[str, Any]) -> list[dict[str, Any]]:
+def _build_exits_data(
+    exit_lookup: dict[str, WorldExit], exit_overrides: dict[str, Any]
+) -> list[dict[str, Any]]:
     exits = []
     for ex in exit_lookup.values():
         override = exit_overrides.get(ex.id, {})
@@ -310,24 +329,42 @@ async def _load_blueprint(db: AsyncSession, template_id: str) -> dict[str, Any] 
         return None
 
 
-async def _load_world(db: AsyncSession, state: SessionState):
+async def _load_world(
+    db: AsyncSession, state: SessionState
+) -> tuple[dict[str, WorldScene], dict[str, WorldExit], dict[str, WorldEntity]]:
     scenes = (
-        await db.execute(
-            select(WorldScene).where(_session_or_template(WorldScene, state)).order_by(WorldScene.id)
+        (
+            await db.execute(
+                select(WorldScene)
+                .where(_session_or_template(WorldScene, state))
+                .order_by(WorldScene.id)
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     exits = (
-        await db.execute(select(WorldExit).where(_session_or_template(WorldExit, state)))
-    ).scalars().all()
+        (await db.execute(select(WorldExit).where(_session_or_template(WorldExit, state))))
+        .scalars()
+        .all()
+    )
     entities = (
-        await db.execute(
-            select(WorldEntity).where(_session_or_template(WorldEntity, state)).order_by(WorldEntity.id)
+        (
+            await db.execute(
+                select(WorldEntity)
+                .where(_session_or_template(WorldEntity, state))
+                .order_by(WorldEntity.id)
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     session_id = state.session_id
     return (
         _prefer_session_rows(list(scenes), lambda s: s.id, session_id),
-        _prefer_session_rows(list(exits), lambda ex: f"{ex.from_scene_id}->{ex.to_scene_id}", session_id),
+        _prefer_session_rows(
+            list(exits), lambda ex: f"{ex.from_scene_id}->{ex.to_scene_id}", session_id
+        ),
         _prefer_session_rows(list(entities), lambda ent: ent.id, session_id),
     )
 
@@ -348,6 +385,10 @@ async def build_session_debug_payload(
         for ent in entity_lookup.values()
         if ent.entity_type == "NPC"
     ]
+    for npc in npcs_data:
+        npc["wardrobe"] = wardrobe_info(
+            entity_lookup[npc["id"]], list(entity_lookup.values()), entity_overrides
+        )
     scene_npcs: dict[str, list[dict[str, Any]]] = {s_id: [] for s_id in scene_lookup}
     for npc in npcs_data:
         scene_npcs.setdefault(npc["current_scene_id"], []).append(_scene_npc_summary(npc))
@@ -370,6 +411,7 @@ async def build_session_debug_payload(
     return {
         "session": _session_section(state, adventure, scene_names),
         "avatar": _avatar_section(avatar),
+        "physical_conditions": condition_view(state, npcs_data, items_data, avatar),
         "npcs": npcs_data,
         "scene_npcs": scene_npcs,
         "items": items_data,
@@ -379,6 +421,6 @@ async def build_session_debug_payload(
             "current_scene_id": state.current_scene_id,
             "scene_npcs": scene_npcs,
         },
-        "blueprint": await _load_blueprint(db, state.template_id),
+        "blueprint": await _load_blueprint(db, state.template_id) if state.template_id else None,
         **_runtime_sections(state, avatar),
     }

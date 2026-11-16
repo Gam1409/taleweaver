@@ -1,7 +1,11 @@
-import uuid6
-from sqlalchemy import JSON, Column, ForeignKey, String, Text, event, inspect
-from sqlalchemy.orm import Session
+from collections.abc import Iterable
+from typing import Any
 
+import uuid6
+from sqlalchemy import JSON, Boolean, ForeignKey, String, Text, event, false, inspect
+from sqlalchemy.orm import Mapped, Session, UOWTransaction, mapped_column
+
+from backend.core.npc_presentation import public_cues
 from backend.models.base import Base, TimestampMixin
 from backend.models.session_state import SessionState
 
@@ -13,31 +17,53 @@ class ChatMessage(Base, TimestampMixin):
 
     __tablename__ = "chat_messages"
 
-    id = Column(String(36), primary_key=True, default=lambda: str(uuid6.uuid7()))
-    session_id = Column(String(36), ForeignKey("game_sessions.id"), nullable=False)
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid6.uuid7())
+    )
+    session_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("game_sessions.id"), nullable=False
+    )
 
     # "user", "assistant", or "system"
-    role = Column(String(20), nullable=False)
+    role: Mapped[str] = mapped_column(String(20), nullable=False)
 
     # The actual message payload
-    content = Column(Text, nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    is_debug: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=false(), nullable=False
+    )
 
     # Scene and sequence the message was written in. The client groups the story into
     # one page per scene/sequence. Stamped automatically on flush (see below).
-    scene_id = Column(String(100), nullable=True)
-    sequence_id = Column(String(100), nullable=True)
+    scene_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    sequence_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
     # Durable optional background extraction task; old narration is not rescanned implicitly.
-    npc_journal = Column(JSON, nullable=True)
+    npc_journal: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    # Source-bound catch-up cursors are independent of the optional public journal worker.
+    npc_recovery: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
 
-    def to_client_dict(self) -> dict:
+    illustration: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    portrait_state: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+
+    revision_id: Mapped[str | None] = mapped_column(
+        String(36), nullable=True, default=lambda: str(uuid6.uuid7())
+    )
+    versions: Mapped[list[dict[str, Any]] | None] = mapped_column(JSON, nullable=True)
+
+    def to_client_dict(self) -> dict[str, Any]:
         """Chat history entry as sent to the client."""
         return {
             "id": self.id,
             "role": self.role,
             "content": self.content,
+            "is_debug": bool(self.is_debug),
             "scene_id": self.scene_id,
             "sequence_id": self.sequence_id,
+            "revision_id": self.revision_id,
+            "portrait_state": public_cues(self.portrait_state, self.content)
+            if self.role == "assistant"
+            else None,
         }
 
 
@@ -51,7 +77,9 @@ def _loaded_session_states(session: Session) -> dict[str, SessionState]:
 
 
 @event.listens_for(Session, "before_flush")
-def _stamp_chat_scene_context(session: Session, _flush_context, _instances) -> None:
+def _stamp_chat_scene_context(
+    session: Session, _flush_context: UOWTransaction, _instances: Iterable[object] | None
+) -> None:
     """Stamps new chat messages with the session's current scene and sequence.
 
     Uses the SessionState already loaded in this DB session (the turn pipeline always has

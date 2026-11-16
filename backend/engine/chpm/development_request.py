@@ -1,0 +1,94 @@
+"""Rare consolidation shares the proposal call; oversized optional work is visibly deferred."""
+
+from typing import Literal, NamedTuple
+
+from backend.engine.chpm import (
+    appraisal_context,
+    cognitive_context,
+    development,
+    development_context,
+    motivation,
+    proposal_draft,
+)
+from backend.engine.chpm.appraisal_contracts import GroundedProposal
+from backend.engine.chpm.core.contracts import Belief
+from backend.engine.chpm.development_contracts import DevelopmentProposal
+from backend.engine.chpm.host_state import Mind, Source
+from backend.engine.chpm.schema import AgendaEntry, Observation, Settings
+
+
+class Prepared(NamedTuple):
+    window: appraisal_context.Window
+    motives: motivation.Catalogue
+    payload: dict
+    identifiers: dict
+    schema: type[GroundedProposal]
+    instruction: str
+    sources: dict[str, development_context.Episode]
+    status: Literal["available", "not_yet_eligible", "deferred_input_budget"]
+
+
+def prepare(
+    mind: Mind,
+    observation: Observation,
+    supplied: dict,
+    entries: list[AgendaEntry],
+    settings: Settings,
+    instruction: str,
+    *,
+    pinned: dict[str, tuple[str, Source, str]] | None = None,
+    pinned_beliefs: dict[str, Belief] | None = None,
+    focus_subjects: tuple[str, ...] = (),
+) -> Prepared:
+    available = development_context.episodes(
+        mind, query=observation.player_request, focus_subjects=focus_subjects
+    )
+    allowed = development_context.eligible(mind, available)
+    body = development_context.payload(mind, available if allowed else {})
+    body["status"] = "available" if allowed else "not_yet_eligible"
+    if allowed:
+        try:
+            packed = cognitive_context.pack(
+                mind,
+                observation,
+                supplied,
+                entries,
+                settings,
+                instruction + development.INSTRUCTIONS,
+                schema=DevelopmentProposal,
+                wire_schema=proposal_draft.DevelopmentDraft,
+                pinned=pinned,
+                pinned_beliefs=pinned_beliefs,
+                focus_subjects=focus_subjects,
+                extra={"development_context": body},
+            )
+            return Prepared(
+                *packed,
+                DevelopmentProposal,
+                instruction + development.INSTRUCTIONS,
+                available,
+                "available",
+            )
+        except cognitive_context.ContextBudgetError:
+            body["status"] = "deferred_input_budget"
+            body["basis"] = []
+    packed = cognitive_context.pack(
+        mind,
+        observation,
+        supplied,
+        entries,
+        settings,
+        instruction,
+        extra={"development_context": body},
+        wire_schema=proposal_draft.Draft,
+        pinned=pinned,
+        pinned_beliefs=pinned_beliefs,
+        focus_subjects=focus_subjects,
+    )
+    return Prepared(
+        *packed,
+        GroundedProposal,
+        instruction,
+        {},
+        "deferred_input_budget" if allowed else "not_yet_eligible",
+    )

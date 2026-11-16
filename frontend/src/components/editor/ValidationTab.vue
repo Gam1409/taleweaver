@@ -366,14 +366,6 @@ function reactivateFinding(finding: AnnotatedValidationFinding) {
   dismissedKeys.value = next
 }
 
-function toggleDismissedFor(finding: AnnotatedValidationFinding) {
-  if (isDismissed(finding)) {
-    reactivateFinding(finding)
-  } else {
-    dismissFinding(finding)
-  }
-}
-
 function _makeRef(finding: AnnotatedValidationFinding): DeleteValidationFindingRef {
   return {
     source: finding.source,
@@ -485,6 +477,7 @@ const aiFixFindingSignature = ref<string>('')
 const aiFixFinding = ref<AnnotatedValidationFinding | null>(null)
 const aiFixBackupConfirmed = ref(false)
 const aiFixErrorMessage = ref<string | null>(null)
+const aiFixServedProvider = ref<string | null>(null)
 
 function findingKey(finding: AnnotatedValidationFinding, index: number): string {
   return `${finding.source}-${finding.code}-${finding.location || ''}-${index}`
@@ -509,11 +502,13 @@ async function openAIFixSuggestions(
   void index
 }
 
-async function runAIFixRequest(finding: AnnotatedValidationFinding) {
+async function runAIFixRequest(finding: AnnotatedValidationFinding, forceRefresh = false) {
+  aiFixServedProvider.value = null
   aiFixLoading.value = true
   aiFixErrorMessage.value = null
   try {
     const request: AIFixSuggestionsRequest = {
+      force_refresh: forceRefresh,
       finding_code: finding.code,
       finding_message: finding.message,
       finding_location: finding.location ?? null,
@@ -525,6 +520,7 @@ async function runAIFixRequest(finding: AnnotatedValidationFinding) {
     aiFixProposals.value = resp.proposals ?? []
     aiFixFindingSignature.value = resp.finding_signature
     aiFixErrorMessage.value = resp.error ?? null
+    aiFixServedProvider.value = resp.served_provider ?? null
     if (aiFixSelectedIndex.value >= aiFixProposals.value.length) {
       aiFixSelectedIndex.value = aiFixProposals.value.length > 0 ? 0 : -1
     }
@@ -545,7 +541,7 @@ function retryAIFix() {
   if (!aiFixFinding.value || aiFixLoading.value || aiFixApplying.value) return
   aiFixProposals.value = []
   aiFixSelectedIndex.value = 0
-  void runAIFixRequest(aiFixFinding.value)
+  void runAIFixRequest(aiFixFinding.value, true)
 }
 
 function selectFixProposal(index: number) {
@@ -869,13 +865,10 @@ defineExpose({
           </div>
         </div>
 
-        <!-- Action row: AI-Fix (only AI findings), Manually Fixed / Reactivate toggle, trash.
+        <!-- Action row: AI-Fix for either source, Manually Fixed / Reactivate toggle, trash.
              Lives at the bottom-right of the card per spec. -->
         <div class="flex items-center justify-between gap-2 pt-1 border-t border-white/5">
-          <div
-            v-if="finding.source === 'ai'"
-            class="flex items-center gap-2"
-          >
+          <div class="flex items-center gap-2">
             <button
               type="button"
               class="px-3 py-1.5 rounded-lg border border-violet-500/40 bg-violet-500/15 text-violet-200 text-[10px] font-black uppercase tracking-widest hover:bg-violet-500/25 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -889,9 +882,6 @@ defineExpose({
             <span class="text-[10px] text-slate-500 leading-snug hidden sm:inline">
               Generate up to 3 fix proposals.
             </span>
-          </div>
-          <div v-else class="text-[10px] text-slate-500">
-            Structural finding &mdash; resolve through "Manually fixed" or fix the underlying entity.
           </div>
 
           <div class="flex items-center gap-2">
@@ -976,6 +966,7 @@ defineExpose({
       :finding-location="aiFixFinding?.location ?? null"
       :has-backup-confirmed="aiFixBackupConfirmed"
       :error-message="aiFixErrorMessage"
+      :served-provider="aiFixServedProvider"
       @close="closeAIFixModal"
       @select="selectFixProposal"
       @apply="applySelectedFix"
@@ -988,10 +979,10 @@ defineExpose({
       <Transition name="modal">
         <div
           v-if="showDeleteAllConfirm"
-          class="fixed inset-0 z-[240] flex items-center justify-center p-6 backdrop-blur-xl bg-slate-950/60"
+          class="authoring-modal-overlay fixed inset-0 z-[240] flex items-center justify-center p-6 backdrop-blur-xl bg-slate-950/60"
           @click.self="cancelDeleteAll"
         >
-          <div class="modal-content w-full max-w-md bg-slate-900 border border-white/10 rounded-2xl shadow-2xl overflow-hidden">
+          <div class="authoring-dialog modal-content w-full max-w-md bg-slate-900 border border-white/10 rounded-2xl shadow-2xl overflow-hidden">
             <div class="p-6 border-b border-white/5">
               <h3 class="text-xs font-black text-rose-400 uppercase tracking-widest flex items-center gap-2">
                 <Trash2 class="w-4 h-4" />

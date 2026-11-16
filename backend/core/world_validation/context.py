@@ -7,7 +7,7 @@ small and do not rebuild the same indexes over and over.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 from backend.schemas.validation import ValidationFinding
 
@@ -16,7 +16,7 @@ RULE_MODE_RPG = "rpg"
 
 
 def finding(
-    severity: str,
+    severity: Literal["error", "warn"],
     code: str,
     message: str,
     location: Optional[str] = None,

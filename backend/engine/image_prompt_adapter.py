@@ -3,20 +3,28 @@
 import asyncio
 import json
 import re
+from typing import Any
 
-from backend.core import prompts
+from backend.core import mature_content_prompts, prompts
 from backend.core.comfyui_config import prompt_rules, select_profile, select_workflow
 from backend.core.image_prompt_rules import ImagePromptRules
-from backend.core.llm_router import GameMasterLLM
-from backend.engine.image_profiles import advanced_for
-
-PROMPT_TIMEOUT = 90
-MATURE_THEMES_INSTRUCTION = (
-    "When consistent with the supplied scene, allow romantic tension, flirting and implied "
-    "intimacy between clearly adult characters. Do not add sexual context on your own. "
-    "Do not describe sexual acts, intimate anatomy or graphic sexual details. "
-    "Do not sexualize minors or age-ambiguous characters."
+from backend.core.image_purposes import image_provider, purpose_for
+from backend.core.item_image_prompts import (
+    ITEM_ADAPTER_INSTRUCTION,
+    item_composition,
+    item_negative,
+    item_purpose,
 )
+from backend.core.llm_deadlines import role_timeout
+from backend.core.llm_router import GameMasterLLM
+from backend.core.prompt_preparation_error import PromptPreparationError
+from backend.core.visual_trace import record
+from backend.engine.image_profiles import advanced_for
+from backend.engine.visual_progress import report
+from backend.models.user import User
+
+# Compatibility export for callers importing the former instruction constant.
+MATURE_THEMES_INSTRUCTION = mature_content_prompts.IMAGE_PROMPT_ADDENDUM
 
 
 def cover_source(title: str, original_prompt: str, provider: str, options: dict) -> str:
@@ -35,11 +43,11 @@ def cover_source(title: str, original_prompt: str, provider: str, options: dict)
     return prompts.ADVENTURE_COVER_PROMPT_TEMPLATE.format(title=title, original_prompt=clean)
 
 
-def asset_source(t2i: dict, kind: str, legacy: str, **facts) -> str:
+def asset_source(t2i: dict, kind: str, legacy: str, **facts: Any) -> str:
     profile = "advanced" if advanced_for(t2i, kind) else "simple"
-    if t2i.get(f"{profile}_model_provider") != "comfyui":
+    if image_provider(t2i, profile, purpose_for(kind)) != "comfyui":
         return legacy
-    rules = prompt_rules({**t2i, "comfyui_profile": profile})
+    rules = prompt_rules({**t2i, "comfyui_profile": profile, "image_purpose": purpose_for(kind)})
     if not rules:
         return legacy
     if not rules.adapt_with_llm:
@@ -54,12 +62,20 @@ def asset_source(t2i: dict, kind: str, legacy: str, **facts) -> str:
 
 
 async def adapt_body(
-    description: str, rules: ImagePromptRules, user, *, mature_themes: bool = False
+    description: str,
+    rules: ImagePromptRules,
+    user: User | None,
+    *,
+    mature_themes: bool = False,
+    nsfw_enabled: bool = False,
+    nsfw_level: str = "hard",
+    purpose: str | None = None,
 ) -> str:
     if not rules.adapt_with_llm:
         return description.strip()
     if user is None:
         raise ValueError("Prompt adaptation requires configured Small/Utility LLM settings.")
+    report("prompt")
     llm = GameMasterLLM.for_role(user, "small")
     policy = rules.model_dump(include={"format", "language", "max_words", "instructions"})
     system = (
@@ -73,24 +89,45 @@ async def adapt_body(
         "analysis, technical settings, weights, LoRA syntax or trigger/quality tokens; "
         "mandatory tokens are added separately. Avoid lettering unless explicitly requested."
     )
-    if mature_themes:
-        system += "\n" + MATURE_THEMES_INSTRUCTION
+    if mature_themes and nsfw_enabled:
+        addendum = mature_content_prompts.image_prompt_addendum(nsfw_level)
+        if addendum:
+            system += "\n" + addendum
+    if purpose_for(purpose or "") == "object":
+        system += "\nITEM TASK COMPOSITION: " + ITEM_ADAPTER_INSTRUCTION
+    record("prompt.request", system=system, user=description)
+    timeout = role_timeout(user, "small")
     try:
         body = await asyncio.wait_for(
             llm.aexecute_simple_task(
-                system_prompt=system, user_prompt=description, model=llm.model
+                system_prompt=system,
+                user_prompt=description,
+                model=llm.model,
+                operation="image_prompt",
+                phase="prompt_preparation",
             ),
-            timeout=PROMPT_TIMEOUT,
+            timeout=timeout,
         )
     except TimeoutError as exc:
         raise TimeoutError(
-            f"Small/Utility LLM image-prompt preparation timed out (limit: {PROMPT_TIMEOUT}s). "
+            f"Small/Utility LLM image-prompt preparation timed out (limit: {timeout:g}s). "
             "No ComfyUI image job was submitted."
         ) from exc
+    except Exception as exc:
+        raise PromptPreparationError(llm.provider, llm.model) from exc
     if not isinstance(body, str) or not body.strip() or len(body) > 12000:
         raise ValueError("The prompt adapter returned an empty or invalid description.")
-    # This is a word budget, not a model-specific tokenizer/context guarantee.
-    return " ".join(body.strip().split()[: rules.max_words])
+    # The word budget guides the LLM; slicing can remove a final action or negation.
+    # Keep the valid response intact within the independent 12,000-character cap.
+    prepared = body.strip()
+    record(
+        "prompt.budget",
+        response=body,
+        prepared=prepared,
+        over_budget=len(body.split()) > rules.max_words,
+        truncated=False,
+    )
+    return prepared
 
 
 def assemble_prompt(body: str, rules: ImagePromptRules) -> str:
@@ -113,9 +150,15 @@ def negative_prompt(options: dict, extra: str = "") -> str:
 
 
 async def prepare_prompt(description: str, options: dict) -> dict[str, str]:
+    purpose = item_purpose(options)
     rules = prompt_rules(options)
     if not rules:
-        return {"body": description, "positive": description, "negative": negative_prompt(options)}
+        body = item_composition(description, purpose)
+        return {
+            "body": body,
+            "positive": body,
+            "negative": item_negative(negative_prompt(options), purpose),
+        }
     body = description
     if not options.get("_prompt_prepared"):
         body = await adapt_body(
@@ -123,9 +166,13 @@ async def prepare_prompt(description: str, options: dict) -> dict[str, str]:
             rules,
             options.get("_prompt_user"),
             mature_themes=getattr(select_profile(options), "mature_themes", False),
+            nsfw_enabled=bool(options.get("_nsfw_enabled", False)),
+            nsfw_level=str(options.get("_nsfw_level") or "hard"),
+            purpose=purpose,
         )
+    body = item_composition(body, purpose)
     return {
         "body": body,
         "positive": assemble_prompt(body, rules),
-        "negative": negative_prompt(options, rules.negative_prompt),
+        "negative": item_negative(negative_prompt(options, rules.negative_prompt), purpose),
     }

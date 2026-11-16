@@ -1,4 +1,3 @@
-import base64
 import json
 import logging
 import os
@@ -13,7 +12,9 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 def get_app_version() -> str:
     try:
-        path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "version.json")
+        path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "version.json"
+        )
         with open(path) as f:
             data = json.load(f)
             v = data.get("version", "0.1.0")
@@ -21,6 +22,7 @@ def get_app_version() -> str:
             return f"{v}-{s}" if s else v
     except Exception:
         return "0.1.0"
+
 
 logger = logging.getLogger(__name__)
 
@@ -34,13 +36,39 @@ class TTSSettings(BaseModel):
     use_vocal_tags: bool = True
     use_streaming: bool = False
     voice_list: list[str] = [
-        "Zephyr", "Puck", "Charon", "Kore", "Fenrir", "Leda", "Orus", "Aoede", "Callirrhoe",
-        "Autonoe", "Enceladus", "Iapetus", "Umbriel", "Algieba", "Despina", "Erinome",
-        "Algenib", "Rasalgethi", "Laomedeia", "Achernar", "Alnilam", "Schedar", "Gacrux",
-        "Pulcherrima", "Achird", "Zubenelgenubi", "Vindemiatrix", "Sadachbia", "Sadaltager"
+        "Zephyr",
+        "Puck",
+        "Charon",
+        "Kore",
+        "Fenrir",
+        "Leda",
+        "Orus",
+        "Aoede",
+        "Callirrhoe",
+        "Autonoe",
+        "Enceladus",
+        "Iapetus",
+        "Umbriel",
+        "Algieba",
+        "Despina",
+        "Erinome",
+        "Algenib",
+        "Rasalgethi",
+        "Laomedeia",
+        "Achernar",
+        "Alnilam",
+        "Schedar",
+        "Gacrux",
+        "Pulcherrima",
+        "Achird",
+        "Zubenelgenubi",
+        "Vindemiatrix",
+        "Sadachbia",
+        "Sadaltager",
     ]
     voice_catalog: list[dict] = []
     speech_rate: float = 1.0
+
 
 class Settings(BaseSettings):
     ADVENTURE_LIBRARY_URL: str = (
@@ -52,6 +80,8 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "TaleWeaver"
     APP_VERSION: str = Field(default_factory=get_app_version)
     DATABASE_URL: str = ""
+    # Experimental single-worker admission for self-hosted completion/embedding APIs.
+    INFERENCE_SERIALIZATION_ENABLED: bool = False
     BACKEND_PORT: int = 8000
     FRONTEND_PORT: int = 5173
     LOG_LEVEL: str = "INFO"
@@ -68,7 +98,6 @@ class Settings(BaseSettings):
         """Return ALLOWED_HOSTS as a list, splitting on commas."""
         return [h.strip() for h in self.ALLOWED_HOSTS.split(",") if h.strip()]
 
-
     DATA_DIR: str = "data"
     # When set, LLM debug logs are written here (recommended: outside DATA_DIR).
     # When unset (default), logs are written to DATA_DIR/logs — in that case
@@ -80,10 +109,15 @@ class Settings(BaseSettings):
     LLM_TELEMETRY_ENABLED: bool = False
     SESSION_EMPTY_DIR_CLEANUP_DAYS: int = 7
 
+    # Local visual traces are private, opt-in and separate from system debug logs.
+    VISUAL_TRACE_ENABLED: bool = False
+    VISUAL_TRACE_CONTENT_ENABLED: bool = False
+
     VISUAL_TIMEOUT: int = 300
     INTELLIGENCE_TIMEOUT: int = 60
-    STREAM_CHUNK_TIMEOUT: float = 12.0
-    STREAM_INITIAL_TIMEOUT: float = 40.0
+    # Deprecated compatibility fields: stream waits use the resolved model timeout.
+    STREAM_CHUNK_TIMEOUT: Optional[float] = None
+    STREAM_INITIAL_TIMEOUT: Optional[float] = None
     WORLDBUILDING_TIMEOUT: int = 600
     TTS_TIMEOUT_SECONDS: int = 120
     TTS_TIMEOUT_PER_1K_CHARS: int = 20
@@ -96,7 +130,8 @@ class Settings(BaseSettings):
     TTS_RATE_LIMIT_JITTER_MAX: float = 1.15
 
     # SSRF: allow private/loopback hosts in user-supplied URLs (Ollama, Automatic1111, etc.)
-    # Default False rejects calls to 127.0.0.1, ::1, RFC1918 ranges, link-local, etc.
+    # Legacy local providers default to True for self-hosting. Custom OpenAI also
+    # requires an explicit environment setting; see docs/provider-network-policy.md.
     ALLOW_PRIVATE_NETWORK_MODELS: bool = True
 
     # setup-root hardening: allow the bootstrap endpoint to be reached from
@@ -115,29 +150,18 @@ class Settings(BaseSettings):
     # editor's Validation tab; structural-only saves are never affected.
     MAX_AI_VALIDATION_SCENES: int = 50
 
-    # Validation panel limits.
-    # Hard upper bound on number of scenes before AI validation is skipped.
-    # Larger adventures overflow typical LLM context windows and incur
-    # disproportionate cost. Structural validation always runs regardless.
-    MAX_AI_VALIDATION_SCENES: int = 50
-
     # Per-user rate limit on POST /editor/validate (covers both modes).
     VALIDATION_RATE_LIMIT_MAX: int = 5
     VALIDATION_RATE_LIMIT_WINDOW_SECONDS: int = 60
 
-    # Hard wall-clock cap on a single AI fix-suggestion round. Even if the
-    # upstream provider hangs past its own request_timeout, this watchdog
-    # returns control to the client so we can show a clean inline retry.
-    # Slow providers (Deepseek, large-context reasoning models) regularly
-    # need more than 30s for a non-trivial suggestion, so the default is
-    # intentionally generous. The client also gets a 200 with a clean error
-    # message on timeout so the user can retry without losing modal state.
-    AI_FIX_SUGGEST_TIMEOUT_SECONDS: float = 90.0
+    # By default AI Fix follows its selected model-role deadline. An explicit
+    # override is an operation watchdog, not evidence that remote work stopped.
+    AI_FIX_SUGGEST_TIMEOUT_SECONDS: float | None = None
 
     # Provider/model used as a fallback when the user's configured
     # complex_model_provider times out or errors. Empty string disables
     # the fallback and surfaces the original error to the caller.
-    AI_FIX_FALLBACK_PROVIDER: str = "openai"
+    AI_FIX_FALLBACK_PROVIDER: str = ""
     AI_FIX_FALLBACK_MODEL: str = "gpt-4o-mini"
 
     # Maximum number of HTTPS scheme bytes accepted in user-supplied URLs.
@@ -145,7 +169,7 @@ class Settings(BaseSettings):
 
     @model_validator(mode="before")
     @classmethod
-    def normalize_data_dir(cls, values):
+    def normalize_data_dir(cls, values: object) -> object:
         if isinstance(values, dict):
             data_dir = values.get("DATA_DIR")
             if not isinstance(data_dir, str) or not data_dir.strip():
@@ -156,7 +180,11 @@ class Settings(BaseSettings):
     def assemble_db_url(self) -> "Settings":
         if not self.DATABASE_URL:
             # Construct default path in data dir
-            self.DATABASE_URL = f"sqlite+aiosqlite:///./{self.DATA_DIR}/taleweaver.db"
+            database = Path(self.DATA_DIR) / "taleweaver.db"
+            path = database.as_posix()
+            if not database.is_absolute():
+                path = f"./{path}"
+            self.DATABASE_URL = f"sqlite+aiosqlite:///{path}"
         return self
 
     # ENCRYPTION_KEY MUST be set; we no longer silently fall back to an
@@ -190,22 +218,32 @@ class Settings(BaseSettings):
 
     def get_env_api_key(self, provider: str) -> Optional[str]:
         """Returns the API key for a provider if set in environment variables."""
-        p = provider.lower()
-        if p == "openai": return self.OPENAI_API_KEY
-        if p == "anthropic": return self.ANTHROPIC_API_KEY
-        if p in ["google", "gemini"]: return self.GOOGLE_API_KEY or self.GEMINI_API_KEY
-        if p == "deepseek": return self.DEEPSEEK_API_KEY
-        if p == "kimi": return self.KIMI_API_KEY
-        if p == "openrouter": return self.OPENROUTER_API_KEY
-        if p == "mistral": return self.MISTRAL_API_KEY
-        if p == "groq": return self.GROQ_API_KEY
-        if p == "black_forest_labs": return self.BLACK_FOREST_LABS_API_KEY
-        if p == "minimax": return self.MINIMAX_API_KEY
-        return None
-    
+        keys = {
+            "openai": self.OPENAI_API_KEY,
+            "anthropic": self.ANTHROPIC_API_KEY,
+            "google": self.GOOGLE_API_KEY or self.GEMINI_API_KEY,
+            "gemini": self.GOOGLE_API_KEY or self.GEMINI_API_KEY,
+            "deepseek": self.DEEPSEEK_API_KEY,
+            "kimi": self.KIMI_API_KEY,
+            "openrouter": self.OPENROUTER_API_KEY,
+            "mistral": self.MISTRAL_API_KEY,
+            "groq": self.GROQ_API_KEY,
+            "black_forest_labs": self.BLACK_FOREST_LABS_API_KEY,
+            "minimax": self.MINIMAX_API_KEY,
+        }
+        return keys.get(provider.lower())
+
     # Resolve .env against the project root so loading does not depend on the CWD
-    model_config = {"env_file": PROJECT_ROOT / ".env", "extra": "ignore"}
+    model_config = {
+        "env_file": os.environ.get("TALEWEAVER_ENV_FILE", PROJECT_ROOT / ".env"),
+        "extra": "ignore",
+    }
+
 
 settings = Settings()
-print(f"DEBUG: TaleWeaver Debug Mode: {'ENABLED' if settings.TALEWEAVER_DEBUG_ENABLED else 'DISABLED'}")
-logger.info(f"TaleWeaver Debug Mode: {'ENABLED' if settings.TALEWEAVER_DEBUG_ENABLED else 'DISABLED'}")
+print(
+    f"DEBUG: TaleWeaver Debug Mode: {'ENABLED' if settings.TALEWEAVER_DEBUG_ENABLED else 'DISABLED'}"
+)
+logger.info(
+    f"TaleWeaver Debug Mode: {'ENABLED' if settings.TALEWEAVER_DEBUG_ENABLED else 'DISABLED'}"
+)

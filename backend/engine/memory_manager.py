@@ -1,11 +1,14 @@
 import json
 import logging
+from collections.abc import Sequence
 from typing import Any, Optional
 
 from backend.core import prompts
 from backend.engine import location_context
+from backend.engine.character_identity import identity_facts
 from backend.engine.stat_aggregator import calculate_total_stats
 from backend.models.avatar import Avatar
+from backend.models.world_entity import WorldEntity, WorldExit, WorldScene
 
 logger = logging.getLogger(__name__)
 
@@ -89,7 +92,10 @@ class MemoryManager:
 
     @staticmethod
     def _build_location_context(
-        current_scene=None, entities=None, exits=None, detail_level: str = "full"
+        current_scene: WorldScene | None = None,
+        entities: Sequence[WorldEntity] | None = None,
+        exits: Sequence[WorldExit] | None = None,
+        detail_level: str = "full",
     ) -> str:
         return location_context.build_location_context(current_scene, entities, exits, detail_level)
 
@@ -207,6 +213,7 @@ class MemoryManager:
             "name": avatar.name,
             "role": getattr(avatar, "role", None),
             "description": getattr(avatar, "description", None),
+            **identity_facts(avatar),
             "hp": avatar.hp,
             "stamina": avatar.stamina,
             "mana": avatar.mana,
@@ -222,9 +229,9 @@ class MemoryManager:
     @staticmethod
     def build_state_block(
         avatar: Avatar,
-        current_scene=None,
-        entities=None,
-        exits=None,
+        current_scene: WorldScene | None = None,
+        entities: Sequence[WorldEntity] | None = None,
+        exits: Sequence[WorldExit] | None = None,
         in_game_time: int = 0,
         time_system: str = "calendar",
         time_config: Optional[dict] = None,
@@ -255,9 +262,9 @@ class MemoryManager:
     def build_system_prompt(
         avatar: Avatar,
         world_context: str,
-        current_scene=None,
-        entities=None,
-        exits=None,
+        current_scene: WorldScene | None = None,
+        entities: Sequence[WorldEntity] | None = None,
+        exits: Sequence[WorldExit] | None = None,
         in_game_time: int = 0,
         awards: Optional[list[dict]] = None,
         plot: Optional[str] = None,

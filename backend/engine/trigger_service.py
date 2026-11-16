@@ -10,6 +10,7 @@ from backend.core.config import settings
 from backend.engine.scripting.context import GameContext
 from backend.engine.scripting.runner import ScriptRunner
 from backend.engine.switch_service import SwitchService
+from backend.engine.trigger_state import apply_trigger_changes
 from backend.models.avatar import Avatar
 from backend.models.chat import ChatMessage
 from backend.models.session_state import SessionState
@@ -161,39 +162,6 @@ class TriggerService:
                 )
                 messages.append(sys_msg)
 
-            if (
-                context.changeset.var_updates
-                or context.changeset.entity_updates
-                or context.changeset.exit_updates
-            ):
-                from sqlalchemy.orm.attributes import flag_modified
-
-                cur_states = dict(state.entity_states or {})
-                if context.changeset.var_updates:
-                    sv = dict(cur_states.get("__script_vars__", {}))
-                    sv.update(context.changeset.var_updates)
-                    cur_states["__script_vars__"] = sv
-                for upd in context.changeset.entity_updates:
-                    eid = upd.get("entity_id")
-                    if eid:
-                        st = dict(cur_states.get(eid, {}))
-                        for k, v in upd.items():
-                            if k != "entity_id":
-                                st[k] = v
-                        cur_states[eid] = st
-                state.entity_states = cur_states
-                flag_modified(state, "entity_states")
-
-                if context.changeset.exit_updates:
-                    exit_states = dict(state.exit_states or {})
-                    for eu in context.changeset.exit_updates:
-                        k = f"{eu['from_scene_id']}:{eu['to_scene_id']}"
-                        st_item = dict(exit_states.get(k, {}))
-                        st_item["is_locked"] = eu["is_locked"]
-                        if "lock_description" in eu:
-                            st_item["lock_description"] = eu["lock_description"]
-                        exit_states[k] = st_item
-                    state.exit_states = exit_states
-                    flag_modified(state, "exit_states")
+            apply_trigger_changes(state, context.changeset)
 
         return messages

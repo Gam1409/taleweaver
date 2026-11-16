@@ -1,56 +1,144 @@
 name: TaleWeaver CI
 
 on:
+  workflow_dispatch:
   push:
-    branches: [ "main", "develop" ]
+    branches: ["main", "develop", "experiment/**"]
   pull_request:
-    branches: [ "main" ]
+    branches: ["main"]
 
 permissions:
   contents: read
 
 jobs:
-  backend-lint-test:
+  backend-checks:
+    name: Backend ${{ matrix.check }}
     runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      # Type errors must not prevent tests or lint from reporting their own result.
+      fail-fast: false
+      matrix:
+        check: [lint, types, tests, concordia]
     defaults:
       run:
+        shell: bash
         working-directory: ./
+    env:
+      LITELLM_LOCAL_MODEL_COST_MAP: "True"
 
     steps:
-    - name: Check out repository
-      uses: actions/checkout@v4
+      - name: Check out repository
+        uses: actions/checkout@v4
 
-    - name: Set up Python 3.12
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.12'
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
 
-    - name: Install Poetry
-      run: |
-        python -m pip install --upgrade pip
-        pip install "poetry>=2.0.0"
+      - name: Install Poetry
+        run: |
+          python -m pip install --upgrade pip
+          pip install "poetry>=2.0.0"
 
-    - name: Install dependencies
-      run: |
-        poetry install
+      - name: Install dependencies
+        run: |
+          if [ "${{ matrix.check }}" = "concordia" ]; then
+            poetry install --extras concordia
+          else
+            poetry install
+          fi
 
-    - name: Code Quality & Security Linting (Ruff)
-      run: |
-        poetry run ruff check backend scripts
-        poetry run ruff format --check backend scripts
+      - name: Code Quality & Security Linting (Ruff)
+        if: matrix.check == 'lint'
+        run: |
+          poetry run ruff check backend scripts
+          poetry run ruff format --check backend scripts
 
-    - name: Type checking with mypy
-      run: |
-        poetry run mypy backend --ignore-missing-imports || true # Optional: remove || true once fully typed
+      - name: Type checking with mypy
+        if: matrix.check == 'types'
+        run: |
+          mkdir -p reports
+          poetry run mypy backend --ignore-missing-imports --no-color-output 2>&1 | tee reports/mypy.txt
 
-    - name: Run Tests with pytest
-      run: |
-        # Ensure a tests directory exists or this step will fail natively.
-        # We handle it gracefully in case it doesn't exist yet.
-        if [ -d "backend/tests" ]; then
-          poetry run pytest backend/tests/ -v
-        elif [ -d "tests" ]; then
-          poetry run pytest tests/ -v || true
-        else
-          echo "No tests directory found. Skipping tests."
-        fi
+      - name: Create temporary test keys
+        if: matrix.check == 'tests' || matrix.check == 'concordia'
+        run: |
+          poetry run python - <<'PY'
+          import os
+          import secrets
+          from pathlib import Path
+          from cryptography.fernet import Fernet
+
+          values = {
+              "SECRET_KEY": secrets.token_urlsafe(48),
+              "ENCRYPTION_KEY": Fernet.generate_key().decode("ascii"),
+          }
+          with Path(os.environ["GITHUB_ENV"]).open("a", encoding="utf-8") as output:
+              for name, value in values.items():
+                  print(f"::add-mask::{value}")
+                  output.write(f"{name}={value}\n")
+          PY
+
+      - name: Run Tests with pytest
+        if: matrix.check == 'tests'
+        run: |
+          mkdir -p reports
+          poetry run pytest tests/ -q --tb=short --junitxml=reports/pytest.xml 2>&1 | tee reports/pytest.txt
+
+      - name: Verify optional Concordia adapter
+        if: matrix.check == 'concordia'
+        run: |
+          poetry run python -c "from importlib.metadata import version; assert version('gdm-concordia') == '2.4.0'"
+          mkdir -p reports
+          poetry run pytest tests/test_living_world_decisions.py tests/test_living_world_reference_recall.py tests/test_actor_reference_module_compatibility.py tests/test_living_world_acceptance.py tests/test_vn_time_passage_world.py -q --tb=short --junitxml=reports/concordia.xml 2>&1 | tee reports/concordia.txt
+
+      - name: Upload check reports
+        if: always() && matrix.check != 'lint'
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-${{ matrix.check }}-reports
+          path: reports/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  frontend-checks:
+    name: Frontend ${{ matrix.check }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - check: lint
+            command: npm run lint
+          - check: tests
+            command: node --test tests/*.test.mjs
+          - check: build
+            command: npm run build
+          - check: types
+            command: npm run typecheck
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - name: Run frontend check
+        shell: bash
+        run: |
+          mkdir -p reports
+          ${{ matrix.command }} 2>&1 | tee reports/${{ matrix.check }}.txt
+      - name: Upload frontend report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-${{ matrix.check }}-report
+          path: frontend/reports/
+          if-no-files-found: ignore
+          retention-days: 7

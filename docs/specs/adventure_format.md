@@ -2,6 +2,10 @@
 
 This document defines the structure, schema, and field definitions for `.adv` (JSON) and `.adz` (ZIP Bundle) adventure formats used in TaleWeaver.
 
+Feature-specific authored data may use top-level `extensions`. The proposed
+[`agent_runtime` version 1 contract](agent_runtime.md) defines portable adventure
+defaults and NPC seeds; changing session state remains outside adventure blueprints.
+
 ---
 
 ## 1. File Formats
@@ -41,6 +45,7 @@ General configuration, narrative constraints, and gameplay settings.
 
 | Field | Type | Description |
 | :--- | :--- | :--- |
+| `living_world_settings` | `object` or `null` | Optional validated Living World defaults, inherited by new VN sessions. Contains settings only, never session events or private NPC memories. |
 | `title` | `string` | The title of the adventure. |
 | `teaser` | `string` | A short, atmospheric hook/summary (max 300 chars). |
 | `context` | `string` | Foundational world-building lore and background for the AI Game Master. |

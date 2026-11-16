@@ -2,13 +2,18 @@
 
 from typing import Any
 
-from backend.engine.clothing.profiles import garment_for_item, load_profile, owned_items
-from backend.engine.clothing.schema import REGIONS, Garment, VisualProfile, WornItem
+from backend.engine.clothing.profiles import (
+    attachment_item_allowed,
+    garment_for_item,
+    load_profile,
+    owned_items,
+)
+from backend.engine.clothing.schema import REGIONS, Garment, Region, VisualProfile, WornItem
 
 
 def _worn_items(profile: VisualProfile, items: dict[str, dict], equipment: Any) -> list[WornItem]:
-    worn = list(profile.worn)
-    present = {value.item_id for value in worn}
+    worn = [item for item in profile.worn if item.attachment_slot is None]
+    present = {value.item_id for value in profile.worn}
     for raw in equipment.values() if isinstance(equipment, dict) else []:
         identifier = raw.get("id") if isinstance(raw, dict) else raw
         if not isinstance(identifier, str) or identifier in present or identifier not in items:
@@ -20,7 +25,7 @@ def _worn_items(profile: VisualProfile, items: dict[str, dict], equipment: Any) 
     return worn
 
 
-def _covered(garment: Garment, worn: WornItem) -> set[str]:
+def _covered(garment: Garment, worn: WornItem) -> set[Region]:
     return set(garment.coverage) - set(worn.uncovered_regions)
 
 
@@ -37,16 +42,22 @@ def visible_character(
         return None
     items = owned_items(inventory, equipment=equipment)
     worn = [w for w in _worn_items(profile, items, equipment) if w.item_id in items]
-    garments = {w.item_id: garment_for_item(items[w.item_id]) for w in worn}
-    result = {
+    candidates = {w.item_id: garment_for_item(items[w.item_id]) for w in worn}
+    result: dict[str, Any] = {
         "appearance": profile.appearance.model_dump(),
         "clothing": [],
         "clothing_detail_limited": False,
     }
     # Unknown coverage cannot justify exposing the names of lower layers.
-    if any(garments[w.item_id] is None for w in worn):
+    if any(candidates[w.item_id] is None for w in worn) or any(
+        row.attachment_slot
+        and row.item_id in items
+        and not attachment_item_allowed(items[row.item_id])
+        for row in profile.worn
+    ):
         result["clothing_detail_limited"] = True
         return result
+    garments = {key: value for key, value in candidates.items() if value is not None}
     if any(not set(w.uncovered_regions).issubset(garments[w.item_id].coverage) for w in worn):
         result["clothing_detail_limited"] = True
         return result
@@ -58,7 +69,9 @@ def visible_character(
             *[
                 _covered(garments[other.item_id], other)
                 for other in worn
-                if garments[other.item_id].opaque and garments[other.item_id].layer > garment.layer
+                if garments[other.item_id].opaque
+                and garments[other.item_id].category != "accessory"
+                and garments[other.item_id].layer > garment.layer
             ]
         )
         visible = covered - blocked
@@ -75,6 +88,32 @@ def visible_character(
                 "name": name[:200] if isinstance(name, str) else "",
                 "description": garment.description if detailed is True else "",
                 "visible_regions": [region for region in REGIONS if region in visible],
+                **(
+                    {"uncovered_regions": current.uncovered_regions}
+                    if current.uncovered_regions
+                    else {}
+                ),
             }
         )
     return result
+
+
+def visible_body_regions(raw_profile: Any, inventory: Any, *, equipment: Any = None) -> set[Region]:
+    """Conservative coverage for already evidenced surface traces, never proof of undress."""
+    profile = load_profile(raw_profile)
+    if profile is None:
+        return set()
+    items = owned_items(inventory, equipment=equipment)
+    if any(worn.item_id not in items for worn in profile.worn):
+        return set()
+    worn = _worn_items(profile, items, equipment)
+    garments = [(entry, garment_for_item(items[entry.item_id])) for entry in worn]
+    if any(garment is None for _, garment in garments):
+        return set()
+    blocked: set[Region] = set()
+    for entry, garment in garments:
+        if garment is None or not set(entry.uncovered_regions).issubset(garment.coverage):
+            return set()
+        if garment.opaque:
+            blocked.update(_covered(garment, entry))
+    return set(REGIONS) - blocked

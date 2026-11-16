@@ -83,6 +83,26 @@ def test_completed_list_cannot_promote_player_assertions_to_facts():
     assert character.relationship.trust == 0
 
 
+@pytest.mark.parametrize(
+    "intention", ["initiate", "pursue_goal", "challenge", "propose_activity", "investigate"]
+)
+def test_proactive_reaction_is_available_without_becoming_a_completed_event(intention):
+    social, character = seeded()
+    reaction = proposal(
+        source="player_action",
+        evidence="I ask about the letter.",
+        event="none",
+        intention=intention,
+    )
+    directed = apply_plan(
+        social, InteractionPlan(reactions=[reaction]), [npc()], reaction.evidence, "", ""
+    )
+    assert directed.characters["LINA"].next_intention == intention
+    assert character.next_intention == "listen"
+    assert character.memories == []
+    assert character.relationship.trust == 0
+
+
 def test_reviewed_scene_ids_are_bounded_even_for_empty_observations():
     social, _ = seeded()
     for i in range(MAX_PROCESSED + 10):

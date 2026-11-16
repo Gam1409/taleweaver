@@ -10,7 +10,8 @@ from backend.core.auth import get_current_admin
 from backend.core.database import get_db
 from backend.core.security import encryption_util
 from backend.engine.memory_rag.control import ensure_index_states, invalidate
-from backend.engine.memory_rag.embeddings import EmbeddingError, embed_with_settings
+from backend.engine.memory_rag.diagnostics import embedding_test_diagnostic
+from backend.engine.memory_rag.embeddings import embed_with_settings
 from backend.engine.memory_rag.settings import MemoryRagSettings, read_settings
 from backend.models.user import User
 
@@ -23,7 +24,7 @@ class MemorySettingsPayload(MemoryRagSettings):
     clear_api_key: bool = False
 
     @model_validator(mode="after")
-    def require_endpoint(self):
+    def require_endpoint(self) -> "MemorySettingsPayload":
         if self.enabled and (not self.base_url or not self.model):
             raise ValueError("Enabled memory search requires an embedding URL and model.")
         return self
@@ -39,10 +40,10 @@ def public_settings(user: User) -> dict:
     }
 
 
-async def settings_owner(db: AsyncSession, user: User) -> User:
+async def settings_owner(db: AsyncSession, user: User, *, for_update: bool = False) -> User:
     from backend.api.routes.config_api import _resolve_global_settings_owner
 
-    return await _resolve_global_settings_owner(db, user)
+    return await _resolve_global_settings_owner(db, user, for_update=for_update)
 
 
 @router.get("")
@@ -60,7 +61,7 @@ async def save_memory_settings(
 ) -> dict:
     from backend.api.routes.config_api import _broadcast_global_settings
 
-    owner = await settings_owner(db, user)
+    owner = await settings_owner(db, user, for_update=True)
     before = read_settings(owner).model_dump()
     after = payload.public_config()
     owner.llm_settings = {**(owner.llm_settings or {}), "memory_rag": after}
@@ -70,11 +71,14 @@ async def save_memory_settings(
     if payload.api_key and payload.api_key.strip():
         keys["memory_embeddings"] = encryption_util.encrypt_key(payload.api_key.strip())
     owner.encrypted_api_keys = keys
-    await _broadcast_global_settings(db, owner)
+    await _broadcast_global_settings(db, owner, fields=("llm_settings", "encrypted_api_keys"))
     rows = await ensure_index_states(db)
-    if before != after or payload.api_key or payload.clear_api_key:
+    index_changed = any(
+        value != after[key] for key, value in before.items() if key != "timeout_seconds"
+    )
+    if index_changed or payload.api_key or payload.clear_api_key:
         for row in rows:
-            invalidate(row)
+            await invalidate(db, row)
     result = public_settings(owner)
     # Keep source IDs available with expire_on_commit sessions.
     scheduling = [(row.session_id, row.user_id, row.paused) for row in rows]
@@ -105,11 +109,8 @@ async def test_memory_settings(
             key = encryption_util.decrypt_key(encrypted)
     try:
         vectors = await embed_with_settings(config, ["Memory connection test."], api_key=key)
-    except EmbeddingError as exc:
-        raise HTTPException(400, str(exc)) from exc
     except Exception as exc:
-        logger.warning("Memory embedding test failed: %s", type(exc).__name__)
-        raise HTTPException(
-            400, "Embedding connection failed. Check the endpoint and model."
-        ) from exc
+        diagnostic = embedding_test_diagnostic(exc)
+        logger.warning("Memory embedding test failed: %s (%s)", diagnostic, type(exc).__name__)
+        return {"ok": False, "message": diagnostic}
     return {"ok": True, "message": "Embedding connection succeeded.", "dimensions": len(vectors[0])}

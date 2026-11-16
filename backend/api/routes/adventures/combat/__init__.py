@@ -1,5 +1,5 @@
-"""Turn-based combat for game sessions (multi-enemy encounters and special attacks)."""
+"""Compatibility exports; new code imports backend.engine.gameplay."""
 
-from backend.api.routes.adventures.combat.manager import TurnCombatManager
+from backend.engine.gameplay.combat import TurnCombatManager
 
 __all__ = ["TurnCombatManager"]

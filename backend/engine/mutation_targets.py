@@ -2,12 +2,20 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+from backend.engine.rule_engine import GameEvent
+
+if TYPE_CHECKING:
+    from backend.engine.gameplay.manager import GameTurnManager
+
 import logging
 from collections import defaultdict
 from typing import Any
 
 from sqlalchemy import select
 
+from backend.core.state_rejection_trace import reject
 from backend.models.world_entity import WorldEntity, WorldScene
 
 logger = logging.getLogger(__name__)
@@ -46,7 +54,11 @@ def _inventory(value: Any) -> list[dict]:
     return [item for item in value if isinstance(item, dict)] if isinstance(value, list) else []
 
 
-async def _canonical_entities(manager, states):
+async def _canonical_entities(
+    manager: GameTurnManager, states: dict[str, Any]
+) -> list[WorldEntity]:
+    if manager.state is None:
+        raise RuntimeError("Turn state must be initialized")
     result = await manager.db.execute(
         select(WorldEntity).where(WorldEntity.session_id == manager.game_id)
     )
@@ -61,6 +73,8 @@ async def _canonical_entities(manager, states):
     if scene:
         return []
     # Compatibility for old sessions that still read the template directly.
+    if manager.state is None:
+        raise RuntimeError("Turn state must be initialized")
     result = await manager.db.execute(
         select(WorldEntity).where(
             WorldEntity.template_id == manager.state.template_id,
@@ -70,12 +84,28 @@ async def _canonical_entities(manager, states):
     return list(result.scalars().all())
 
 
-def _filter_targets(event, field, index, rejected, attribute=None):
+def _filter_targets(
+    event: GameEvent,
+    field: str,
+    index: TargetIndex,
+    rejected: list[str],
+    attribute: str | None = None,
+) -> None:
     accepted = []
     for target in getattr(event, field) or []:
         raw = getattr(target, attribute) if attribute else target
         canonical = index.resolve(raw)
         if canonical is None:
+            reject(
+                "mutation_targets",
+                "unknown_target",
+                "The proposed target does not resolve to a unique canonical entity or required inventory item.",
+                proposal=target,
+                target_id=raw,
+                field=field,
+                allowed_target_ids=index.ids,
+                known_target_names=index.names,
+            )
             rejected.append(f"{field}: {raw}")
             continue
         if attribute:
@@ -87,7 +117,7 @@ def _filter_targets(event, field, index, rejected, attribute=None):
         setattr(event, field, accepted)
 
 
-async def validate_mutation_targets(manager, event) -> list[str]:
+async def validate_mutation_targets(manager: GameTurnManager, event: GameEvent) -> list[str]:
     """Filter unsupported targets in place so persistence, outcomes and UI agree.
 
     Memories are unstructured and cannot reliably be attributed to individual
@@ -105,6 +135,8 @@ async def validate_mutation_targets(manager, event) -> list[str]:
     if not any(getattr(event, field) for field in fields):
         return []
 
+    if manager.state is None or manager.avatar is None:
+        raise RuntimeError("Turn must be initialized")
     states = manager.state.entity_states
     states = states if isinstance(states, dict) else {}
     entities = await _canonical_entities(manager, states)
@@ -136,6 +168,19 @@ async def validate_mutation_targets(manager, event) -> list[str]:
     if not rejected:
         return []
 
+    if any((event.new_world_memories, event.remember_notes, event.forget_notes, event.clear_notes)):
+        reject(
+            "mutation_targets",
+            "unsupported_target_side_effects",
+            "Proposed memories and note changes cannot be attributed reliably after a mutation target was rejected.",
+            proposal={
+                "new_world_memories": event.new_world_memories,
+                "remember_notes": event.remember_notes,
+                "forget_notes": event.forget_notes,
+                "clear_notes": event.clear_notes,
+            },
+            rejected_targets=rejected,
+        )
     event.new_world_memories = None
     event.remember_notes = None
     event.forget_notes = None

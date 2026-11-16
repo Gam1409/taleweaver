@@ -88,7 +88,22 @@ def ollama_server():
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("transport", ["ollama", "ollama_chat"])
-async def test_five_router_paths_on_ollama_wire(ollama_server, monkeypatch, transport):
+@pytest.mark.parametrize(
+    "sampling",
+    [
+        None,
+        {
+            "defaults": {
+                "temperature": 0.85,
+                "top_p": 0.95,
+                "top_k": 50,
+                "min_p": 0.05,
+                "repetition_penalty": 1.08,
+            }
+        },
+    ],
+)
+async def test_five_router_paths_on_ollama_wire(ollama_server, monkeypatch, transport, sampling):
     url, requests, _ = ollama_server
     router = GameMasterLLM.for_role(
         User(
@@ -96,6 +111,7 @@ async def test_five_router_paths_on_ollama_wire(ollama_server, monkeypatch, tran
                 "ollama_api_mode": "chat" if transport == "ollama_chat" else "generate",
                 "small_model_provider": "ollama",
                 "small_model": "local-test",
+                "sampling": sampling,
                 "small_ollama_url": url,
                 "small_ollama_num_ctx": 8192,
                 "small_max_tokens": 777,
@@ -139,6 +155,17 @@ async def test_five_router_paths_on_ollama_wire(ollama_server, monkeypatch, tran
         assert body["options"]["num_ctx"] == 8192
         assert body["options"]["num_predict"] == 777
         assert body["think"] is False
+        if sampling:
+            assert {
+                key: body["options"].get(key)
+                for key in ("temperature", "top_p", "top_k", "min_p", "repeat_penalty")
+            } == {
+                "temperature": 0.85,
+                "top_p": 0.95,
+                "top_k": 50,
+                "min_p": 0.05,
+                "repeat_penalty": 1.08,
+            }
         if transport == "ollama_chat":
             assert body["messages"][0]["role"] == "system"
             assert body["messages"][0]["content"] == "system rules"

@@ -1,5 +1,5 @@
 import { api } from '@/composables/useApi'
-import { API_BASE, authHeaders } from '@/services/http'
+import { apiFetch, authHeaders } from '@/services/http'
 
 export type GameDateFormat = 'DD.MM.YY' | 'MM/DD/YY' | 'YY-MM-DD'
 
@@ -39,7 +39,12 @@ export const gameViewService = {
       }
 
       if (settings?.game_settings) {
-        return settings.game_settings as GameSettings
+        const raw = settings.game_settings
+        const dateFormat = raw.date_format
+        return {
+          clock_24h: typeof raw.clock_24h === 'boolean' ? raw.clock_24h : false,
+          date_format: dateFormat === 'DD.MM.YY' || dateFormat === 'MM/DD/YY' || dateFormat === 'YY-MM-DD' ? dateFormat : undefined,
+        }
       }
       return null
     } catch (error) {
@@ -51,14 +56,14 @@ export const gameViewService = {
 
   async fetchFullWorldDebug(gameId: string): Promise<any | null> {
     try {
-      const res = await fetch(`${API_BASE}/adventures/${gameId}/session-debug`, {
+      const res = await apiFetch(`/adventures/${gameId}/session-debug`, {
         headers: authHeaders(false),
       })
       if (res.ok) {
         return await res.json()
       }
       // Fallback to chat endpoint with include_full_world
-      const fallbackRes = await fetch(`${API_BASE}/adventures/${gameId}/chat?include_full_world=true`, {
+      const fallbackRes = await apiFetch(`/adventures/${gameId}/chat?include_full_world=true`, {
         headers: authHeaders(false),
       })
       if (!fallbackRes.ok) return null
@@ -71,7 +76,7 @@ export const gameViewService = {
 
   async fetchWalkthrough(gameId: string, currentXp: number): Promise<WalkthroughData> {
     try {
-      const res = await fetch(`${API_BASE}/adventures/${gameId}/walkthrough`, {
+      const res = await apiFetch(`/adventures/${gameId}/walkthrough`, {
         headers: authHeaders(false),
       })
       if (!res.ok) {

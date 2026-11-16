@@ -6,6 +6,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.auth import get_current_user
 from backend.core.database import get_db
+from backend.engine.character_identity import identity_facts
+from backend.engine.npc_cards.current_state import character_current_state
 from backend.engine.npc_cards.presentation import (
     HistoryKind,
     character_insights,
@@ -16,6 +18,7 @@ from backend.engine.npc_cards.presentation import (
 )
 from backend.engine.npc_cards.settings import card_insights_enabled
 from backend.engine.npc_journal.portraits import portrait_status
+from backend.engine.npc_journal.progress import snapshot as learning_progress
 from backend.engine.npc_journal.records import journal_of
 from backend.engine.npc_journal.relationships import player_relationship
 from backend.engine.npc_journal.worker import schedule
@@ -66,6 +69,7 @@ def _card(npc: WorldEntity, state: SessionState) -> dict:
         "id": npc.id,
         "name": override.get("name", npc.name),
         "description": override.get("description", npc.description),
+        **identity_facts(npc),
         "image_url": override.get("image_url", npc.image_url),
         "scene_id": state.current_scene_id
         if override.get("current_scene_id", npc.current_scene_id) == state.current_scene_id
@@ -106,6 +110,7 @@ async def list_characters(
         await db.scalars(
             select(ChatMessage.npc_journal).where(
                 ChatMessage.session_id == game_id,
+                ChatMessage.is_debug.is_(False),
                 ChatMessage.npc_journal.is_not(None),
             )
         )
@@ -115,6 +120,7 @@ async def list_characters(
         "characters": [_card(npc, state) for npc in npcs if _known(npc, state)],
         "pending": sum(s in ("pending", "running") for s in statuses),
         "failed": statuses.count("failed"),
+        "learning": learning_progress(game_id, list(tasks)),
     }
 
 
@@ -137,12 +143,13 @@ async def character_details(
     )
     if npc is None or not _known(npc, state):
         raise HTTPException(404, "Character not found.")
-    entries = list(reversed(public_entries(journal_of(npc).get("entries") or [])))
+    entries = list(reversed(public_entries(journal_of(npc, full=True).get("entries") or [])))
     return {
         **_card(npc, state),
         "overview": character_overview(entries),
         "summary": recent_summary(entries),
         "insights": await character_insights(db, state, npc.id),
+        "current_state": await character_current_state(db, state, npc),
         **history_page(entries, history, offset),
     }
 
@@ -158,12 +165,19 @@ async def retry_learning(
         await db.scalars(
             select(ChatMessage).where(
                 ChatMessage.session_id == game_id,
+                ChatMessage.is_debug.is_(False),
                 ChatMessage.npc_journal["status"].as_string() == "failed",
             )
         )
     ).all()
     for message in messages:
-        message.npc_journal = {"status": "pending", "attempts": 0, "recovering": True}
+        message.npc_journal = {
+            **(message.npc_journal or {}),
+            "status": "pending",
+            "attempts": 0,
+            "recovering": True,
+            "retry_after": 0,
+        }
     await db.commit()
     schedule(game_id, user.id, retry=True)
     return {"queued": len(messages)}

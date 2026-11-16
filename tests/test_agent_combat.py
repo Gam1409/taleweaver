@@ -13,6 +13,7 @@ from backend.api.routes.adventures.agent_combat_math import (
     expected_weapon_damage,
     weapon_hit_chances,
 )
+from tests.llm_fakes import RoleLLMFactory
 
 FIREBALL = {
     "id": "FIREBALL",
@@ -208,7 +209,8 @@ async def test_decide_uses_tactician_during_combat_without_llm():
 
 
 @pytest.mark.asyncio
-async def test_tactician_plays_a_real_fight_round(setup_test_db, monkeypatch):
+@pytest.mark.parametrize("special_event_roll", [0.0, 1.0], ids=["special-event", "ordinary-round"])
+async def test_tactician_plays_a_real_fight_round(setup_test_db, monkeypatch, special_event_roll):
     import copy
     from unittest.mock import MagicMock
 
@@ -226,6 +228,9 @@ async def test_tactician_plays_a_real_fight_round(setup_test_db, monkeypatch):
         mock_llm.aexecute_complex_task = AsyncMock(
             return_value=GameEvent(narrative_description="Fight progresses.")
         )
+        mock_llm.aexecute_simple_task = AsyncMock(
+            return_value='{"mode": "story", "text": "The goblin circles cautiously."}'
+        )
 
         async def mock_stream(*args, **kwargs):
             yield MagicMock(choices=[MagicMock(delta=MagicMock(content="Round continues."))])
@@ -233,7 +238,11 @@ async def test_tactician_plays_a_real_fight_round(setup_test_db, monkeypatch):
         mock_llm.stream_simple_task = AsyncMock(return_value=mock_stream())
         monkeypatch.setattr(
             "backend.api.routes.adventures.gameplay_logic.GameMasterLLM",
-            lambda *args, **kwargs: mock_llm,
+            RoleLLMFactory(lambda *args, **kwargs: mock_llm),
+        )
+        monkeypatch.setattr(
+            "backend.api.routes.adventures.gameplay_logic.random.random",
+            lambda: special_event_roll,
         )
         manager = GameTurnManager(db, "session-combat", user)
         async for _ in manager.process_turn("/fight GOBLIN"):
@@ -249,3 +258,9 @@ async def test_tactician_plays_a_real_fight_round(setup_test_db, monkeypatch):
     assert decision.action == "Attack Goblin"
     assert decision.thoughts.startswith("[Combat tactician]")
     assert not any(INVALID_ACTION_MSG in chunk for chunk in chunks)
+    special_event_calls = [
+        call
+        for call in mock_llm.aexecute_simple_task.await_args_list
+        if call.kwargs.get("operation") == "combat.special_event"
+    ]
+    assert bool(special_event_calls) is (special_event_roll == 0.0)

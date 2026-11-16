@@ -64,9 +64,7 @@ def check_oversized_files(files: list[str]) -> list[tuple[str, int]]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(
-        description="TaleWeaver Code Quality & Security Linter"
-    )
+    parser = argparse.ArgumentParser(description="TaleWeaver Code Quality & Security Linter")
     parser.add_argument(
         "--staged",
         action="store_true",
@@ -138,9 +136,7 @@ def main() -> int:
             print("\n[WARN] [Clean Code Notice] Oversized modules detected (> 600 lines):")
             for path, count in oversized:
                 print(f"   * {path}: {count} lines")
-            print(
-                "   Consider decomposing large modules into dedicated service/handler classes.\n"
-            )
+            print("   Consider decomposing large modules into dedicated service/handler classes.\n")
 
     if exit_code == 0:
         print("[OK] Clean Code & Security checks passed!")

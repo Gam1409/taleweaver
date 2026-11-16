@@ -1,28 +1,47 @@
 """Story choices reference administrator presets, never embedded server workflows."""
 
+from types import SimpleNamespace
+
 from backend.core.comfyui_config import ComfySettings, select_workflow
 from backend.core.comfyui_presets import normalize_comfy_presets
+from backend.core.image_purposes import PURPOSES
+from backend.engine.image_profiles import advanced_for
+from backend.engine.nsfw.settings import nsfw_settings
+from backend.models.adventure_template import AdventureTemplate
 
 
-def preserve_story_presets(manifest: dict, adventure) -> dict:
+def preserve_story_presets(
+    manifest: dict, adventure: AdventureTemplate | SimpleNamespace | None
+) -> dict:
     original = getattr(adventure, "original_manifest", None) or {}
-    if "visual_presets" not in original:
-        return dict(manifest)
-    return {**manifest, "visual_presets": dict(story_selection(adventure))}
+    result = dict(manifest)
+    for key in ("visual_presets", "visual_preset_source"):
+        if key in original:
+            result[key] = original[key]
+    return result
 
 
-def story_selection(adventure) -> dict[str, str]:
+def story_selection(adventure: AdventureTemplate | SimpleNamespace | None) -> dict[str, str]:
     manifest = getattr(adventure, "original_manifest", None) or {}
     selection = manifest.get("visual_presets", {})
     if not isinstance(selection, dict):
         raise ValueError("Invalid story visual preset selection.")
-    if any(k not in ("simple", "advanced") or not isinstance(v, str) for k, v in selection.items()):
+    if any(
+        k not in PURPOSES | {"simple", "advanced"} or not isinstance(v, str)
+        for k, v in selection.items()
+    ):
         raise ValueError("Invalid story visual preset selection.")
     return selection
 
 
-def story_t2i(t2i: dict | None, adventure) -> dict:
+def story_t2i(t2i: dict | None, adventure: AdventureTemplate | SimpleNamespace | None) -> dict:
     result = normalize_comfy_presets(t2i or {})
+    nsfw = nsfw_settings(getattr(adventure, "original_manifest", None))
+    result["_nsfw_enabled"] = nsfw["enabled"]
+    result["_nsfw_level"] = nsfw["level"]
+    manifest = getattr(adventure, "original_manifest", None) or {}
+    if manifest.get("visual_preset_source") == "current":
+        return result
     selection = story_selection(adventure)
     if not selection:
         return result
@@ -32,8 +51,20 @@ def story_t2i(t2i: dict | None, adventure) -> dict:
             raise ValueError(
                 "A story image preset is unavailable. Re-select it in the story's Visuals settings."
             )
-        result[f"{profile}_model_provider"] = "comfyui"
+        if profile in {"simple", "advanced"}:
+            result[f"{profile}_model_provider"] = "comfyui"
     result["comfyui_assignments"] = {**result.get("comfyui_assignments", {}), **selection}
+    # Preserve explicit legacy story choices when new global task assignments exist.
+    for purpose in PURPOSES:
+        profile = "advanced" if advanced_for(result, purpose) else "simple"
+        if purpose not in selection and profile in selection:
+            result["comfyui_assignments"][purpose] = selection[profile]
     for profile in selection:
-        select_workflow({**result, "comfyui_profile": profile})
+        select_workflow(
+            {
+                **result,
+                "comfyui_profile": profile if profile in {"simple", "advanced"} else "simple",
+                "image_purpose": profile if profile in PURPOSES else None,
+            }
+        )
     return result

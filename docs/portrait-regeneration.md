@@ -23,6 +23,19 @@ missing workflows or unreadable images fail explicitly rather than silently
 falling back to text-to-image. The old portrait remains until generation succeeds.
 Automatic first portraits do not use a reference.
 
+Session portraits with a managed appearance profile include confirmed current
+visible conditions of the NPC and its worn clothing. This uses the same physical
+condition projection as scene illustrations: the latest visible state supersedes
+original descriptions and previous images. Facts stay bound to their character or
+garment; repairing an item replaces the earlier damage in subsequent portraits.
+
+Public facts alone do not establish visible detail. Private, resolved, unverified
+or unavailable-source conditions are omitted, as are traces hidden by current
+clothing and conditions of carried or removed garments. Existing records without
+confirmed visual evidence remain saved without being inferred into an image.
+Reading these facts does not change state or add an extraction request. Historical
+scene illustrations continue to use their frozen message-time facts.
+
 The image is uploaded through the existing ComfyUI image binding. The selected
 workflow decides how to use it: plain img2img, compatible IP-Adapter/FaceID, or
 another image-conditioning pipeline. No custom nodes are inserted automatically.

@@ -1,9 +1,16 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from faster_whisper import WhisperModel
 import asyncio
 import io
 import logging
 import threading
 import time
 import wave
+from typing import Any
 
 import numpy as np
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
@@ -17,13 +24,15 @@ router = APIRouter(prefix="/stt", tags=["STT"])
 logger = logging.getLogger(__name__)
 
 # Cache loaded Whisper models and track loading states.
-_whisper_models = {}
-_whisper_model_states = {}  # model_name -> "not_loaded" | "loading" | "loaded" | "error"
-_active_background_loaders = set()
+_whisper_models: dict[str, WhisperModel] = {}
+_whisper_model_states: dict[
+    str, str
+] = {}  # model_name -> "not_loaded" | "loading" | "loaded" | "error"
+_active_background_loaders: set[str] = set()
 _state_lock = threading.Lock()
 
 
-def get_whisper_model(model_name: str, is_background_loader: bool = False):
+def get_whisper_model(model_name: str, is_background_loader: bool = False) -> WhisperModel:
     from faster_whisper import WhisperModel
 
     # Check if already loaded
@@ -75,26 +84,26 @@ def get_whisper_model(model_name: str, is_background_loader: bool = False):
             time.sleep(0.5)
 
 
-def load_whisper_model_sync(model_name: str):
+def load_whisper_model_sync(model_name: str) -> None:
     try:
         get_whisper_model(model_name, is_background_loader=True)
     except Exception:
         logger.exception("Background preloading of Whisper model failed: %s", model_name)
 
 
-@router.get("/status")
+@router.get("/status", response_model=None)
 async def get_stt_status(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> dict[str, Any]:
     """Gets the load status of the configured Whisper model."""
-    from backend.api.routes.config_api import (
-        _normalize_game_settings,
-        _resolve_global_settings_owner,
+    from backend.core.global_settings import (
+        normalize_game_settings,
+        resolve_global_settings_owner,
     )
 
-    settings_owner = await _resolve_global_settings_owner(db, current_user)
-    game_settings = _normalize_game_settings(settings_owner.game_settings)
+    settings_owner = await resolve_global_settings_owner(db, current_user)
+    game_settings = normalize_game_settings(settings_owner.game_settings)
     model_name = game_settings.get("whisper_model", "tiny")
 
     with _state_lock:
@@ -103,20 +112,20 @@ async def get_stt_status(
     return {"model_name": model_name, "status": state}
 
 
-@router.post("/preload")
+@router.post("/preload", response_model=None)
 async def preload_stt_model(
     background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> dict[str, Any]:
     """Starts preloading the configured Whisper model in a background thread."""
-    from backend.api.routes.config_api import (
-        _normalize_game_settings,
-        _resolve_global_settings_owner,
+    from backend.core.global_settings import (
+        normalize_game_settings,
+        resolve_global_settings_owner,
     )
 
-    settings_owner = await _resolve_global_settings_owner(db, current_user)
-    game_settings = _normalize_game_settings(settings_owner.game_settings)
+    settings_owner = await resolve_global_settings_owner(db, current_user)
+    game_settings = normalize_game_settings(settings_owner.game_settings)
     model_name = game_settings.get("whisper_model", "tiny")
 
     with _state_lock:
@@ -165,39 +174,47 @@ def decode_wav_to_numpy(wav_bytes: bytes) -> np.ndarray:
         return audio
 
 
-@router.post("/transcribe")
+def _transcribed_text(model: WhisperModel, audio_data: np.ndarray) -> str:
+    """Consume Whisper's lazy inference generator on the same worker as transcribe."""
+    segments, _ = model.transcribe(audio_data)
+    return "".join(segment.text for segment in segments).strip()
+
+
+@router.post("/transcribe", response_model=None)
 async def transcribe_audio(
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> dict[str, Any]:
     """Transcribes an uploaded WAV file using OpenAI Whisper."""
-    from backend.api.routes.config_api import (
-        _normalize_game_settings,
-        _resolve_global_settings_owner,
+    from backend.core.global_settings import (
+        normalize_game_settings,
+        resolve_global_settings_owner,
     )
 
-    settings_owner = await _resolve_global_settings_owner(db, current_user)
-    game_settings = _normalize_game_settings(settings_owner.game_settings)
+    settings_owner = await resolve_global_settings_owner(db, current_user)
+    game_settings = normalize_game_settings(settings_owner.game_settings)
     model_name = game_settings.get("whisper_model", "tiny")
 
     content = await file.read()
 
     try:
-        audio_data = decode_wav_to_numpy(content)
+        audio_data = await asyncio.to_thread(decode_wav_to_numpy, content)
     except Exception as e:
         logger.exception("Failed to decode WAV file")
         raise HTTPException(
             status_code=400,
-            detail=f"Invalid audio format. Must be 16kHz 16-bit mono WAV: {e}",
+            detail="Invalid audio format. Use 16kHz sample rate, 16-bit mono WAV.",
         ) from e
 
     try:
         model = await asyncio.to_thread(get_whisper_model, model_name)
-        segments, _ = await asyncio.to_thread(model.transcribe, audio_data)
-        text = "".join(segment.text for segment in segments).strip()
+        text = await asyncio.to_thread(_transcribed_text, model, audio_data)
         logger.info("Whisper transcription result (%s): %s", model_name, text)
         return {"text": text}
     except Exception as e:
         logger.exception("Whisper transcription failed")
-        raise HTTPException(status_code=500, detail=f"Transcription failed: {e}") from e
+        raise HTTPException(
+            status_code=500,
+            detail="Transcription failed. Check the speech-model settings and server logs.",
+        ) from e

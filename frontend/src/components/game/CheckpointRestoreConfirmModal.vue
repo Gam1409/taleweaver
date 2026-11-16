@@ -49,6 +49,8 @@ const formatTimestamp = (iso: string | undefined): string => {
           Warning: Weaving a new timeline will permanently overwrite your current future.
         </div>
 
+        <p class="text-sm text-slate-300">The selected point restores its saved world state and removes later messages and checkpoints. Debug points restore the state before the named turn. Account achievements remain earned; a paused play agent stays paused.</p>
+
         <div v-if="props.checkpoint" class="rounded-xl border border-white/10 bg-white/5 px-4 py-3">
           <p class="text-xs text-slate-400 uppercase tracking-wider">Selected checkpoint</p>
           <p class="text-sm font-bold text-amber-300 mt-1">{{ props.checkpoint.title }}</p>

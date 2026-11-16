@@ -184,9 +184,7 @@ const handleSave = () => {
 }
 
 const handleDelete = (providerId: string) => {
-  if (confirm(`Remove the API key for ${providerId}? Models requiring this key will stop functioning.`)) {
-    emit('delete', providerId)
-  }
+  emit('delete', providerId)
 }
 </script>
 
@@ -441,9 +439,9 @@ const handleDelete = (providerId: string) => {
 
     <!-- Configure Key Modal -->
     <Teleport to="body">
-      <div v-if="activeProvider" class="fixed inset-0 z-[100] flex items-center justify-center p-4">
+      <div v-if="activeProvider" class="workspace-dialog-overlay fixed inset-0 z-[100] flex items-center justify-center p-4">
         <div class="absolute inset-0 bg-black/80 backdrop-blur-sm" @click="closeConfig"></div>
-        <div class="relative w-full max-w-lg bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl p-8 animate-fade-in">
+        <div class="workspace-dialog relative w-full max-w-lg bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl p-8 animate-fade-in">
           <!-- Modal Header -->
           <div class="flex items-start justify-between gap-4 mb-6">
             <div class="flex items-center gap-3">

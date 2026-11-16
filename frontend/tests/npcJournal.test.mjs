@@ -1,3 +1,4 @@
+import { httpModule } from './sessionSnapshotModule.mjs'
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
@@ -9,6 +10,7 @@ const source = readFileSync(new URL('../src/composables/useNpcJournal.ts', impor
 const compiled = ts.transpileModule(source, {
   compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext }
 }).outputText.replace("from 'vue'", `from '${import.meta.resolve('vue')}'`)
+  .replace("from '@/services/http'", `from '${httpModule}'`)
   .replace("import { authState } from '@/store/auth';", 'const authState = { token: "test-token" };')
 const { useNpcJournal } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`)
 const reply = data => new Response(JSON.stringify(data))
@@ -138,6 +140,16 @@ test('enabling indicators refetches and still respects server visibility', async
   assert.equal(f.details.value.insights, null)
 })
 
+test('physical observations stay available when psychological indicators are disabled', async t => {
+  const state = { availability: 'present', clothing: { items: [{ item_id: 'coat' }] }, conditions: { items: [{ id: 'bandage' }] } }
+  const shown = ref(false)
+  t.mock.method(globalThis, 'fetch', async () => reply({ id: 'mira', current_state: state, state_visible: true, insights: { emotion: 'calm' }, entries: [] }))
+  const f = fixture(t, 'mira', shown)
+  await tick()
+  assert.equal(f.details.value.insights, null)
+  assert.deepEqual(f.details.value.current_state, state)
+})
+
 
 test('history tabs paginate independently, preserve profile while loading and ignore late old-tab data', async t => {
   const history = ref('general'), requests = []
@@ -169,4 +181,33 @@ test('history tabs paginate independently, preserve profile while loading and ig
   requests[4].resolve(reply({ id: 'mira', history_kind: 'general', entries: [{ id: 'g1' }] }))
   await tick()
   assert.deepEqual(f.details.value.entries.map(entry => entry.id), ['g1'])
+})
+
+test('directory exposes save waiting without treating it as a model failure', async t => {
+  t.mock.method(globalThis, 'fetch', async () => reply({
+    characters: [], pending: 3, failed: 0,
+    learning: { phase: 'waiting_to_save', elapsed_seconds: 25 },
+  }))
+  const f = fixture(t)
+  await tick()
+  assert.equal(f.learning.value.phase, 'waiting_to_save')
+  assert.equal(f.learning.value.elapsed_seconds, 25)
+  assert.equal(f.failed.value, 0)
+})
+
+test('changing session clears the previous learning status while loading', async t => {
+  const fetch = t.mock.method(globalThis, 'fetch', async () => reply({
+    characters: [], pending: 3, failed: 1,
+    learning: { phase: 'extracting', elapsed_seconds: 20 },
+  }))
+  const f = fixture(t)
+  await tick()
+  fetch.mock.mockImplementation((url, { signal }) => new Promise((resolve, reject) => {
+    signal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')))
+  }))
+  f.session.value = 'another-session'
+  await nextTick()
+  assert.equal(f.learning.value, null)
+  assert.equal(f.pending.value, 0)
+  assert.equal(f.failed.value, 0)
 })

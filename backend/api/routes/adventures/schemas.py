@@ -1,14 +1,23 @@
 from datetime import datetime
 from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import AliasChoices, AliasPath, BaseModel, Field, field_validator, model_validator
 
 from backend.core.content_language import normalize_language
+from backend.engine.blueprint.brief import WorldBrief
+from backend.engine.chpm.template_settings import Defaults as NpcPersonalityDefaults
+from backend.engine.chpm.template_settings import ensure_compatible
+from backend.engine.living_world.schema import Settings as LivingWorldSettings
+from backend.engine.narration_correction import NarrationCorrection
 from backend.schemas.adventure import AdventureTemplateDebugResponse
+from backend.schemas.adventure_visuals import SuggestPromptRequest
 
 
 class CreateAdventureTemplatePayload(BaseModel):
     """Payload for creating a new adventure. Backwards-compatible with previous tests (avatar_name optional)."""
+
+    living_world_settings: Optional[LivingWorldSettings] = None
+    npc_personality_settings: Optional[NpcPersonalityDefaults] = None
 
     id: Optional[str] = None  # Client-side UUID optional; server will generate if missing
     title: str
@@ -22,6 +31,7 @@ class CreateAdventureTemplatePayload(BaseModel):
     license_url: Optional[str] = None
     language: Optional[str] = None
     original_prompt: Optional[str] = None
+    world_brief: Optional[WorldBrief] = None
     intro_text: Optional[str] = None
     rule_enforcement_mode: Optional[Literal["rpg", "story", "chat", "vn"]] = "rpg"
     generate_scene_images: bool = False
@@ -29,6 +39,8 @@ class CreateAdventureTemplatePayload(BaseModel):
     generate_item_images: bool = False
     show_npc_state: bool = False
     detailed_clothing: bool = False
+    nsfw_enabled: bool = False
+    nsfw_level: Optional[Literal["soft", "medium", "hard"]] = "soft"
     automatic_npc_voice_assignment: bool = True
     time_per_turn: int = 5
     pacing_minutes: Optional[int] = None
@@ -152,14 +164,14 @@ class CreateAdventureTemplatePayload(BaseModel):
 
     @field_validator("selected_tone", mode="before")
     @classmethod
-    def parse_legacy_tone(cls, v):
+    def parse_legacy_tone(cls, v: object) -> object:
         if isinstance(v, str):
             return {"id": v, "name": v.capitalize()}
         return v
 
     @field_validator("selected_image_styles", mode="before")
     @classmethod
-    def parse_legacy_styles(cls, v):
+    def parse_legacy_styles(cls, v: object) -> object:
         if isinstance(v, list) and len(v) > 0 and isinstance(v[0], str):
             return [{"id": s, "name": s.capitalize()} for s in v]
         return v
@@ -255,6 +267,10 @@ class CreateAdventureTemplatePayload(BaseModel):
 
     @model_validator(mode="after")
     def validate_scene_range(self) -> "CreateAdventureTemplatePayload":
+        ensure_compatible(
+            self.npc_personality_settings,
+            self.living_world_settings.model_dump() if self.living_world_settings else None,
+        )
         if (
             self.max_scenes is not None
             and self.min_scenes is not None
@@ -297,6 +313,9 @@ class CreateAdventureTemplatePayload(BaseModel):
 class AdventureTemplateResponse(BaseModel):
     """Full adventure details returned to the client."""
 
+    living_world_settings: Optional[LivingWorldSettings] = None
+    npc_personality_settings: Optional[NpcPersonalityDefaults] = None
+
     id: str
     title: str
     teaser: Optional[str] = None
@@ -308,6 +327,24 @@ class AdventureTemplateResponse(BaseModel):
     language: Optional[str] = None
     origin_id: Optional[str] = None
 
+    detailed_clothing: bool = Field(
+        default=False,
+        validation_alias=AliasChoices(
+            "detailed_clothing", AliasPath("original_manifest", "clothing_settings", "detailed")
+        ),
+    )
+    nsfw_enabled: bool = Field(
+        default=False,
+        validation_alias=AliasChoices(
+            "nsfw_enabled", AliasPath("original_manifest", "nsfw_settings", "enabled")
+        ),
+    )
+    nsfw_level: Literal["soft", "medium", "hard"] = Field(
+        default="soft",
+        validation_alias=AliasChoices(
+            "nsfw_level", AliasPath("original_manifest", "nsfw_settings", "level")
+        ),
+    )
     rule_enforcement_mode: str
     strict_rules: bool = True
     time_per_turn: int
@@ -352,14 +389,14 @@ class AdventureTemplateResponse(BaseModel):
 
     @field_validator("selected_tone", mode="before")
     @classmethod
-    def parse_legacy_tone(cls, v):
+    def parse_legacy_tone(cls, v: object) -> object:
         if isinstance(v, str):
             return {"id": v, "name": v.capitalize()}
         return v
 
     @field_validator("selected_image_styles", mode="before")
     @classmethod
-    def parse_legacy_styles(cls, v):
+    def parse_legacy_styles(cls, v: object) -> object:
         if isinstance(v, list) and len(v) > 0 and isinstance(v[0], str):
             return [{"id": s, "name": s.capitalize()} for s in v]
         return v
@@ -399,6 +436,7 @@ class GameSessionResponse(BaseModel):
     scene_id: str
     current_scene_name: Optional[str] = None
     in_game_time: int
+    playtime_seconds: int = 0
     is_ready: bool = True
     creation_status: Optional[str] = None
     creation_error: Optional[str] = None
@@ -420,14 +458,14 @@ class GameSessionResponse(BaseModel):
 
     @field_validator("selected_tone", mode="before")
     @classmethod
-    def parse_legacy_tone(cls, v):
+    def parse_legacy_tone(cls, v: object) -> object:
         if isinstance(v, str):
             return {"id": v, "name": v.capitalize()}
         return v
 
     @field_validator("selected_image_styles", mode="before")
     @classmethod
-    def parse_session_image_styles(cls, v):
+    def parse_session_image_styles(cls, v: object) -> object:
         if isinstance(v, list):
             res = []
             for item in v:
@@ -477,14 +515,14 @@ class AdventureTemplateSummaryResponse(BaseModel):
 
     @field_validator("selected_tone", mode="before")
     @classmethod
-    def parse_legacy_tone(cls, v):
+    def parse_legacy_tone(cls, v: object) -> object:
         if isinstance(v, str):
             return {"id": v, "name": v.capitalize()}
         return v
 
     @field_validator("selected_image_styles", mode="before")
     @classmethod
-    def parse_template_image_styles(cls, v):
+    def parse_template_image_styles(cls, v: object) -> object:
         if isinstance(v, list):
             res = []
             for item in v:
@@ -517,6 +555,8 @@ class ContentLanguageRequest(BaseModel):
 
 
 class ChatRequest(ContentLanguageRequest):
+    narration_correction: NarrationCorrection | None = None
+    replay_message_id: str | None = Field(default=None, max_length=36)
     content: str
     auto_visualize: bool = False
     language: Optional[str] = None
@@ -546,8 +586,12 @@ class TranslateTextResponse(BaseModel):
 
 
 class ChatResponse(BaseModel):
+    pending_turn: Optional[dict[str, Any]] = None
+    npc_behavior: Optional[dict[str, Any]] = None
+    system_debug_enabled: bool = False
     language: str = "English"
     messages: list[dict[str, Any]]
+    history_included: bool = True
     sheet: dict[str, Any]
     combat: Optional[dict[str, Any]] = None
     map_data: Optional[dict[str, Any]] = None
@@ -582,12 +626,6 @@ class AdventureTemplateImportPayload(BaseModel):
     rule_enforcement_mode: Optional[str] = None
 
 
-class SuggestPromptRequest(BaseModel):
-    target_type: Literal["cover", "scene", "npc", "object", "protagonist"]
-    target_id: str
-    use_advanced_model: Optional[bool] = None
-
-
 class SuggestPromptResponse(BaseModel):
     suggested_prompt: str
 
@@ -616,6 +654,12 @@ class StoryIdeaSuggestionResponse(BaseModel):
 class AdventureTemplateUpdate(BaseModel):
     """Payload for partial updates to an adventure template."""
 
+    living_world_settings: Optional[LivingWorldSettings] = None
+    npc_personality_settings: Optional[NpcPersonalityDefaults] = None
+
+    detailed_clothing: Optional[bool] = None
+    nsfw_enabled: Optional[bool] = None
+    nsfw_level: Optional[Literal["soft", "medium", "hard"]] = None
     title: Optional[str] = None
     teaser: Optional[str] = None
     version: Optional[str] = None
@@ -764,14 +808,14 @@ class AdventureTemplateUpdate(BaseModel):
 
     @field_validator("selected_tone", mode="before")
     @classmethod
-    def parse_legacy_tone(cls, v):
+    def parse_legacy_tone(cls, v: object) -> object:
         if isinstance(v, str):
             return {"id": v, "name": v.capitalize()}
         return v
 
     @field_validator("selected_image_styles", mode="before")
     @classmethod
-    def parse_legacy_styles(cls, v):
+    def parse_legacy_styles(cls, v: object) -> object:
         if isinstance(v, list) and len(v) > 0 and isinstance(v[0], str):
             return [{"id": s, "name": s.capitalize()} for s in v]
         return v
@@ -928,3 +972,47 @@ class ScriptValidateResponse(BaseModel):
     valid: bool
     errors: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
+
+
+__all__ = [
+    "AISuggestFixProposal",
+    "AISuggestFixProposalPatch",
+    "AISuggestFixWrapperResponse",
+    "AIValidationFindingItem",
+    "AIValidationResponse",
+    "AdventureTemplateImportPayload",
+    "AdventureTemplateResponse",
+    "AdventureTemplateSummaryResponse",
+    "AdventureTemplateUpdate",
+    "BiographyGenerationRequest",
+    "BiographyGenerationResponse",
+    "ChatRequest",
+    "ChatResponse",
+    "ContentLanguageRequest",
+    "CreateAdventureTemplatePayload",
+    "DecorativeItemsGenerationRequest",
+    "DecorativeItemsGenerationResponse",
+    "GameSessionResponse",
+    "ImportCheckItem",
+    "ImportCheckResponse",
+    "QuestDescriptionGenerationRequest",
+    "QuestDescriptionGenerationResponse",
+    "QuestGenerationRequest",
+    "QuestGenerationResponse",
+    "SceneDescriptionGenerationRequest",
+    "SceneDescriptionGenerationResponse",
+    "ScriptValidateRequest",
+    "ScriptValidateResponse",
+    "StoryIdeaSuggestionRequest",
+    "StoryIdeaSuggestionResponse",
+    "SuggestPromptRequest",
+    "SuggestPromptResponse",
+    "TemplateFieldGenerationRequest",
+    "TemplateFieldGenerationResponse",
+    "TerminalEpilogueRequest",
+    "TerminalEpilogueResponse",
+    "TraitGenerationRequest",
+    "TraitGenerationResponse",
+    "TranslateTextRequest",
+    "TranslateTextResponse",
+]

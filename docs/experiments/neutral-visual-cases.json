@@ -1,0 +1,252 @@
+[
+  {
+    "id": "arrival",
+    "narration": "Anna stands by the window. Boris opens the door and steps into the room.",
+    "visible_facts": {
+      "setting": "Quiet room with a table, door and window",
+      "characters": [
+        {
+          "id": "ANNA",
+          "name": "Anna",
+          "appearance": "adult with short brown hair",
+          "clothing": "red coat",
+          "managed_clothing": true
+        },
+        {
+          "id": "BORIS",
+          "name": "Boris",
+          "appearance": "adult with gray hair",
+          "clothing": "blue jacket",
+          "managed_clothing": true
+        }
+      ]
+    },
+    "required_visual_facts": [
+      "Anna visible by window",
+      "Boris visible at doorway",
+      "two people"
+    ],
+    "forbidden_visual_facts": [
+      "Boris merely off-screen"
+    ]
+  },
+  {
+    "id": "departure",
+    "narration": "Anna and Boris initially hold hands. Anna releases his hand, walks out and closes the door. Boris stays beside the table.",
+    "visible_facts": {
+      "setting": "Quiet room with a table, door and window",
+      "characters": [
+        {
+          "id": "ANNA",
+          "name": "Anna",
+          "appearance": "adult with short brown hair",
+          "clothing": "red coat",
+          "managed_clothing": true
+        },
+        {
+          "id": "BORIS",
+          "name": "Boris",
+          "appearance": "adult with gray hair",
+          "clothing": "blue jacket",
+          "managed_clothing": true
+        }
+      ]
+    },
+    "required_visual_facts": [
+      "Boris alone",
+      "table visible"
+    ],
+    "forbidden_visual_facts": [
+      "continued hand contact",
+      "Anna in room"
+    ]
+  },
+  {
+    "id": "colors",
+    "narration": "Anna stands to the left of Boris. Both look at a map on the table.",
+    "visible_facts": {
+      "setting": "Quiet room with a table, door and window",
+      "characters": [
+        {
+          "id": "ANNA",
+          "name": "Anna",
+          "appearance": "adult with short brown hair",
+          "clothing": "red coat",
+          "managed_clothing": true
+        },
+        {
+          "id": "BORIS",
+          "name": "Boris",
+          "appearance": "adult with gray hair",
+          "clothing": "blue jacket",
+          "managed_clothing": true
+        }
+      ]
+    },
+    "required_visual_facts": [
+      "Anna red coat",
+      "Boris blue jacket",
+      "Anna left of Boris",
+      "map on table"
+    ],
+    "forbidden_visual_facts": [
+      "swapped clothing colors"
+    ]
+  },
+  {
+    "id": "environment",
+    "narration": "Anna places a red notebook on the table, beside a cracked white cup. She moves to the window.",
+    "visible_facts": {
+      "setting": "Quiet room with a table, door and window",
+      "characters": [
+        {
+          "id": "ANNA",
+          "name": "Anna",
+          "appearance": "adult with short brown hair",
+          "clothing": "red coat",
+          "managed_clothing": true
+        },
+        {
+          "id": "BORIS",
+          "name": "Boris",
+          "appearance": "adult with gray hair",
+          "clothing": "blue jacket",
+          "managed_clothing": true
+        }
+      ]
+    },
+    "required_visual_facts": [
+      "red notebook on table",
+      "cracked white cup",
+      "Anna at window"
+    ],
+    "forbidden_visual_facts": [
+      "notebook still in hand"
+    ]
+  },
+  {
+    "id": "hypothetical",
+    "narration": "Anna says Boris might visit tomorrow. She remembers his arrival last winter. Now she sits alone by the lamp.",
+    "visible_facts": {
+      "setting": "Quiet room with a table, door and window",
+      "characters": [
+        {
+          "id": "ANNA",
+          "name": "Anna",
+          "appearance": "adult with short brown hair",
+          "clothing": "red coat",
+          "managed_clothing": true
+        },
+        {
+          "id": "BORIS",
+          "name": "Boris",
+          "appearance": "adult with gray hair",
+          "clothing": "blue jacket",
+          "managed_clothing": true
+        }
+      ]
+    },
+    "required_visual_facts": [
+      "Anna alone",
+      "Anna seated",
+      "lamp"
+    ],
+    "forbidden_visual_facts": [
+      "Boris visible",
+      "winter scene montage"
+    ]
+  },
+  {
+    "id": "wardrobe_conflict",
+    "narration": "Anna walks toward the door. The passage calls her coat green, while the saved wardrobe identifies it as red.",
+    "visible_facts": {
+      "setting": "Quiet room with a table, door and window",
+      "characters": [
+        {
+          "id": "ANNA",
+          "name": "Anna",
+          "appearance": "adult with short brown hair",
+          "clothing": "red coat",
+          "managed_clothing": true
+        },
+        {
+          "id": "BORIS",
+          "name": "Boris",
+          "appearance": "adult with gray hair",
+          "clothing": "blue jacket",
+          "managed_clothing": true
+        }
+      ]
+    },
+    "required_visual_facts": [
+      "saved red coat",
+      "movement toward door"
+    ],
+    "forbidden_visual_facts": [
+      "green coat",
+      "inventory mutation"
+    ]
+  },
+  {
+    "id": "lighting",
+    "narration": "Morning sunlight enters through the window. Anna turns away from the table toward Boris.",
+    "visible_facts": {
+      "setting": "Quiet room with a table, door and window",
+      "characters": [
+        {
+          "id": "ANNA",
+          "name": "Anna",
+          "appearance": "adult with short brown hair",
+          "clothing": "red coat",
+          "managed_clothing": true
+        },
+        {
+          "id": "BORIS",
+          "name": "Boris",
+          "appearance": "adult with gray hair",
+          "clothing": "blue jacket",
+          "managed_clothing": true
+        }
+      ]
+    },
+    "required_visual_facts": [
+      "morning window light",
+      "Anna turns toward Boris"
+    ],
+    "forbidden_visual_facts": [
+      "night lighting inferred from style"
+    ]
+  },
+  {
+    "id": "unknown_pose",
+    "narration": "Anna and Boris exchange a surprised glance. No pose is specified.",
+    "visible_facts": {
+      "setting": "Quiet room with a table, door and window",
+      "characters": [
+        {
+          "id": "ANNA",
+          "name": "Anna",
+          "appearance": "adult with short brown hair",
+          "clothing": "red coat",
+          "managed_clothing": true
+        },
+        {
+          "id": "BORIS",
+          "name": "Boris",
+          "appearance": "adult with gray hair",
+          "clothing": "blue jacket",
+          "managed_clothing": true
+        }
+      ]
+    },
+    "required_visual_facts": [
+      "two people",
+      "surprised glance",
+      "no asserted sitting or standing requirement"
+    ],
+    "forbidden_visual_facts": [
+      "invented embrace",
+      "invented equipment"
+    ]
+  }
+]

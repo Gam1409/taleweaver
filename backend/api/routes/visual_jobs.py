@@ -14,9 +14,12 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, ValidationError
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core import database
 from backend.core.auth import get_current_user
+from backend.core.llm_deadlines import role_timeout
+from backend.engine.visual_progress import Stage, reporting
 from backend.models.user import User
 
 router = APIRouter(prefix="/visual-jobs", tags=["Visual jobs"])
@@ -36,16 +39,21 @@ class VisualJob:
     owner: str
     request: VisualJobRequest
     state: str = "queued"
+    stage: str | None = None
     result: dict | None = None
     message: str = "Waiting to generate an image."
     created: float = field(default_factory=time.monotonic)
     finished: float | None = None
     task: asyncio.Task | None = None
 
+    def set_stage(self, stage: Stage) -> None:
+        self.stage = stage
+
     def public(self) -> dict:
         return {
             "id": str(self.request.id),
             "state": self.state,
+            "stage": self.stage,
             "result": self.result,
             "message": self.message,
         }
@@ -54,14 +62,14 @@ class VisualJob:
 _jobs: dict[str, VisualJob] = {}
 
 
-def _typed_payload(request: VisualJobRequest):
+def _typed_payload(request: VisualJobRequest) -> BaseModel:
     from backend.api.routes.adventures.assets import RegenerateVisualRequest
     from backend.api.routes.config_api import CatalogGeneratePayload, TestVisionPayload
     from backend.api.routes.users_api import ProfileImageGenerateRequest
     from backend.engine.scene_illustrations import SceneIllustrationRequest
     from backend.engine.session_portraits import SessionPortraitRequest
 
-    schemas = {
+    schemas: dict[str, type[BaseModel]] = {
         "test": TestVisionPayload,
         "asset": RegenerateVisualRequest,
         "catalog": CatalogGeneratePayload,
@@ -79,29 +87,48 @@ def _typed_payload(request: VisualJobRequest):
         raise HTTPException(422, "Invalid visual job parameters or workflow.") from exc
 
 
-async def _dispatch(request: VisualJobRequest, user: User, db):
-    from backend.api.routes.adventures.assets import regenerate_visual
-    from backend.api.routes.config_api import generate_catalog_image, test_vision_connection
-    from backend.api.routes.users_api import UserResponse, generate_my_profile_image
-    from backend.engine.scene_illustrations import generate_scene_illustration
-    from backend.engine.session_portraits import regenerate_session_portrait
+async def _dispatch(request: VisualJobRequest, user: User, db: AsyncSession) -> dict[str, Any]:
+    from backend.api.routes.adventures.assets import RegenerateVisualRequest, regenerate_visual
+    from backend.api.routes.config_api import (
+        CatalogGeneratePayload,
+        TestVisionPayload,
+        generate_catalog_image,
+        test_vision_connection,
+    )
+    from backend.api.routes.users_api import (
+        ProfileImageGenerateRequest,
+        UserResponse,
+        generate_my_profile_image,
+    )
+    from backend.engine.scene_illustrations import (
+        SceneIllustrationRequest,
+        generate_scene_illustration,
+    )
+    from backend.engine.session_portraits import SessionPortraitRequest, regenerate_session_portrait
 
     payload = _typed_payload(request)
-    if request.operation == "session_illustration":
+    if isinstance(payload, SceneIllustrationRequest):
+        if request.session_id is None:
+            raise HTTPException(422, "A saved session is required.")
         return await generate_scene_illustration(request.session_id, payload, db, user)
-    if request.operation == "session_npc":
+    if isinstance(payload, SessionPortraitRequest):
+        if request.session_id is None:
+            raise HTTPException(422, "A saved session is required.")
         return await regenerate_session_portrait(request.session_id, payload, db, user)
-    if request.operation == "asset":
+    if isinstance(payload, RegenerateVisualRequest):
+        if request.template_id is None:
+            raise HTTPException(422, "An adventure template is required.")
         return await regenerate_visual(request.template_id, payload, db, user)
-    functions = {
-        "test": test_vision_connection,
-        "catalog": generate_catalog_image,
-        "avatar": generate_my_profile_image,
-    }
-    result = await functions[request.operation](payload=payload, db=db, current_user=user)
-    if request.operation == "avatar":
-        return UserResponse.model_validate(result, from_attributes=True).model_dump(mode="json")
-    return result.model_dump(mode="json") if hasattr(result, "model_dump") else result
+    if isinstance(payload, TestVisionPayload):
+        result = await test_vision_connection(payload=payload, db=db, current_user=user)
+    elif isinstance(payload, CatalogGeneratePayload):
+        result = await generate_catalog_image(payload=payload, db=db, current_user=user)
+    elif isinstance(payload, ProfileImageGenerateRequest):
+        account = await generate_my_profile_image(payload=payload, db=db, current_user=user)
+        return UserResponse.model_validate(account, from_attributes=True).model_dump(mode="json")
+    else:
+        raise HTTPException(422, "Unsupported visual operation.")
+    return result
 
 
 async def _run(job: VisualJob) -> None:
@@ -112,7 +139,19 @@ async def _run(job: VisualJob) -> None:
             user = await db.get(User, job.owner)
             if not user:
                 raise HTTPException(404, "User no longer exists.")
-            result = await asyncio.wait_for(_dispatch(job.request, user, db), timeout=4000)
+            # Image generation retains its own budget after two sequential LLM calls.
+            timeout = 4000 + (
+                2 * role_timeout(user, "small")
+                if job.request.operation == "session_illustration"
+                else 0
+            )
+            callback = (
+                job.set_stage
+                if (user.t2i_settings or {}).get("show_generation_progress") is True
+                else None
+            )
+            with reporting(callback):
+                result = await asyncio.wait_for(_dispatch(job.request, user, db), timeout=timeout)
         _complete(job, result)
     except asyncio.CancelledError:
         job.state = "abandoned"
@@ -167,15 +206,13 @@ def _resource(request: VisualJobRequest) -> tuple:
     )
 
 
-@router.post("")
-async def create_visual_job(payload: VisualJobRequest, user: User = Depends(get_current_user)):
+@router.post("", response_model=None)
+async def create_visual_job(
+    payload: VisualJobRequest, user: User = Depends(get_current_user)
+) -> dict[str, Any]:
     _prune()
-    if (
-        payload.operation == "test"
-        and payload.payload.get("provider") == "comfyui"
-        and user.role != "admin"
-    ):
-        raise HTTPException(403, "Only administrators can execute workflow drafts.")
+    if payload.operation == "test" and user.role != "admin":
+        raise HTTPException(403, "Only administrators can run provider connection tests.")
     job_id = str(payload.id)
     existing = _jobs.get(job_id)
     if existing:
@@ -205,13 +242,15 @@ def _owned_job(job_id: UUID, user: User) -> VisualJob:
     return job
 
 
-@router.get("/{job_id}")
-async def read_visual_job(job_id: UUID, user: User = Depends(get_current_user)):
+@router.get("/{job_id}", response_model=None)
+async def read_visual_job(job_id: UUID, user: User = Depends(get_current_user)) -> dict[str, Any]:
     return _owned_job(job_id, user).public()
 
 
-@router.delete("/{job_id}")
-async def abandon_visual_job(job_id: UUID, user: User = Depends(get_current_user)):
+@router.delete("/{job_id}", response_model=None)
+async def abandon_visual_job(
+    job_id: UUID, user: User = Depends(get_current_user)
+) -> dict[str, Any]:
     job = _owned_job(job_id, user)
     if job.task and job.finished is None:
         job.task.cancel()

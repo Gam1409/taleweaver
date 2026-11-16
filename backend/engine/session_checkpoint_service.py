@@ -4,9 +4,16 @@ from copy import deepcopy
 from typing import Any
 
 from fastapi.encoders import jsonable_encoder
-from sqlalchemy import delete, select
+from sqlalchemy import and_, delete, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.engine import checkpoint_sources
+from backend.engine.checkpoint_avatar import restore as restore_avatar
+from backend.engine.checkpoint_world import capture as capture_world
+from backend.engine.checkpoint_world import restore as restore_world
+from backend.engine.checkpoint_world import validate as validate_world
+from backend.engine.chpm import recovery_queue
+from backend.engine.chpm.lifecycle import validate as validate_chpm
 from backend.engine.clothing.lifecycle import (
     CHECKPOINT_KEY,
     capture_item_ids,
@@ -14,25 +21,36 @@ from backend.engine.clothing.lifecycle import (
 )
 from backend.engine.dynamic_locations.lifecycle import rewind as rewind_places
 from backend.engine.dynamic_locations.schema import registry
+from backend.engine.gameplay.world import AdventureLogic
+from backend.engine.living_world.state import fork as fork_simulation
+from backend.engine.living_world.state import offline_total
 from backend.engine.memory_rag.lifecycle import invalidate_memory, memory_snapshot, restore_memory
 from backend.engine.npc_journal.lifecycle import rewind_journals
+from backend.engine.visual_plan_lifecycle import reset, without_cache
+from backend.models.adventure_template import AdventureTemplate
 from backend.models.avatar import Avatar
 from backend.models.chat import ChatMessage
 from backend.models.game_session import GameSession
 from backend.models.session_checkpoint import SessionCheckpoint
 from backend.models.session_state import SessionState
+from backend.models.turn_replay import TurnReplay
 from backend.schemas.checkpoint import SessionCheckpointResponse
 
 MAX_CHECKPOINTS_PER_SESSION = 5
+MAX_DEBUG_CHECKPOINTS_PER_SESSION = 5
+DEBUG_TURN_REASON = "DEBUG_TURN"
 
 
 def _reason_title(reason: str, snapshot: dict[str, Any]) -> str:
     scene_label = str(snapshot.get("scene_label") or "").strip()
     norm = str(reason or "").upper()
+    if norm == DEBUG_TURN_REASON:
+        number = _debug_details(snapshot)["turn_number"]
+        return f"Debug: Before turn {number}" if number else "Debug: Before turn"
     if norm == "SCENE_CHANGE":
-        if scene_label:
-            return f"Checkpoint: Arrived at {scene_label}"
-        return "Checkpoint: Scene Changed"
+        return (
+            f"Checkpoint: Arrived at {scene_label}" if scene_label else "Checkpoint: Scene Changed"
+        )
     if norm == "QUEST_UPDATE":
         return "Checkpoint: Quest Update"
     if norm == "AWARD_GRANTED":
@@ -40,6 +58,64 @@ def _reason_title(reason: str, snapshot: dict[str, Any]) -> str:
     if "WORLD_MEMOR" in norm:
         return "Checkpoint: World Memory Updated"
     return f"Checkpoint: {reason.replace('_', ' ').title()}" if reason else "Checkpoint"
+
+
+def _debug_details(snapshot: dict[str, Any]) -> dict:
+    info = snapshot.get("debug_turn") or {}
+    if not isinstance(info, dict):
+        return {"turn_number": None, "input_preview": None}
+    number, preview = info.get("turn_number"), info.get("input_preview")
+    return {
+        "turn_number": number if type(number) is int and number > 0 else None,
+        "input_preview": preview[:160] if isinstance(preview, str) else None,
+    }
+
+
+async def _restore_session_context(
+    db: AsyncSession, game_session: GameSession, state: SessionState, snapshot: dict[str, Any]
+) -> None:
+    state_snapshot = snapshot.get("session_state") or {}
+    if "active_sequence_id" in state_snapshot:
+        state.active_sequence_id = state_snapshot["active_sequence_id"]
+    if "active_sequence_order" in state_snapshot:
+        state.active_sequence_order = state_snapshot["active_sequence_order"]
+    elif "active_sequence_id" in state_snapshot:
+        state.active_sequence_order = await _legacy_sequence_order(db, state)
+    game_session.status = snapshot.get("session_status") or (
+        "completed" if state.is_completed else "active"
+    )
+
+
+def _sequence_order(sequences: Any, sequence_id: str) -> int | None:
+    if not isinstance(sequences, list):
+        return None
+    return next(
+        (
+            sequence.get("order", 1)
+            for sequence in sequences
+            if isinstance(sequence, dict) and sequence.get("id") == sequence_id
+        ),
+        None,
+    )
+
+
+async def _legacy_sequence_order(db: AsyncSession, state: SessionState) -> int:
+    """Older checkpoints saved only the ID; never retain another chapter's future order."""
+    if not state.active_sequence_id:
+        return 1
+    snapshot = AdventureLogic.extract_manifest_snapshot(state)
+    adventure = snapshot.get("adventure")
+    captured = adventure.get("sequences") if isinstance(adventure, dict) else None
+    if isinstance(captured, list):
+        order = _sequence_order(captured, state.active_sequence_id)
+        return 1 if order is None else order
+    manifest = AdventureLogic.resolve_manifest_for_state(state)
+    order = _sequence_order(manifest.get("sequences"), state.active_sequence_id)
+    if order is not None:
+        return order
+    template = await db.get(AdventureTemplate, state.template_id) if state.template_id else None
+    order = _sequence_order(template.sequences if template else None, state.active_sequence_id)
+    return 1 if order is None else order
 
 
 class SessionCheckpointService:
@@ -97,17 +173,22 @@ class SessionCheckpointService:
                 "stats": deepcopy(avatar.stats or {}),
                 "inventory": deepcopy(avatar.inventory or []),
                 "equipment": deepcopy(avatar.equipment or {}),
+                "gender": avatar.gender,
+                "age_years": avatar.age_years,
                 "visual_profile": deepcopy(avatar.visual_profile),
                 "status_effects": deepcopy(avatar.status_effects or []),
             },
             "session_state": {
                 **memory_snapshot(state),
                 "current_scene_id": state.current_scene_id,
+                "active_sequence_id": state.active_sequence_id,
+                "active_sequence_order": state.active_sequence_order,
                 "in_game_time": state.in_game_time,
                 "time_system": state.time_system,
                 "time_config": deepcopy(state.time_config or {}),
                 "inventory": deepcopy(state.inventory or []),
-                "entity_states": deepcopy(state.entity_states or {}),
+                "entity_states": without_cache(state.entity_states),
+                "living_world": deepcopy(state.living_world),
                 "exit_states": deepcopy(state.exit_states or {}),
                 "discovered_scenes": deepcopy(state.discovered_scenes or []),
                 "quests": deepcopy(state.quests or []),
@@ -122,12 +203,19 @@ class SessionCheckpointService:
         db: AsyncSession, session_id: str, keep: int = MAX_CHECKPOINTS_PER_SESSION
     ) -> None:
         cp_res = await db.execute(
-            select(SessionCheckpoint.id)
+            select(SessionCheckpoint)
             .where(SessionCheckpoint.session_id == session_id)
             .order_by(SessionCheckpoint.created_at.desc(), SessionCheckpoint.id.desc())
         )
-        checkpoint_ids = list(cp_res.scalars().all())
-        stale_ids = checkpoint_ids[keep:]
+        points = [
+            cp
+            for cp in cp_res.scalars().all()
+            if cp.trigger_reason.upper() != "MANUAL"
+            and not (cp.state_snapshot or {}).get("pinned", False)
+        ]
+        ordinary = [cp.id for cp in points if cp.trigger_reason.upper() != DEBUG_TURN_REASON]
+        debug = [cp.id for cp in points if cp.trigger_reason.upper() == DEBUG_TURN_REASON]
+        stale_ids = ordinary[keep:] + debug[MAX_DEBUG_CHECKPOINTS_PER_SESSION:]
         if stale_ids:
             await db.execute(delete(SessionCheckpoint).where(SessionCheckpoint.id.in_(stale_ids)))
 
@@ -138,10 +226,16 @@ class SessionCheckpointService:
         trigger_reason: str,
         scene_label: str | None = None,
     ) -> SessionCheckpoint:
-        _, state, avatar = await SessionCheckpointService._load_context(db, session_id)
+        game_session, state, avatar = await SessionCheckpointService._load_context(db, session_id)
         message_ids = await SessionCheckpointService._message_ids(db, session_id)
 
         snapshot = SessionCheckpointService._build_snapshot(state, avatar, scene_label=scene_label)
+        snapshot["session_status"] = game_session.status
+        snapshot["npc_recovery"] = await recovery_queue.capture(db, session_id)
+        snapshot.update(await capture_world(db, state))
+        snapshot[checkpoint_sources.KEY] = await checkpoint_sources.capture(
+            db, session_id, snapshot
+        )
         snapshot[CHECKPOINT_KEY] = await capture_item_ids(db, session_id, snapshot)
         payload = jsonable_encoder(snapshot)
 
@@ -172,15 +266,24 @@ class SessionCheckpointService:
                 id=cp.id,
                 session_id=cp.session_id,
                 message_index=cp.message_index,
+                pinned=bool((cp.state_snapshot or {}).get("pinned")),
                 trigger_reason=cp.trigger_reason,
                 title=_reason_title(cp.trigger_reason, cp.state_snapshot or {}),
                 created_at=cp.created_at,
+                **_debug_details(cp.state_snapshot or {}),
             )
             for cp in checkpoints
         ]
 
     @staticmethod
-    async def restore_checkpoint(db: AsyncSession, session_id: str, checkpoint_id: str) -> int:
+    async def restore_checkpoint(
+        db: AsyncSession,
+        session_id: str,
+        checkpoint_id: str,
+        *,
+        warnings: list[str] | None = None,
+        requeued: list[str] | None = None,
+    ) -> int:
         cp_res = await db.execute(
             select(SessionCheckpoint).where(
                 SessionCheckpoint.id == checkpoint_id,
@@ -191,29 +294,22 @@ class SessionCheckpointService:
         if not checkpoint:
             raise ValueError("Checkpoint not found.")
 
-        _, state, avatar = await SessionCheckpointService._load_context(db, session_id)
+        game_session, state, avatar = await SessionCheckpointService._load_context(db, session_id)
         snapshot = checkpoint.state_snapshot or {}
+        validate_world(snapshot)
+        checkpoint_sources.validate(snapshot)
+        if warnings is not None and (
+            "canonical_items" not in snapshot or "canonical_actors" not in snapshot
+        ):
+            warnings.append(
+                "This older checkpoint lacks complete canonical item/NPC snapshots. "
+                "Only stored fields can be recovered; unsaved canonical fields are retained."
+            )
         avatar_snapshot = snapshot.get("avatar") or {}
         state_snapshot = snapshot.get("session_state") or {}
+        restored_entities = deepcopy(validate_chpm(state_snapshot.get("entity_states"), session_id))
 
-        avatar.hp = int(avatar_snapshot.get("hp", avatar.hp))
-        avatar.max_hp = int(avatar_snapshot.get("max_hp", avatar.max_hp))
-        avatar.stamina = int(avatar_snapshot.get("stamina", avatar.stamina))
-        avatar.max_stamina = int(avatar_snapshot.get("max_stamina", avatar.max_stamina))
-        avatar.mana = int(avatar_snapshot.get("mana", avatar.mana))
-        avatar.max_mana = int(avatar_snapshot.get("max_mana", avatar.max_mana))
-        avatar.exp = int(avatar_snapshot.get("exp", avatar.exp))
-        avatar.strength = int(avatar_snapshot.get("strength", avatar.strength))
-        avatar.intelligence = int(avatar_snapshot.get("intelligence", avatar.intelligence))
-        avatar.wisdom = int(avatar_snapshot.get("wisdom", avatar.wisdom))
-        avatar.dexterity = int(avatar_snapshot.get("dexterity", avatar.dexterity))
-        avatar.charisma = int(avatar_snapshot.get("charisma", avatar.charisma))
-        avatar.armor_class = int(avatar_snapshot.get("armor_class", avatar.armor_class))
-        avatar.stats = deepcopy(avatar_snapshot.get("stats") or {})
-        avatar.inventory = deepcopy(avatar_snapshot.get("inventory") or [])
-        avatar.equipment = deepcopy(avatar_snapshot.get("equipment") or {})
-        avatar.visual_profile = deepcopy(avatar_snapshot.get("visual_profile"))
-        avatar.status_effects = deepcopy(avatar_snapshot.get("status_effects") or [])
+        restore_avatar(avatar, avatar_snapshot)
 
         state.current_scene_id = str(
             state_snapshot.get("current_scene_id") or state.current_scene_id
@@ -223,12 +319,19 @@ class SessionCheckpointService:
         state.time_config = deepcopy(state_snapshot.get("time_config") or {})
         state.inventory = deepcopy(state_snapshot.get("inventory") or [])
         previous_places = deepcopy(registry(state))
-        state.entity_states = deepcopy(state_snapshot.get("entity_states") or {})
+        restored_entities.pop("__portrait_requests__", None)
+        state.entity_states = reset(restored_entities)
+        state.living_world = fork_simulation(
+            state_snapshot.get("living_world"),
+            absence_total=offline_total(game_session.living_world_presence),
+        )
         await rewind_places(db, state, previous_places)
         state.exit_states = deepcopy(state_snapshot.get("exit_states") or {})
         state.discovered_scenes = deepcopy(state_snapshot.get("discovered_scenes") or [])
         state.quests = deepcopy(state_snapshot.get("quests") or [])
         state.is_completed = bool(state_snapshot.get("is_completed", state.is_completed))
+        await _restore_session_context(db, game_session, state, snapshot)
+        await restore_world(db, state, snapshot)
         restore_memory(state, state_snapshot)
         await invalidate_memory(db, session_id)
 
@@ -238,5 +341,29 @@ class SessionCheckpointService:
         if stale_ids:
             await rewind_journals(db, session_id, stale_ids)
             await db.execute(delete(ChatMessage).where(ChatMessage.id.in_(stale_ids)))
+        await recovery_queue.restore(db, session_id, snapshot.get("npc_recovery") or {})
+        await checkpoint_sources.reconcile(db, game_session, snapshot, requeued=requeued)
+
+        await db.execute(
+            delete(SessionCheckpoint)
+            .where(
+                SessionCheckpoint.session_id == session_id,
+                SessionCheckpoint.id != checkpoint_id,
+                or_(
+                    SessionCheckpoint.message_index > checkpoint.message_index,
+                    SessionCheckpoint.created_at > checkpoint.created_at,
+                    and_(
+                        SessionCheckpoint.created_at == checkpoint.created_at,
+                        SessionCheckpoint.id > checkpoint.id,
+                    ),
+                ),
+            )
+            .execution_options(synchronize_session="fetch")
+        )
+        await db.execute(delete(TurnReplay).where(TurnReplay.session_id == session_id))
+        if "__agent__" in (state.entity_states or {}):
+            from backend.engine.gameplay.agent_logic import AgentService
+
+            AgentService.set_agent_active(state, False)
 
         return len(stale_ids)

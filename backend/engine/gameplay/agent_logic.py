@@ -1,0 +1,512 @@
+import logging
+import os
+from typing import Any, Optional
+
+from pydantic import BaseModel, Field
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.attributes import flag_modified
+
+from backend.core.content_language import prose_language_instruction
+from backend.core.llm_router import GameMasterLLM
+from backend.core.prompts import (
+    AGENT_PLAYER_TURN_SYSTEM_PROMPT,
+    get_play_agent_personality_prompt,
+)
+from backend.engine.gameplay.agent_actions import (
+    container_lock_hint,
+    format_exits_for_agent,
+    load_scene_exits,
+)
+from backend.engine.gameplay.agent_persona import format_protagonist_profile
+from backend.engine.gameplay.language import resolve_content_language
+from backend.engine.gameplay.snapshot import AdventureSnapshot
+from backend.engine.gameplay.turn_context_helpers import (
+    _find_active_sequence,
+    resolve_sequence_guidance,
+)
+from backend.engine.gameplay.turn_llm_pipeline import TurnLlmContextBuilder
+from backend.engine.gameplay.world import AdventureLogic
+from backend.models.adventure_template import AdventureTemplate
+from backend.models.avatar import Avatar
+from backend.models.session_state import SessionState
+from backend.models.user import User
+from backend.models.world_entity import WorldEntity
+from backend.utils.path_security import (
+    ensure_within_data_dir,
+    safe_data_path,
+    sanitize_path_component,
+)
+
+logger = logging.getLogger(__name__)
+
+
+def _resolve_session_issue_log_path(session_id: str) -> str:
+    """Return the validated AGENTS.md path for a concrete session id."""
+    safe_session_id = sanitize_path_component(session_id)
+    if not safe_session_id:
+        raise ValueError("Invalid session identifier.")
+
+    session_dir = safe_data_path("adventures", "sessions", safe_session_id)
+    if not os.path.isdir(session_dir):
+        raise ValueError("Session directory does not exist.")
+
+    return ensure_within_data_dir(os.path.join(session_dir, "AGENTS.md"))
+
+
+class AgentDecision(BaseModel):
+    thoughts: str = Field(
+        description="Internal reasoning and goals based on the character persona, situation, and walkthrough."
+    )
+    action: str = Field(
+        description="The next action or slash command to execute (e.g. '/inspect shelf', 'go north', '/say Hello')."
+    )
+    is_stuck_or_bug: bool = Field(
+        description="True if an error, bug, or unsolvable puzzle prevents proceeding."
+    )
+    issue_description: str = Field(
+        description="Description of the bug, error, or blocker if is_stuck_or_bug is true. Otherwise empty."
+    )
+
+
+def _resolve_current_scene(ctx: Any, state: Any) -> Any:
+    current_scene = getattr(ctx, "current_scene", None)
+    if current_scene or not hasattr(ctx, "all_scenes"):
+        return current_scene
+    cur_id = getattr(state, "current_scene_id", None)
+    if not cur_id:
+        return None
+    return next((s for s in ctx.all_scenes if s.id == cur_id), None)
+
+
+def _format_npcs_context(entities: list[Any]) -> str:
+    visible_npcs = [
+        e
+        for e in entities
+        if getattr(e, "entity_type", "") == "NPC" and not getattr(e, "is_hidden", False)
+    ]
+    if not visible_npcs:
+        return "PRESENT CHARACTERS (NPCs): None"
+    lines = [
+        f"- {npc.name}: {npc.description or 'Present in the scene.'}"
+        for npc in visible_npcs
+        if getattr(npc, "name", None)
+    ]
+    return "PRESENT CHARACTERS (NPCs):\n" + "\n".join(lines)
+
+
+def build_player_perception_context(
+    adventure: Any, state: Any, ctx: Any, exits_text: str = ""
+) -> str:
+    """Builds legitimate, player-facing world context for the PlayAgent.
+
+    Enforces fair play: a normal player only sees:
+    - Adventure title and premise
+    - Current scene name and public description
+    - Visible NPCs present in this scene
+    - Visible exits leading out of this scene
+
+    Hidden objects, hidden doors, container unlock codes, and Game Master
+    secret notes are strictly excluded to preserve fair player constraints.
+    """
+    parts: list[str] = []
+
+    title = getattr(adventure, "title", "Adventure") or "Adventure"
+    desc = getattr(adventure, "description", "") or ""
+    parts.append(f"ADVENTURE: {title}\nPREMISE: {desc}" if desc else f"ADVENTURE: {title}")
+
+    current_scene = _resolve_current_scene(ctx, state)
+    if current_scene:
+        parts.append(f"CURRENT LOCATION: {current_scene.label or current_scene.id}")
+        if getattr(current_scene, "description", None):
+            parts.append(f"SCENE DESCRIPTION: {current_scene.description}")
+
+    entities = getattr(ctx, "entities", []) or []
+    parts.append(_format_npcs_context(entities))
+
+    if exits_text:
+        parts.append(exits_text)
+
+    if not entities and not exits_text and not current_scene:
+        fallback = getattr(ctx, "mechanics_system_prompt", "")
+        if fallback:
+            parts.append(f"SCENARIO CONTEXT:\n{fallback}")
+
+    return "\n\n".join(parts)
+
+
+def _collect_visible_scene_item_names(
+    scene_entities: list[WorldEntity],
+    states: dict[str, Any],
+    current_scene_id: str | None,
+) -> list[str]:
+    container_payloads = [
+        {
+            "item_type": states.get(e.id, {}).get("item_type", e.item_type)
+            if isinstance(states, dict)
+            else e.item_type,
+            "inventory": states.get(e.id, {}).get("inventory", e.inventory)
+            if isinstance(states, dict)
+            else e.inventory,
+        }
+        for e in scene_entities
+    ]
+    contained_ids = AdventureLogic.collect_container_item_ids(container_payloads)
+
+    visible_names: list[str] = []
+    for entity in scene_entities:
+        e_state = states.get(entity.id, {}) if isinstance(states, dict) else {}
+        if e_state.get("current_scene_id", entity.current_scene_id) != current_scene_id:
+            continue
+        if bool(e_state.get("is_hidden", entity.is_hidden)):
+            continue
+        if bool(e_state.get("is_in_inventory", entity.is_in_inventory)):
+            continue
+        if str(entity.id or "") in contained_ids:
+            continue
+        if not entity.name:
+            continue
+        is_container = str(entity.item_type or "").upper() == "CONTAINER"
+        hint = container_lock_hint(entity, states) if is_container else ""
+        visible_names.append(f"{entity.name}{hint}")
+    return visible_names
+
+
+def _build_agent_objective_and_walkthrough(
+    adventure: Any,
+    state: Any,
+    agent_state: dict[str, Any],
+) -> tuple[str, str]:
+    monkey_mode = bool(agent_state.get("monkey_mode", False))
+    allow_walkthrough = bool(agent_state.get("allow_walkthrough", True))
+
+    if monkey_mode:
+        objective = (
+            "MONKEY MODE (ROBUSTNESS TEST) IS ACTIVE.\n"
+            "Your objective is to stress-test the engine by intentionally trying edge cases and bad inputs.\n"
+            "Prefer actions that challenge validation (unknown commands, malformed commands, impossible interactions).\n"
+            "Do NOT include harmful or illegal content. Stay safe, but be chaotic."
+        )
+        return objective, "Monkey mode active."
+
+    if not allow_walkthrough:
+        walkthrough_text = (
+            "WALKTHROUGH ACCESS: DISABLED\n"
+            "You do NOT have access to any walkthrough, solution guides, or sequence spoilers.\n"
+            "Play naturally as a real human player: explore your surroundings, inspect objects, talk to characters, "
+            "and solve puzzles through observation and logical deduction."
+        )
+        objective = (
+            "Your objective is to play through the adventure autonomously as a regular player without walkthrough assistance.\n"
+            "Observe the scene carefully, talk to present NPCs (/say), inspect interesting objects (/inspect), "
+            "search the area (/search), read discovered notes/books (/read), take useful visible items (/take), "
+            "and try reasonable actions to make progress. Learn from the game master's responses."
+        )
+        return objective, walkthrough_text
+
+    seq_walkthrough, _ = resolve_sequence_guidance(adventure, state)
+    active_seq = _find_active_sequence(adventure, state)
+    seq_title = ""
+    if active_seq:
+        seq_title = active_seq.get("title") or active_seq.get("name") or ""
+
+    if seq_walkthrough:
+        header = (
+            f"CURRENT SEQUENCE WALKTHROUGH ({seq_title}):"
+            if seq_title
+            else "CURRENT SEQUENCE WALKTHROUGH:"
+        )
+        walkthrough_text = f"{header}\n{seq_walkthrough}"
+    else:
+        fallback = state.walkthrough or getattr(adventure, "walkthrough", "")
+        walkthrough_text = (
+            fallback if fallback else "No specific walkthrough available for this sequence."
+        )
+
+    objective = (
+        "Your objective is to play through the adventure as efficiently and purposefully as possible, "
+        "following the current sequence walkthrough step-by-step while remaining in character.\n"
+        "Analyze the current room, visible items, NPCs, and dialogue. If the current situation matches "
+        "a step in the walkthrough, take that action to advance the story."
+    )
+    return objective, walkthrough_text
+
+
+_HISTORY_ROLE_LABELS = {
+    "user": "YOU",
+    "player": "YOU",
+    "assistant": "GAME MASTER",
+    "system": "SYSTEM",
+}
+_HISTORY_MAX_CHARS = 600
+
+
+def format_agent_history(history: list[dict[str, str]]) -> str:
+    """Renders recent chat messages so the agent remembers what it already tried."""
+    lines: list[str] = []
+    for msg in history:
+        label = _HISTORY_ROLE_LABELS.get(str(msg.get("role") or "").lower())
+        content = " ".join(str(msg.get("content") or "").split())
+        if not label or not content:
+            continue
+        if len(content) > _HISTORY_MAX_CHARS:
+            content = content[:_HISTORY_MAX_CHARS] + "..."
+        line = f"{label}: {content}"
+        # Agent actions are stored as both "player" and "user" messages; show them once.
+        if lines and lines[-1] == line:
+            continue
+        lines.append(line)
+    return "\n".join(lines) if lines else "(no history yet - the adventure just started)"
+
+
+class AgentService:
+    @staticmethod
+    def get_agent_state(state: SessionState) -> dict[str, Any]:
+        """Helper to get transient agent state out of entity_states."""
+        if not state.entity_states:
+            state.entity_states = {}
+        if "__agent__" not in state.entity_states:
+            state.entity_states["__agent__"] = {
+                "active": False,
+                "failure_count": 0,
+                "monkey_mode": False,
+                "allow_walkthrough": True,
+                "step_by_step": False,
+                "personality": "casual",
+                "custom_personality": "",
+            }
+        agent_state = state.entity_states["__agent__"]
+        modified = False
+        for key, default in (
+            ("monkey_mode", False),
+            ("allow_walkthrough", True),
+            ("step_by_step", False),
+            ("personality", "casual"),
+            ("custom_personality", ""),
+        ):
+            if key not in agent_state:
+                agent_state[key] = default
+                modified = True
+        # Migrate the legacy German personality key.
+        if agent_state.get("personality") in ("buerokrat", "bürokrat"):
+            agent_state["personality"] = "bureaucrat"
+            modified = True
+        if modified:
+            state.entity_states = {**(state.entity_states or {}), "__agent__": agent_state}
+            flag_modified(state, "entity_states")
+        return dict(agent_state)
+
+    @staticmethod
+    def set_agent_active(state: SessionState, active: bool) -> None:
+        """Helper to toggle agent state active and reset failures."""
+        agent_state = AgentService.get_agent_state(state)
+        agent_state["active"] = active
+        if active:
+            agent_state["failure_count"] = 0
+        state.entity_states = {**(state.entity_states or {}), "__agent__": agent_state}
+        flag_modified(state, "entity_states")
+
+    @staticmethod
+    def set_personality(
+        state: SessionState, personality: str, custom_text: Optional[str] = None
+    ) -> None:
+        """Set the play-agent personality (casual, bureaucrat, powerplayer, custom)."""
+        agent_state = AgentService.get_agent_state(state)
+        normalized = (personality or "casual").strip().lower()
+        if normalized in ("bürokrat", "buerokrat"):
+            normalized = "bureaucrat"
+        agent_state["personality"] = normalized
+        if custom_text is not None:
+            agent_state["custom_personality"] = custom_text
+        state.entity_states = {**(state.entity_states or {}), "__agent__": agent_state}
+        flag_modified(state, "entity_states")
+
+    @staticmethod
+    def set_monkey_mode(state: SessionState, enabled: bool) -> None:
+        """Enable/disable monkey mode for the autonomous play-agent in this session."""
+        agent_state = AgentService.get_agent_state(state)
+        agent_state["monkey_mode"] = enabled
+        state.entity_states = {**(state.entity_states or {}), "__agent__": agent_state}
+        flag_modified(state, "entity_states")
+
+    @staticmethod
+    def set_walkthrough_allowed(state: SessionState, allowed: bool) -> None:
+        """Enable/disable sequence walkthrough access for the play-agent."""
+        agent_state = AgentService.get_agent_state(state)
+        agent_state["allow_walkthrough"] = allowed
+        state.entity_states = {**(state.entity_states or {}), "__agent__": agent_state}
+        flag_modified(state, "entity_states")
+
+    @staticmethod
+    def set_step_by_step(state: SessionState, enabled: bool) -> None:
+        """Enable/disable step-by-step confirmation mode for the play-agent."""
+        agent_state = AgentService.get_agent_state(state)
+        agent_state["step_by_step"] = enabled
+        state.entity_states = {**(state.entity_states or {}), "__agent__": agent_state}
+        flag_modified(state, "entity_states")
+
+    @staticmethod
+    def increment_failure(state: SessionState) -> int:
+        """Increment transient failure count. If >= 3, deactivate agent."""
+        agent_state = AgentService.get_agent_state(state)
+        count = int(agent_state.get("failure_count", 0)) + 1
+        agent_state["failure_count"] = count
+        if count >= 3:
+            agent_state["active"] = False
+        state.entity_states = {**(state.entity_states or {}), "__agent__": agent_state}
+        flag_modified(state, "entity_states")
+        return count
+
+    @staticmethod
+    def reset_failures(state: SessionState) -> None:
+        """Reset consecutive failures to 0."""
+        agent_state = AgentService.get_agent_state(state)
+        agent_state["failure_count"] = 0
+        state.entity_states = {**(state.entity_states or {}), "__agent__": agent_state}
+        flag_modified(state, "entity_states")
+
+    @staticmethod
+    def log_issue(
+        session_id: str,
+        thoughts: str,
+        action: str,
+        issue_description: str,
+        history_summary: str,
+    ) -> None:
+        """Append agent issues to the existing AGENTS.md inside the resolved session directory."""
+        try:
+            file_path = _resolve_session_issue_log_path(session_id)
+        except ValueError:
+            logger.warning(
+                "Agent issue log skipped: invalid or missing session directory for session_id=%s",
+                session_id,
+            )
+            return
+
+        mode = "a" if os.path.exists(file_path) else "w"
+        with open(file_path, mode, encoding="utf-8") as f:
+            if mode == "w":
+                f.write(f"# TaleWeaver Agent Issues Log - Session {session_id}\n\n")
+                f.write(
+                    "This file contains bugs, unsolvable puzzles, or errors encountered during autonomous gameplay.\n\n"
+                )
+
+            f.write("## Issue Detected\n")
+            f.write(f"- **Thoughts:** {thoughts}\n")
+            f.write(f"- **Attempted Action:** {action}\n")
+            f.write(f"- **Issue Description:** {issue_description}\n")
+            f.write(f"- **Recent History Summary:** {history_summary}\n")
+            f.write("\n---\n\n")
+
+    @staticmethod
+    async def get_decision(
+        db: AsyncSession,
+        game_id: str,
+        user: User,
+        state: SessionState,
+        avatar: Avatar,
+        adventure: AdventureTemplate | AdventureSnapshot,
+        manager: Any,
+    ) -> AgentDecision:
+        """Runs the simple LLM to determine the agent's next action using legitimate player context."""
+        builder = TurnLlmContextBuilder(manager)
+        ctx = await builder.build_context(user_msg="", language=None)
+
+        scene_items_res = await db.execute(
+            select(WorldEntity).where(
+                WorldEntity.session_id == game_id,
+                WorldEntity.entity_type == "OBJECT",
+            )
+        )
+        scene_entities = list(scene_items_res.scalars().all())
+        states = state.entity_states or {}
+
+        visible_item_names = _collect_visible_scene_item_names(
+            scene_entities, states, state.current_scene_id
+        )
+        visible_scene_items_text = ", ".join(visible_item_names) if visible_item_names else "None"
+
+        agent_state = AgentService.get_agent_state(state)
+        objective_block, walkthrough_text = _build_agent_objective_and_walkthrough(
+            adventure, state, agent_state
+        )
+        scene_exits = await load_scene_exits(db, game_id, state.current_scene_id)
+        player_world_context = build_player_perception_context(
+            adventure, state, ctx, format_exits_for_agent(scene_exits)
+        )
+
+        inventory_names = [
+            str(i.get("name") or i.get("id") or "") if isinstance(i, dict) else str(i)
+            for i in (avatar.inventory or [])
+        ]
+
+        llm_settings = getattr(user, "llm_settings", None) or {}
+        agent_personality = (
+            agent_state.get("personality") or llm_settings.get("play_agent_personality") or "casual"
+        )
+        agent_custom_personality = (
+            agent_state.get("custom_personality")
+            or llm_settings.get("play_agent_custom_personality")
+            or ""
+        )
+        personality_prompt = get_play_agent_personality_prompt(
+            agent_personality, agent_custom_personality
+        )
+
+        system_prompt = AGENT_PLAYER_TURN_SYSTEM_PROMPT.format(
+            name=avatar.name,
+            role=avatar.role or "Adventurer",
+            level=getattr(avatar, "level", 1),
+            exp=avatar.exp or 0,
+            hp=avatar.hp,
+            max_hp=avatar.max_hp,
+            stamina=avatar.stamina,
+            max_stamina=avatar.max_stamina,
+            mana=avatar.mana,
+            max_mana=avatar.max_mana,
+            inventory=", ".join(inventory_names) if inventory_names else "Empty",
+            equipment=avatar.equipment or "None",
+            protagonist_profile=format_protagonist_profile(avatar),
+            personality_prompt=personality_prompt,
+            mechanics_system_prompt=player_world_context,
+            visible_scene_items_text=visible_scene_items_text,
+            walkthrough_text=walkthrough_text,
+            objective_block=objective_block,
+        )
+
+        user_prompt = (
+            "RECENT GAME HISTORY (oldest first):\n"
+            f"{format_agent_history(getattr(ctx, 'history', None) or [])}\n\n"
+            "Based on this history and your current location, what is the single next action or "
+            "command you want to perform? Do not repeat an action that already failed or produced "
+            "no progress; try something different instead. If you are truly stuck or encountered "
+            "an error/bug, report it."
+        )
+
+        await db.refresh(state, attribute_names=["session"])
+        language = resolve_content_language(state, user, adventure)
+        system_prompt += prose_language_instruction(
+            language, "thoughts, issue_description and natural-language action prose"
+        )
+        gm_llm = GameMasterLLM.for_role(user, "play_agent")
+        model = gm_llm.model
+
+        try:
+            return await gm_llm.aexecute_complex_task(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                response_model=AgentDecision,
+                model=model,
+                adventure_id=adventure.id,
+                game_id=game_id,
+                operation="agent_turn",
+                phase="decision",
+            )
+        except Exception as e:
+            logger.exception("Failed to run agent decision LLM call")
+            return AgentDecision(
+                thoughts="Failed to contact GM model or parse JSON output.",
+                action="Wait a moment.",
+                is_stuck_or_bug=True,
+                issue_description=f"LLM call exception: {str(e)}",
+            )

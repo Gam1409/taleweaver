@@ -5,9 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
-from sqlalchemy import select
-
 from backend.core import prompts
+from backend.engine.character_identity import describe_character
 from backend.engine.image_profiles import image_timeout
 from backend.engine.image_prompt_adapter import asset_source
 from backend.engine.manifest_apply.assets import needs_image
@@ -19,33 +18,11 @@ from backend.engine.manifest_apply.visuals import (
     t2i_config,
     uses_advanced_model,
 )
+from backend.engine.template_avatar import AVATAR_FIELDS, get_template_avatar
 
 EQUIPMENT_SLOTS = (
     "Head", "Chest", "Arms", "Legs", "Hands", "Feet", "Ring_1", "Ring_2", "Neck", "MainHand", "OffHand",
 )  # fmt: skip
-
-# (avatar attribute, manifest key, default for new avatars)
-AVATAR_FIELDS: tuple[tuple[str, str, Any], ...] = (
-    ("name", "name", "Hero"),
-    ("role", "role", "Protagonist"),
-    ("description", "description", ""),
-    ("goal", "goal", ""),
-    ("character", "character", ""),
-    ("visual_profile", "visual_profile", None),
-    ("hp", "hp", 200),
-    ("max_hp", "hp", 200),
-    ("stamina", "stamina", 200),
-    ("max_stamina", "stamina", 200),
-    ("mana", "mana", 200),
-    ("max_mana", "mana", 200),
-    ("strength", "strength", 10),
-    ("dexterity", "dexterity", 10),
-    ("intelligence", "intelligence", 10),
-    ("wisdom", "wisdom", 10),
-    ("charisma", "charisma", 10),
-    ("armor_class", "armor_class", 10),
-    ("exp", "exp", 0),
-)
 
 
 @dataclass
@@ -129,7 +106,7 @@ async def _generate_portrait(ctx: ApplyContext, avatar: Any) -> Optional[str]:
         ctx.manifest.get("objects") or [],
         detailed=clothing_settings(ctx.manifest)["detailed"],
     )
-    description = portrait_description(visual) if visual is not None else avatar.description
+    description = portrait_description(visual) if visual is not None else describe_character(avatar)
     role = "" if visual is not None else avatar.role
     prompt = prompts.PROTAGONIST_IMAGE_PROMPT_TEMPLATE.format(
         name=avatar.name, role=role, description=description
@@ -155,7 +132,7 @@ async def _generate_portrait(ctx: ApplyContext, avatar: Any) -> Optional[str]:
             prompt,
             ctx.template_id,
             "PROTAGONIST",
-            "NPC",
+            "PROTAGONIST",
             user_config,
             api_keys,
             style_instruction=ctx.style_instruction,
@@ -182,22 +159,14 @@ async def _portrait(ctx: ApplyContext, avatar: Any, prot: dict[str, Any]) -> Opt
     if not needs_image(image_url):
         return image_url
     current = avatar.profile_image
-    if current and current.startswith("/data/"):
+    if isinstance(current, str) and current.startswith("/data/"):
         return current
     return await placeholder_image(ctx, "PROTAGONIST", category="SCENE")
 
 
 async def persist_avatar(ctx: ApplyContext, prot: dict[str, Any]) -> tuple[Any, StartingItems]:
     """Creates or updates the template avatar from the manifest and resolves its portrait."""
-    from backend.models.avatar import Avatar
-
-    res = await ctx.db.execute(
-        select(Avatar)
-        .where(Avatar.template_id == ctx.template_id)
-        .order_by(Avatar.created_at.asc(), Avatar.id.asc())
-        .limit(1)
-    )
-    avatar = res.scalars().first()
+    avatar = await get_template_avatar(ctx.db, ctx.template_id)
     items = collect_starting_items(prot)
     stats = starting_stats(prot)
     if avatar:

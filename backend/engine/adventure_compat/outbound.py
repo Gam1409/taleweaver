@@ -14,6 +14,10 @@ from backend.engine.adventure_compat.common import (
     script_sources,
 )
 from backend.engine.adventure_compat.privacy import public_content
+from backend.engine.adventure_compat.runtime_extensions import (
+    check_public_extensions,
+    omit_local_options,
+)
 
 
 def _require_publication_metadata(meta: dict[str, Any]) -> None:
@@ -30,6 +34,16 @@ def _require_publication_metadata(meta: dict[str, Any]) -> None:
 
 
 def _visuals(record: dict[str, Any], report: ConversionReport) -> None:
+    gender = record.pop("gender", None)
+    age = record.pop("age_years", None)
+    identity = [str(gender)] if gender else []
+    if age is not None:
+        identity.append(f"age {age}")
+    if identity:
+        record["appearance"] = ", ".join(filter(None, [record.get("appearance"), *identity]))
+        report.warn(
+            "Structured character identity becomes descriptive appearance.", acknowledge=True
+        )
     profile = record.pop("visual_profile", None)
     if isinstance(profile, dict):
         appearance = profile.get("appearance") or {}
@@ -68,7 +82,9 @@ def export_upstream_manifest(manifest: dict[str, Any]) -> tuple[dict[str, Any], 
         for node in ast.walk(ast.parse(source))
         if isinstance(node, ast.Constant) and isinstance(node.value, str)
     )
-    result = public_content(result, report, script_names)
+    cleaned = public_content(result, report, script_names)
+    check_public_extensions(result, cleaned, report)
+    result = omit_local_options(cleaned, report)
     for extension in EXTENSIONS:
         value = result.pop(extension, None)
         if value:
@@ -91,6 +107,7 @@ def export_upstream_manifest(manifest: dict[str, Any]) -> tuple[dict[str, Any], 
         "protagonist",
         "init_script",
         "metadata",
+        "extensions",
         *COLLECTIONS,
     }
     if result.keys() - allowed:

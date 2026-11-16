@@ -1,3 +1,4 @@
+import { httpModule } from './sessionSnapshotModule.mjs'
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
@@ -8,6 +9,7 @@ const source = readFileSync(new URL('../src/composables/useNpcCardSettings.ts', 
 const compiled = ts.transpileModule(source, {
   compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext },
 }).outputText.replace("from 'vue'", `from '${import.meta.resolve('vue')}'`)
+  .replace("from '@/services/http'", `from '${httpModule}'`)
   .replace("import { authState } from '@/store/auth';", 'const authState = { token: "test-token" };')
 const { useNpcCardSettings } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`)
 const reply = data => new Response(JSON.stringify(data))

@@ -37,9 +37,7 @@ def validate_manifest_version(payload: dict[str, Any], *, require_format: bool =
     if require_format:
         fmt = payload.get("format")
         if fmt not in [FORMAT_NAME, LEGACY_FORMAT_NAME]:
-            raise ValueError(
-                f"Unsupported import format '{fmt}'. Expected '{FORMAT_NAME}'."
-            )
+            raise ValueError(f"Unsupported import format '{fmt}'. Expected '{FORMAT_NAME}'.")
 
     if not is_supported_version(version):
         raise ValueError(

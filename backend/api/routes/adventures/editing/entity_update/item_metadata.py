@@ -10,7 +10,7 @@ from fastapi import HTTPException
 
 from backend.api.routes.adventures.editing.common import _normalize_lock_fields
 from backend.api.routes.adventures.editing.entity_update.fields import given, put_metadata
-from backend.api.routes.adventures.editing.schemas import EntityUpdateRequest
+from backend.api.routes.adventures.editing.schemas import EntityBehaviorFields, EntityUpdateRequest
 from backend.models.world_entity import WorldEntity
 
 _LOCK_FIELDS = ("code_to_unlock", "item_to_unlock", "rule_to_unlock")
@@ -107,7 +107,7 @@ def update_constructable(
         put_metadata(metadata_json, payload, _CRAFT_FIELDS, empty_as_none=True)
 
 
-def update_item_events(metadata_json: dict[str, Any], payload: EntityUpdateRequest) -> None:
+def update_item_events(metadata_json: dict[str, Any], payload: EntityBehaviorFields) -> None:
     put_metadata(metadata_json, payload, _ITEM_EVENT_FIELDS, empty_as_none=False)
 
 

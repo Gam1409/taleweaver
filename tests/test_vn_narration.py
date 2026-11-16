@@ -36,13 +36,25 @@ def test_pace_preserves_canonical_state_and_common_agency_contract(pace):
     assert old_reference == original
     assert state.entity_states["npc_7"] == original["npc_7"]
     assert state.entity_states["__vn_state__"] == original["__vn_state__"]
-    assert state.entity_states[SETTINGS_KEY] == {"pace": pace}
+    assert state.entity_states[SETTINGS_KEY] == {
+        "pace": pace,
+        "scene_staging": False,
+        "visual_preparation": "plan",
+        "visual_audit": True,
+        "visual_audit_failure": "block",
+        "nsfw_guard": "warn",
+    }
     assert read_settings(state).pace == pace
     assert f"PACING: {pace.upper()}." in prompt
+    assert "VISUAL NOVEL PRESENTATION" in prompt
+    assert "not a checklist to describe in each response" in prompt
+    assert "there is no one-beat or one-gesture limit" in prompt
     assert "Stop before the next meaningful player decision" in prompt
     assert 'Character Name: "Dialogue"' in prompt
     assert "session's content language" in prompt
     assert "approved NPC movement in TURN RESOLUTION" in prompt
+    assert "same-turn completed-state check" in prompt
+    assert "current action explicitly chosen by the player" in prompt
     assert "does not authorize leaving the room" in prompt
     assert "Never invent a destination" in prompt
     assert "Use CURRENT STATE's present cast" in prompt
@@ -123,3 +135,10 @@ def test_generator_retains_its_tool_contract_even_with_vn_mode():
     )
     assert prompts.ADVENTURE_GENERATOR_INSTRUCTIONS in prompt
     assert "Text Adventure RPG" in prompt
+
+
+def test_visual_preparation_defaults_enable_plans_and_strict_audit():
+    settings = read_settings(SimpleNamespace(entity_states={SETTINGS_KEY: {"pace": "leisurely"}}))
+    assert settings.visual_preparation == "plan"
+    assert settings.visual_audit is True
+    assert settings.visual_audit_failure == "block"

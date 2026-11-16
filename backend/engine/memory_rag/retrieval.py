@@ -4,21 +4,24 @@ import asyncio
 import logging
 import time
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import select
 
+from backend.core.engine_detailed_trace import step
 from backend.core.llm_logger import log_structured_event
-from backend.engine.memory_rag.documents import MemoryDocument, collect_documents
+from backend.core.reliability_metrics import record_recall
+from backend.engine.memory_rag.core import context_fallback, working_memory
+from backend.engine.memory_rag.documents import MemoryDocument
 from backend.engine.memory_rag.embeddings import embed_texts
 from backend.engine.memory_rag.ranking import rank_documents
+from backend.engine.memory_rag.recall_sources import collect_documents
 from backend.engine.memory_rag.settings import embedding_signature, read_settings
 from backend.engine.memory_rag.store import LanceMemoryStore, Scope
 from backend.models.memory_rag import MemoryIndexState
 
 logger = logging.getLogger(__name__)
-QUERY_TIMEOUT = 2.0
-VECTOR_BUDGET = 2.5
+VECTOR_SEARCH_GRACE = 0.5
 
 
 @dataclass
@@ -28,12 +31,19 @@ class TurnRecall:
     method: str = "disabled"
     elapsed_ms: float = 0
     usage: dict[str, dict] = field(default_factory=dict)
+    core_documents: list[MemoryDocument] = field(default_factory=list)
+    candidates: int = 0
+    ranked: int = 0
+    projection_metrics: dict = field(default_factory=dict)
+    query: str = ""
 
     def record_usage(
         self, manager: Any, audience: str, block: str, selected: list[MemoryDocument]
     ) -> None:
+        metrics = {"candidates": self.candidates, "ranked": self.ranked, **self.projection_metrics}
         audit = {
-            "method": self.method,
+            "selection_metrics": metrics,
+            "retrieval_method": self.method,
             "duration_ms": self.elapsed_ms,
             "source_ids": [doc.source_id for doc in selected],
             "source_message_ids": sorted(
@@ -45,6 +55,7 @@ class TurnRecall:
         if self.usage.get(audience) == audit:
             return
         self.usage[audience] = audit
+        record_recall(metrics, self.method)
         log_structured_event(
             "gm.turn.memory_recall",
             game_id=manager.state.session_id,
@@ -66,7 +77,12 @@ async def _index_state(manager: Any) -> Any:
 
 
 async def _query_vectors(manager: Any, query: str, scope: Scope, settings: Any) -> list[dict]:
-    vectors = await embed_texts(manager.user, [query[:4000]], timeout=QUERY_TIMEOUT)
+    vectors = await embed_texts(
+        manager.user,
+        [query[:4000]],
+        timeout=settings.timeout_seconds,
+        purpose="query",
+    )
     if embedding_signature(settings, len(vectors[0])) != scope.signature:
         return []
     return await LanceMemoryStore().query(scope, vectors[0], query, limit=32)
@@ -83,9 +99,11 @@ async def _semantic_candidates(manager: Any, query: str) -> tuple[list[dict], Sc
     if index.template_id != manager.state.template_id:
         return [], None
     scope = Scope(str(manager.user.id), str(manager.state.session_id), index.epoch, index.signature)
+    query_settings = read_settings(manager.user)
     try:
         candidates = await asyncio.wait_for(
-            _query_vectors(manager, query, scope, read_settings(manager.user)), VECTOR_BUDGET
+            _query_vectors(manager, query, scope, query_settings),
+            query_settings.timeout_seconds + VECTOR_SEARCH_GRACE,
         )
     except Exception as exc:
         # Provider errors can contain credentials or quoted text. Log only the class.
@@ -100,7 +118,7 @@ def _canonical_scores(
     canonical = {doc.id: doc for doc in documents}
     scores = {}
     for rank, candidate in enumerate(candidates):
-        document = canonical.get(candidate.get("id"))
+        document = canonical.get(str(candidate.get("id") or ""))
         if document is None or document.source_hash != candidate.get("source_hash"):
             continue
         expected = (
@@ -121,9 +139,16 @@ def _canonical_scores(
 
 
 async def _collect_recall(manager: Any, query: str, npc_ids: set[str]) -> TurnRecall:
-    candidates, scope = await _semantic_candidates(manager, query)
+    candidates, scope = await _turn_vectors(manager, query)
     # Read source text AFTER network awaits: edits/deletion/rewinds cannot resurrect vector text.
-    documents = await collect_documents(manager.db, manager.state, str(manager.user.id))
+    documents = await collect_documents(
+        manager.db,
+        manager.state,
+        str(manager.user.id),
+        query=query,
+        npc_ids=npc_ids,
+        candidates=candidates,
+    )
     scores = {}
     if candidates and scope:
         current = await _index_state(manager)
@@ -134,21 +159,64 @@ async def _collect_recall(manager: Any, query: str, npc_ids: set[str]) -> TurnRe
         ):
             scores = _canonical_scores(documents, candidates, scope)
     ranked = rank_documents(documents, query, npc_ids, manager.state.current_scene_id, scores)
-    return TurnRecall(enabled=True, documents=ranked, method="hybrid" if scores else "sql_lexical")
+    ranked_count = len(ranked)
+    core = working_memory(documents, npc_ids)
+    if not ranked:
+        ranked = context_fallback(documents)
+    return TurnRecall(
+        enabled=True,
+        candidates=len(documents),
+        ranked=ranked_count,
+        documents=ranked,
+        core_documents=core,
+        method="hybrid" if scores else "sql_lexical",
+        query=query,
+    )
 
 
-async def prepare_recall(manager: Any, user_msg: str, entities: list[Any]) -> TurnRecall:
+async def _turn_vectors(manager: Any, query: str) -> tuple[list[dict], Scope | None]:
+    # Host resolution may rebuild the scene/cast in the same input turn. Reread
+    # canonical SQL and rerank then, while sharing the original vector request.
+    if hasattr(manager, "_memory_vector_result"):
+        return cast(tuple[list[dict], Scope | None], manager._memory_vector_result)
+    result = await _semantic_candidates(manager, query)
+    manager._memory_vector_result = result
+    return result
+
+
+@step("memory.retrieve")
+async def prepare_recall(
+    manager: Any, user_msg: str, entities: list[Any], *, history: list[dict] | None = None
+) -> TurnRecall:
     """Cache the result through state-context rebuilds and every actual turn audience."""
-    token = (manager.state.session_id, getattr(manager, "_vn_player_message_id", None), user_msg)
-    if getattr(manager, "_memory_recall_token", None) == token:
-        return manager._memory_recall
+    turn_token = (
+        manager.state.session_id,
+        getattr(manager, "_vn_player_message_id", None),
+        user_msg,
+    )
+    if getattr(manager, "_memory_vector_token", None) != turn_token:
+        manager._memory_vector_token = turn_token
+        if hasattr(manager, "_memory_vector_result"):
+            del manager._memory_vector_result
+    token = (
+        turn_token,
+        manager.state.current_scene_id,
+        tuple(sorted(str(entity.id) for entity in entities if entity.entity_type == "NPC")),
+        getattr(manager.state, "in_game_time", 0),
+    )
+    if getattr(manager, "_memory_recall_token", None) == token and isinstance(
+        cached := getattr(manager, "_memory_recall", None), TurnRecall
+    ):
+        return cached
     started = time.perf_counter()
     recall = TurnRecall()
     try:
         if read_settings(manager.user).enabled:
             npcs = [entity for entity in entities if entity.entity_type == "NPC"]
             names = " ".join(str(npc.name or npc.id) for npc in npcs)
-            query = user_msg[:3500] + "\nPresent characters: " + names[:500]
+            previous = " ".join(str(row.get("content", "")) for row in (history or [])[-2:])
+            query = user_msg[:2400] + "\nRecent context: " + previous[-1000:]
+            query += "\nPresent characters: " + names[:500]
             recall = await _collect_recall(manager, query, {str(npc.id) for npc in npcs})
     except Exception as exc:
         logger.warning(

@@ -2,6 +2,7 @@
 # pylint: disable=unused-argument,unused-variable,using-constant-test
 # ruff: noqa: ARG001,F841,PLR0133
 
+import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -37,6 +38,33 @@ def _llm_call_text(call) -> str:
     parts = [str(arg) for arg in call.args[:2]]
     parts.extend(str(msg.get("content", "")) for msg in call.kwargs.get("messages") or [])
     return "\n\n".join(parts)
+
+
+def _visible_sse_text(chunks: list[str]) -> str:
+    """Inspect story/error text, excluding opaque receipt and correlation IDs."""
+    payloads = [
+        json.loads(line.removeprefix("data: "))
+        for chunk in chunks
+        for line in chunk.splitlines()
+        if line.startswith("data: ")
+    ]
+    return "\n".join(
+        str(payload.get(field, "")) for payload in payloads for field in ("content", "detail")
+    )
+
+
+@pytest.fixture
+def status_digits_in_receipt(monkeypatch):
+    original_save = GameTurnManager._save_chat_message
+
+    async def save_with_status_digits(manager, role, content):
+        message = await original_save(manager, role, content)
+        if role == "user":
+            message.id = "00000000-0429-7503-8000-000000000001"
+            await manager.db.flush()
+        return message
+
+    monkeypatch.setattr(GameTurnManager, "_save_chat_message", save_with_status_digits)
 
 
 async def _seed_game_context(db):
@@ -1094,7 +1122,9 @@ async def test_token_limit_error_is_user_safe_in_chat(setup_test_db, monkeypatch
         assert not any("maximum context length" in c.lower() for c in chunks)
 
 
-async def test_rate_limit_error_is_user_safe_in_chat(setup_test_db, monkeypatch):
+async def test_rate_limit_error_is_user_safe_in_chat(
+    setup_test_db, monkeypatch, status_digits_in_receipt
+):
     """Rate-limit exceptions should be surfaced as a short user-safe message without raw provider details."""
     from tests.conftest import TestSessionLocal
 
@@ -1117,7 +1147,8 @@ async def test_rate_limit_error_is_user_safe_in_chat(setup_test_db, monkeypatch)
             chunks.append(chunk)
 
         assert any("event: error" in c and "busy right now" in c.lower() for c in chunks)
-        assert not any("429" in c or "rate limit exceeded" in c.lower() for c in chunks)
+        visible_text = _visible_sse_text(chunks)
+        assert "429" not in visible_text and "rate limit exceeded" not in visible_text.lower()
 
 
 async def test_timeout_error_is_user_safe_in_chat(setup_test_db, monkeypatch):
@@ -1146,7 +1177,9 @@ async def test_timeout_error_is_user_safe_in_chat(setup_test_db, monkeypatch):
         assert not any("request timeout" in c.lower() for c in chunks)
 
 
-async def test_service_unavailable_error_is_user_safe_in_chat(setup_test_db, monkeypatch):
+async def test_service_unavailable_error_is_user_safe_in_chat(
+    setup_test_db, monkeypatch, status_digits_in_receipt
+):
     """Service unavailable exceptions should be surfaced as a short user-safe message."""
     from tests.conftest import TestSessionLocal
 
@@ -1169,7 +1202,7 @@ async def test_service_unavailable_error_is_user_safe_in_chat(setup_test_db, mon
             chunks.append(chunk)
 
         assert any("event: error" in c and "temporarily unavailable" in c.lower() for c in chunks)
-        assert not any("503" in c for c in chunks)
+        assert "503" not in _visible_sse_text(chunks)
 
 
 async def test_invalid_structured_llm_payload_is_user_safe_in_chat(setup_test_db, monkeypatch):
@@ -1417,6 +1450,19 @@ async def test_chat_mode_runs_progression_pass_and_keeps_progress_unchanged(
         assert mock_llm_instance.aexecute_complex_task.await_count == 1
         assert mock_llm_instance.stream_simple_task.await_count == 1
         assert any("quiet wind" in c for c in chunks)
+        statuses = [
+            json.loads(c.split("data: ", 1)[1])["content"]
+            for c in chunks
+            if c.startswith("event: status\n")
+        ]
+        phases = [
+            "Checking progression...",
+            "Applying progression...",
+            "Preparing narrative...",
+            "Preparing NPC responses...",
+            "Generating narrative...",
+        ]
+        assert [status for status in statuses if status in phases] == phases
         assert (state.quests or [])[0].get("status") == "open"
         assert user.earned_awards == []
 
@@ -1569,6 +1615,9 @@ async def test_traverse_exit_with_lowercase_uuid_id(setup_test_db, monkeypatch):
             )
 
         mock_llm_instance = MagicMock()
+        mock_llm_instance.aexecute_complex_task = AsyncMock(
+            return_value=GameEvent(narrative_description="You step into the courtyard.")
+        )
         mock_llm_instance.stream_simple_task = AsyncMock(return_value=mock_stream())
         monkeypatch.setattr(
             "backend.api.routes.adventures.gameplay_logic.GameMasterLLM",

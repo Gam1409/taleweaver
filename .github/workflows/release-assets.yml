@@ -1,0 +1,99 @@
+name: Attach verified release archives
+
+on:
+  workflow_run:
+    workflows: [TaleWeaver CI, Security checks, Docker distribution, Desktop distributions]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing draft or published release tag
+        required: true
+        type: string
+      build_run_id:
+        description: Successful Desktop distributions run for exactly that tag commit (optional)
+        required: false
+        type: string
+      promote:
+        description: Publish, remove Pre-release and mark Latest after verified uploads
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  group: release-assets-${{ inputs.tag || 'v0.7.1-beta' }}
+  cancel-in-progress: false
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  attach:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_TAG: ${{ inputs.tag || 'v0.7.1-beta' }}
+      BUILD_RUN_ID: ${{ inputs.build_run_id }}
+      PROMOTE_RELEASE: ${{ github.event_name != 'workflow_dispatch' || inputs.promote }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate tag, source run and completed release checks
+        id: verify
+        shell: bash
+        run: |
+          python scripts/release_assets.py inspect
+      - uses: actions/download-artifact@v4
+        if: steps.verify.outputs.ready == 'true'
+        with:
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.verify.outputs.build_run_id }}
+          pattern: TaleWeaver-*
+          path: release-artifacts
+      - name: Collect the three platform archives and generate SHA-256 checksums
+        if: steps.verify.outputs.ready == 'true'
+        shell: bash
+        run: |
+          python - <<'PY'
+          import hashlib, pathlib, shutil
+          root = pathlib.Path('release-artifacts')
+          dist = pathlib.Path('release-dist')
+          dist.mkdir()
+          expected = {'TaleWeaver-windows-X64.zip', 'TaleWeaver-linux-X64.tar.gz', 'TaleWeaver-macos-ARM64.tar.gz'}
+          paths = [path for path in root.rglob('*') if path.is_file()]
+          if len(paths) != 3 or {path.name for path in paths} != expected:
+              raise SystemExit('Expected exactly three platform archives.')
+          sums = []
+          for path in sorted(paths, key=lambda item: item.name):
+              with path.open('rb') as stream:
+                  digest = hashlib.file_digest(stream, 'sha256').hexdigest()
+              sums.append(f'{digest}  {path.name}\n')
+              shutil.copy2(path, dist / path.name)
+          (dist / 'SHA256SUMS').write_text(''.join(sums))
+          PY
+      - name: Attach verified archives
+        if: steps.verify.outputs.ready == 'true'
+        shell: bash
+        run: |
+          gh release upload "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --clobber \
+            release-dist/TaleWeaver-windows-X64.zip \
+            release-dist/TaleWeaver-linux-X64.tar.gz \
+            release-dist/TaleWeaver-macos-ARM64.tar.gz \
+            release-dist/SHA256SUMS
+      - name: Record verification and apply the requested release status
+        if: steps.verify.outputs.ready == 'true'
+        env:
+          BUILD_RUN_ID: ${{ steps.verify.outputs.build_run_id }}
+        run: python scripts/release_assets.py publish

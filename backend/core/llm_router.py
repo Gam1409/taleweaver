@@ -3,6 +3,7 @@ import json
 import logging
 import re
 import time
+from collections.abc import AsyncIterator
 from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any, Optional, TypeVar
@@ -10,23 +11,40 @@ from typing import Any, Optional, TypeVar
 import litellm
 from pydantic import BaseModel, ValidationError
 
+from backend.core.inference.admission import timeout_for
+from backend.core.inference.transport import guarded_async, guarded_sync, owned_stream, target
+from backend.core.llm_completion_capture import capture_completions
+from backend.core.llm_detailed_trace import trace_async, trace_sync
+from backend.core.llm_diagnostics import async_call, retry, sync_call
 from backend.core.llm_json_repair import (
     attempt_repair_truncated_json,
+    clean_technical_text,
     is_truncated_json,
     repair_json,
 )
 from backend.core.llm_logger import log_llm_interaction, log_structured_event
+from backend.core.llm_output_errors import StructuredOutputError
+from backend.core.llm_parallel import resolve as resolve_parallel
 from backend.core.llm_provider_config import (
     apply_provider_endpoint,
-    is_minimax_model,
     json_schema_instruction,
     normalize_model,
     uses_json_mode_fallback,
 )
 from backend.core.llm_request_tuning import apply_prompt_cache_markers
 from backend.core.llm_roles import resolve_llm_role
+from backend.core.llm_sampling import apply as apply_sampling
+from backend.core.llm_sampling import resolve as resolve_sampling
 from backend.core.llm_stream_filters import clean_stream_thinking, clean_stream_voice_tags
+from backend.core.llm_structured_execution import (
+    input_characters,
+    require_complete,
+    require_input_budget,
+)
+from backend.core.llm_thinking import apply_thinking_settings
+from backend.core.llm_tool_turn import ToolTurn
 from backend.core.security import encryption_util
+from backend.core.voice_repetition import clean_voice_repetition
 from backend.core.voice_tags import VOICE_TAG_SET
 from backend.models.user import User
 
@@ -131,7 +149,9 @@ class GameMasterLLM:
         retry_kwargs["extra_body"] = extra_body
         return retry_kwargs
 
-    def _completion_with_openrouter_fallback(self, kwargs: dict):
+    @trace_sync
+    @guarded_sync
+    def _completion_with_openrouter_fallback(self, kwargs: dict) -> Any:
         """Call LiteLLM completion and retry for OpenRouter provider-order mismatches and transient connection drops (up to 3 retries)."""
         if self.provider == "custom_openai":
             from backend.core.custom_openai import complete
@@ -140,13 +160,12 @@ class GameMasterLLM:
         max_transient_retries = 4
         for attempt in range(max_transient_retries):
             try:
-                return self._get_litellm().completion(
-                    **kwargs, request_timeout=self.request_timeout
-                )
+                return self._get_litellm().completion(**kwargs, request_timeout=timeout_for(self))
             except Exception as exc:
                 if self.provider == "openrouter":
                     available_providers = self._extract_openrouter_available_providers(exc)
                     if available_providers:
+                        retry(self, attempt + 1, error=exc)
                         logger.warning(
                             "OpenRouter provider mismatch for model '%s'. Retrying with provider order: %s",
                             kwargs.get("model"),
@@ -156,13 +175,14 @@ class GameMasterLLM:
                             kwargs, available_providers
                         )
                         return self._get_litellm().completion(
-                            **retry_kwargs, request_timeout=self.request_timeout
+                            **retry_kwargs, request_timeout=timeout_for(self)
                         )
 
                     err_str = str(exc)
                     if "removed during routing" in err_str or "No endpoints found" in err_str:
                         extra_body = dict(kwargs.get("extra_body") or {})
                         if "provider" in extra_body:
+                            retry(self, attempt + 1, error=exc)
                             logger.warning(
                                 "OpenRouter provider routing failed for model '%s'. Retrying with unrestricted fallback routing.",
                                 kwargs.get("model"),
@@ -172,19 +192,25 @@ class GameMasterLLM:
                             new_extra_body.pop("provider", None)
                             retry_kwargs["extra_body"] = new_extra_body
                             return self._get_litellm().completion(
-                                **retry_kwargs, request_timeout=self.request_timeout
+                                **retry_kwargs, request_timeout=timeout_for(self)
                             )
 
-                if attempt < max_transient_retries - 1 and self._is_transient_llm_error(exc):
+                if (
+                    attempt < max_transient_retries - 1
+                    and self._is_transient_llm_error(exc)
+                    and target(self) is None
+                ):
                     backoff_delay = 0.75 * (attempt + 1)
+                    retry(self, attempt + 1, backoff_delay, exc)
                     logger.warning(
-                        "Transient LLM connection/timeout error on attempt %d/%d (retry %d/%d) (%s: %s). Retrying with fresh connection in %.2fs...",
+                        "Transient LLM connection/timeout error provider=%s role=%s on attempt %d/%d (retry %d/%d) (%s). Retrying with fresh connection in %.2fs...",
+                        self.provider,
+                        self.model_category,
                         attempt + 1,
                         max_transient_retries,
                         attempt + 1,
                         max_transient_retries - 1,
                         type(exc).__name__,
-                        exc,
                         backoff_delay,
                     )
                     time.sleep(backoff_delay)
@@ -192,12 +218,14 @@ class GameMasterLLM:
 
                 raise
 
-    async def _acompletion_with_openrouter_fallback(self, kwargs: dict):
+    @trace_async
+    @guarded_async
+    async def _acompletion_with_openrouter_fallback(self, kwargs: dict) -> Any:
         """Async variant of completion retry for OpenRouter provider-order mismatches and transient connection drops (up to 3 retries)."""
-        if self.provider == "custom_openai":
-            from backend.core.custom_openai import acomplete
+        if self.provider == "custom_openai" or kwargs.get("_single_attempt"):
+            from backend.core.llm_tool_turn import single_attempt
 
-            return await acomplete(self, kwargs)
+            return await single_attempt(self, kwargs)
         max_transient_retries = 4
         for attempt in range(max_transient_retries):
             try:
@@ -209,12 +237,13 @@ class GameMasterLLM:
                     max_transient_retries,
                 )
                 return await self._get_litellm().acompletion(
-                    **kwargs, request_timeout=self.request_timeout
+                    **kwargs, request_timeout=timeout_for(self)
                 )
             except Exception as exc:
                 if self.provider == "openrouter":
                     available_providers = self._extract_openrouter_available_providers(exc)
                     if available_providers:
+                        retry(self, attempt + 1, error=exc)
                         logger.warning(
                             "OpenRouter provider mismatch for model '%s'. Retrying with provider order: %s",
                             kwargs.get("model"),
@@ -229,13 +258,14 @@ class GameMasterLLM:
                             kwargs.get("model"),
                         )
                         return await self._get_litellm().acompletion(
-                            **retry_kwargs, request_timeout=self.request_timeout
+                            **retry_kwargs, request_timeout=timeout_for(self)
                         )
 
                     err_str = str(exc)
                     if "removed during routing" in err_str or "No endpoints found" in err_str:
                         extra_body = dict(kwargs.get("extra_body") or {})
                         if "provider" in extra_body:
+                            retry(self, attempt + 1, error=exc)
                             logger.warning(
                                 "OpenRouter provider routing failed for model '%s'. Retrying with unrestricted fallback routing.",
                                 kwargs.get("model"),
@@ -245,19 +275,25 @@ class GameMasterLLM:
                             new_extra_body.pop("provider", None)
                             retry_kwargs["extra_body"] = new_extra_body
                             return await self._get_litellm().acompletion(
-                                **retry_kwargs, request_timeout=self.request_timeout
+                                **retry_kwargs, request_timeout=timeout_for(self)
                             )
 
-                if attempt < max_transient_retries - 1 and self._is_transient_llm_error(exc):
+                if (
+                    attempt < max_transient_retries - 1
+                    and self._is_transient_llm_error(exc)
+                    and target(self) is None
+                ):
                     backoff_delay = 0.75 * (attempt + 1)
+                    retry(self, attempt + 1, backoff_delay, exc)
                     logger.warning(
-                        "Transient LLM connection/timeout error on attempt %d/%d (retry %d/%d) (%s: %s). Retrying with fresh connection in %.2fs...",
+                        "Transient LLM connection/timeout error provider=%s role=%s on attempt %d/%d (retry %d/%d) (%s). Retrying with fresh connection in %.2fs...",
+                        self.provider,
+                        self.model_category,
                         attempt + 1,
                         max_transient_retries,
                         attempt + 1,
                         max_transient_retries - 1,
                         type(exc).__name__,
-                        exc,
                         backoff_delay,
                     )
                     await asyncio.sleep(backoff_delay)
@@ -272,14 +308,15 @@ class GameMasterLLM:
         """
         content = content.strip()
 
-        # Check for markdown code blocks first
-        if "```json" in content:
-            content = content.split("```json")[1].split("```")[0]
-        elif "```" in content:
-            # Check if there are at least two sets of backticks
-            parts = content.split("```")
-            if len(parts) >= 3:
-                content = parts[1]
+        # A fence inside a JSON string is data, not a wrapper.
+        try:
+            json.loads(content)
+            return content
+        except json.JSONDecodeError:
+            pass
+        wrapper = re.fullmatch(r"```(?:json)?\s*\n?(.*?)\n?```", content, re.DOTALL)
+        if wrapper:
+            content = wrapper.group(1)
 
         content = content.strip()
 
@@ -321,6 +358,8 @@ class GameMasterLLM:
         """Strip <think>...</think> tags and the reasoning text inside them."""
         if not text:
             return ""
+        if "<think>" not in text and "</think>" not in text:
+            return text
         # Remove completed think blocks
         cleaned = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL)
         # Also strip any dangling open think tag to the end of the text (in case of truncation/interruption)
@@ -352,7 +391,7 @@ class GameMasterLLM:
     @staticmethod
     async def _append_generation_log_async(
         adventure_id: Optional[str], log_type: str, content: str, image_url: Optional[str] = None
-    ):
+    ) -> None:
         """Append a status, thinking, or image generation log to the adventure template's generation_logs list."""
         if not adventure_id:
             return
@@ -386,13 +425,12 @@ class GameMasterLLM:
 
     @staticmethod
     def _to_canonical_voice_tag(tag: str) -> str:
-        return tag.strip().lower()
+        return tag.strip().lower() if tag.strip().lower() in VOICE_TAG_SET else tag
 
     @staticmethod
     def normalize_voice_tags(text: str) -> str:
         """
-        Normalizes voice/emotion tags at the beginning of the text, in paragraphs,
-        and in character dialogue lines to standard English [tag] format.
+        Legacy opt-in tag formatting; never apply to generated or stored narration.
         """
         if not text:
             return text
@@ -431,7 +469,7 @@ class GameMasterLLM:
                 speaker_part = sp_match.group("speaker")
                 speech_part = sp_match.group("speech").strip()
                 tag_match = tag_extract_re.match(speech_part)
-                if tag_match:
+                if tag_match and tag_match.group("tag").strip().lower() in VOICE_TAG_SET:
                     canon_tag = GameMasterLLM._to_canonical_voice_tag(tag_match.group("tag"))
                     body = tag_match.group("body").strip()
                     body = (
@@ -461,69 +499,30 @@ class GameMasterLLM:
 
             normalized_lines.append(line)
 
-        return "\n".join(normalized_lines)
+        return clean_voice_repetition("\n".join(normalized_lines))
 
     @staticmethod
-    async def _clean_stream_voice_tags(stream):
+    async def _clean_stream_voice_tags(stream: AsyncIterator[Any]) -> AsyncIterator[Any]:
         """Async generator that buffers the start of the stream and normalizes voice tags."""
         async for chunk in clean_stream_voice_tags(stream, GameMasterLLM.normalize_voice_tags):
             yield chunk
 
     @staticmethod
     async def _with_stream_timeout(
-        stream,
-        initial_timeout: float = 40.0,
-        chunk_timeout: float = 12.0,
-    ):
-        """Async generator that enforces timeouts between streaming chunks.
+        stream: AsyncIterator[Any],
+        initial_timeout: float,
+        chunk_timeout: float,
+    ) -> AsyncIterator[Any]:
+        """Bound provider silence; partial failures remain visible to the caller."""
+        from backend.core.llm_stream_timeout import with_stream_timeout
 
-        - initial_timeout: Max wait for the first chunk (time to first token).
-        - chunk_timeout: Max wait between subsequent chunks (inactivity timeout).
-        If chunk_timeout expires AFTER content has already been received, the stream
-        terminates gracefully (as LLMs often complete without sending EOF or [DONE]).
-        """
-        has_content = False
-        iterator = aiter(stream)
-
-        while True:
-            current_timeout = chunk_timeout if has_content else initial_timeout
-            try:
-                chunk = await asyncio.wait_for(anext(iterator), timeout=current_timeout)
-            except StopAsyncIteration:
-                break
-            except asyncio.TimeoutError:
-                if has_content:
-                    logger.warning(
-                        "Stream stalled for %.1fs after receiving content; terminating stream gracefully.",
-                        chunk_timeout,
-                    )
-                    break
-                logger.error(
-                    "Stream timed out after %.1fs without generating any content.",
-                    initial_timeout,
-                )
-                raise TimeoutError("The AI model did not respond in time.") from None
-            except Exception as e:
-                if has_content:
-                    logger.warning(
-                        "Stream interrupted by %s after receiving content; preserving received narrative: %s",
-                        type(e).__name__,
-                        e,
-                    )
-                    break
-                raise
-
-            try:
-                delta = chunk.choices[0].delta.content
-                if delta and delta.strip():
-                    has_content = True
-            except (AttributeError, IndexError, TypeError):
-                pass
-
+        async for chunk in with_stream_timeout(
+            stream, initial_timeout=initial_timeout, chunk_timeout=chunk_timeout
+        ):
             yield chunk
 
     @staticmethod
-    async def _clean_stream_thinking(stream):
+    async def _clean_stream_thinking(stream: AsyncIterator[Any]) -> AsyncIterator[Any]:
         """Async generator that strips <think>...</think> blocks from stream chunks on-the-fly."""
         async for chunk in clean_stream_thinking(stream):
             yield chunk
@@ -571,7 +570,9 @@ class GameMasterLLM:
         retry_kwargs["messages"] = retry_messages
         return retry_kwargs
 
-    async def _retry_blank_json_content_async(self, kwargs: dict, response: Any):
+    async def _retry_blank_json_content_async(
+        self, kwargs: dict, response: Any, *, max_input_chars: int | None = None
+    ) -> Any:
         """Retry once when JSON-mode providers return only reasoning_content and an empty content channel."""
         try:
             message = response.choices[0].message
@@ -586,9 +587,11 @@ class GameMasterLLM:
             "LLM returned empty assistant content but reasoning_content was populated. Retrying once with explicit content-channel instruction."
         )
         retry_kwargs = self._build_blank_content_retry_kwargs(kwargs)
+        require_input_budget(retry_kwargs, max_input_chars)
+        retry(self, 1)
         return await self._acompletion_with_openrouter_fallback(retry_kwargs)
 
-    def _retry_blank_json_content(self, kwargs: dict, response: Any):
+    def _retry_blank_json_content(self, kwargs: dict, response: Any) -> Any:
         """Sync variant of retry for empty content with populated reasoning_content."""
         try:
             message = response.choices[0].message
@@ -602,6 +605,7 @@ class GameMasterLLM:
         logger.warning(
             "LLM returned empty assistant content but reasoning_content was populated. Retrying once with explicit content-channel instruction."
         )
+        retry(self, 1)
         retry_kwargs = self._build_blank_content_retry_kwargs(kwargs)
         return self._completion_with_openrouter_fallback(retry_kwargs)
 
@@ -690,10 +694,6 @@ class GameMasterLLM:
         if model_category == "generator":
             raw_timeout = getattr(settings, "WORLDBUILDING_TIMEOUT", settings.INTELLIGENCE_TIMEOUT)
         self.request_timeout = self._coerce_int(raw_timeout, default=settings.INTELLIGENCE_TIMEOUT)
-        self.stream_chunk_timeout = float(getattr(settings, "STREAM_CHUNK_TIMEOUT", 12.0) or 12.0)
-        self.stream_initial_timeout = float(
-            getattr(settings, "STREAM_INITIAL_TIMEOUT", 40.0) or 40.0
-        )
         self.kimi_api_base = (
             getattr(settings, "KIMI_API_BASE", "https://api.moonshot.ai/v1")
             or "https://api.moonshot.ai/v1"
@@ -746,6 +746,12 @@ class GameMasterLLM:
         self.ollama_api_mode = (user.llm_settings or {}).get("ollama_api_mode", "generate")
 
         llm_settings = self.user.llm_settings or {}
+        self.parallel_policy = resolve_parallel(
+            llm_settings, model_category if use_role_settings else None
+        )
+        self.sampling = resolve_sampling(
+            llm_settings, model_category if use_role_settings else None
+        )
         prefix = self._CATEGORY_PREFIXES.get(model_category, "small_")
         self._load_runtime_settings(model_category)
 
@@ -765,7 +771,7 @@ class GameMasterLLM:
         if self.provider == "custom_openai":
             from backend.core.custom_openai import configure_custom_router
 
-            configure_custom_router(self, llm_settings)
+            configure_custom_router(self, llm_settings, model_category if use_role_settings else "")
         elif self.provider == "ollama":
             from backend.core.ollama_role_config import resolve_ollama_role_settings
 
@@ -821,6 +827,7 @@ class GameMasterLLM:
             kwargs["num_ctx"] = self.ollama_num_ctx
 
     def _apply_provider_options(self, kwargs: dict[str, Any], model: str) -> None:
+        apply_sampling(kwargs, self.sampling, self.provider)
         if self.provider == "ollama":
             self._apply_ollama_options(kwargs, model)
             return
@@ -847,19 +854,13 @@ class GameMasterLLM:
 
     def _apply_thinking_settings(self, kwargs: dict) -> None:
         """Inject thinking parameters based on user settings and provider."""
-        # MiniMax defaults to thinking-on server-side, so we must explicitly opt-out
-        # when the user has not enabled thinking in their settings.
-        if self.provider == "minimax":
-            kwargs["thinking"] = (
-                {"type": "adaptive"} if self.enable_thinking else {"type": "disabled"}
-            )
-            return
-
-        if not self.enable_thinking:
-            return
-
-        # LiteLLM maps 'thinking' to provider-specific params (budget_tokens for Anthropic, etc.)
-        kwargs["thinking"] = {"type": "enabled", "budget_tokens": self.max_thinking_tokens}
+        apply_thinking_settings(
+            kwargs,
+            provider=self.provider,
+            model=kwargs.get("model") or self.model,
+            enabled=self.enable_thinking,
+            budget_tokens=self.max_thinking_tokens,
+        )
 
     def _apply_openrouter_provider_routing(self, kwargs: dict) -> None:
         """Inject provider routing ordering into OpenRouter requests if configured."""
@@ -925,6 +926,7 @@ class GameMasterLLM:
                 "Configure a local Ollama model (for example: llama3.2, qwen2.5, mistral)."
             )
 
+    @sync_call("simple")
     def execute_simple_task(
         self,
         system_prompt: str,
@@ -975,7 +977,6 @@ class GameMasterLLM:
 
         result = response.choices[0].message.content or ""
         result = self.clean_thinking_tags(result)
-        result = self.normalize_voice_tags(result)
 
         log_llm_interaction(
             model=model,
@@ -994,34 +995,76 @@ class GameMasterLLM:
 
         return result
 
+    @async_call("tools")
+    async def aexecute_tool_turn(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+        model: str,
+        *,
+        tool_choice: str | dict[str, Any] = "auto",
+        adventure_id: Optional[str] = None,
+        game_id: Optional[str] = None,
+        operation: Optional[str] = None,
+        phase: Optional[str] = None,
+        metadata: Optional[dict[str, Any]] = None,
+    ) -> ToolTurn:
+        """Return native tool calls intact through the shared single-attempt transport."""
+        from backend.core.llm_tool_turn import execute
+
+        return await execute(
+            self,
+            messages,
+            tools,
+            model,
+            tool_choice=tool_choice,
+            adventure_id=adventure_id,
+            game_id=game_id,
+            operation=operation,
+            phase=phase,
+            metadata=metadata,
+        )
+
+    @async_call("simple")
     async def aexecute_simple_task(
         self,
         system_prompt: str,
         user_prompt: str,
         model: str,
         *,
+        messages: Optional[list[dict[str, Any]]] = None,
+        response_format: dict[str, Any] | None = None,
+        single_attempt: bool = False,
         adventure_id: Optional[str] = None,
         game_id: Optional[str] = None,
         operation: Optional[str] = None,
         phase: Optional[str] = None,
         metadata: Optional[dict[str, Any]] = None,
     ) -> str:
-        """
-        Async version of execute_simple_task.
-        """
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ]
+        """Run a text task; technical callers may explicitly supply a response format."""
+        if messages is None:
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ]
 
         normalized_model = self._normalize_model(model)
+        technical = response_format is not None or operation == "chpm"
 
-        kwargs = {
+        kwargs: dict[str, Any] = {
             "model": normalized_model,
             "messages": messages,
             "max_tokens": self.max_tokens
             + (self.max_thinking_tokens if self.enable_thinking else 0),
         }
+        if response_format is not None:
+            kwargs["response_format"] = response_format
+        if single_attempt:
+            kwargs.update(_single_attempt=True, num_retries=0, max_retries=0)
+        if technical:
+            from backend.core.llm_structured_output import trace
+
+            trace(response_format)
         self._apply_thinking_settings(kwargs)
 
         self._apply_provider_options(kwargs, model)
@@ -1042,8 +1085,7 @@ class GameMasterLLM:
         response = await self._acompletion_with_openrouter_fallback(kwargs)
 
         result = response.choices[0].message.content or ""
-        result = self.clean_thinking_tags(result)
-        result = self.normalize_voice_tags(result)
+        result = clean_technical_text(result) if technical else self.clean_thinking_tags(result)
 
         log_llm_interaction(
             model=model,
@@ -1062,6 +1104,7 @@ class GameMasterLLM:
 
         return result
 
+    @async_call("stream")
     async def stream_simple_task(
         self,
         system_prompt: str,
@@ -1074,7 +1117,7 @@ class GameMasterLLM:
         operation: Optional[str] = None,
         phase: Optional[str] = None,
         metadata: Optional[dict[str, Any]] = None,
-    ):
+    ) -> AsyncIterator[Any]:
         """
         Streams a free narrative task.
         """
@@ -1116,18 +1159,32 @@ class GameMasterLLM:
         raw_stream = await self._acompletion_with_openrouter_fallback(kwargs)
         timed_stream = self._with_stream_timeout(
             raw_stream,
-            initial_timeout=self.stream_initial_timeout,
-            chunk_timeout=self.stream_chunk_timeout,
+            initial_timeout=float(self.request_timeout),
+            chunk_timeout=float(self.request_timeout),
         )
         stream = self._clean_stream_thinking(timed_stream)
-        return self._clean_stream_voice_tags(stream)
+        # Narration is source evidence: preserve its delivery cues and exact wording.
+        return owned_stream(stream, timed_stream, raw_stream)
 
-    @staticmethod
-    def _structured_response_format(json_mode: bool, minimax: bool, response_model: type[T]) -> Any:
-        """MiniMax rejects response_format; JSON-mode providers get json_object."""
-        if minimax:
-            return None
-        return {"type": "json_object"} if json_mode else response_model
+    def structured_input_characters(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        response_model: type[T],
+        model: str,
+        *,
+        response_schema: dict | None = None,
+    ) -> int:
+        """Measure the same prepared input used by dispatch, without logging a model call."""
+        request = self._build_structured_request(
+            system_prompt,
+            user_prompt,
+            response_model,
+            model,
+            response_schema=response_schema,
+            emit_contract=False,
+        )
+        return input_characters(request.kwargs)
 
     def _build_structured_request(
         self,
@@ -1135,13 +1192,31 @@ class GameMasterLLM:
         user_prompt: str,
         response_model: type[T],
         model: str,
+        *,
+        response_schema: dict | None = None,
+        emit_contract: bool = True,
     ) -> _StructuredRequest:
         """Builds LiteLLM kwargs for a structured-output (Pydantic) task."""
         normalized_model = self._normalize_model(model)
+        from backend.core.llm_structured_output import for_router, trace
+
+        output = for_router(self, response_model, model=model, schema=response_schema)
+        if emit_contract:
+            trace(output.response_format, local_checks=output.local_checks)
         json_mode = uses_json_mode_fallback(self.provider, normalized_model)
-        if json_mode:
-            # Inject the schema into the prompt since strict enforcement is bypassed.
-            system_prompt += json_schema_instruction(response_model)
+        json_mode = json_mode or output.mode != "json_schema"
+        if output.mode == "json_schema":
+            from backend.core.llm_native_guidance import guidance
+
+            system_prompt += guidance(
+                response_schema
+                if response_schema is not None
+                else response_model.model_json_schema(),
+                output.local_checks,
+            )
+        elif json_mode or output.local_checks:
+            # Ground rules checked locally as well as those enforced during decoding.
+            system_prompt += json_schema_instruction(response_model, schema=response_schema)
 
         kwargs: dict[str, Any] = {
             "model": normalized_model,
@@ -1152,16 +1227,10 @@ class GameMasterLLM:
             "max_tokens": self.max_tokens
             + (self.max_thinking_tokens if self.enable_thinking and not json_mode else 0),
         }
-        response_format = self._structured_response_format(
-            json_mode, is_minimax_model(self.provider, normalized_model), response_model
-        )
-        if self.provider == "custom_openai":
-            from backend.core.custom_openai import structured_response_format
-
-            response_format = structured_response_format(self, response_model)
+        response_format = output.response_format
         if response_format is not None:
             kwargs["response_format"] = response_format
-        if not json_mode:
+        if not json_mode or self.provider in {"deepseek", "minimax"}:
             self._apply_thinking_settings(kwargs)
         self._apply_provider_options(kwargs, model)
         self._apply_openrouter_provider_routing(kwargs)
@@ -1212,12 +1281,12 @@ class GameMasterLLM:
         return content is None or not str(content).strip()
 
     @staticmethod
-    def _empty_content_error(finish_reason: Any) -> ValueError:
+    def _empty_content_error(finish_reason: Any) -> StructuredOutputError:
         if finish_reason == "length":
-            return ValueError(
+            return StructuredOutputError(
                 "LLM hit token limit during reasoning. Increase 'Max Tokens' in Settings."
             )
-        return ValueError("No content returned from LLM for complex task.")
+        return StructuredOutputError("No content returned from LLM for complex task.")
 
     @staticmethod
     def _content_preview(content: str) -> str:
@@ -1230,12 +1299,11 @@ class GameMasterLLM:
         except json.JSONDecodeError as exc:
             if finish_reason == "length" or self._is_truncated_json(content):
                 logger.error(
-                    "LLM response appears truncated. Length: %d, finish_reason: %s. Full content: %s",
+                    "LLM response appears truncated. Length: %d, finish_reason: %s",
                     len(content),
                     finish_reason,
-                    content,
                 )
-                raise ValueError(_TRUNCATED_RESPONSE_MESSAGE) from exc
+                raise StructuredOutputError(_TRUNCATED_RESPONSE_MESSAGE) from exc
             repaired = self._attempt_repair_truncated_json(content)
             data = None
             if repaired != content:
@@ -1249,14 +1317,11 @@ class GameMasterLLM:
                     data = None
             if data is None:
                 logger.error(
-                    "LLM response was not valid JSON. Length: %d, finish_reason: %s. Full content: %s",
+                    "LLM response was not valid JSON. Length: %d, finish_reason: %s",
                     len(content),
                     finish_reason,
-                    content,
                 )
-                raise ValueError(
-                    f"Failed to parse LLM response as JSON. Preview: {self._content_preview(content)}"
-                ) from exc
+                raise StructuredOutputError("Failed to parse LLM response as JSON.") from exc
             return data
 
     @staticmethod
@@ -1267,7 +1332,7 @@ class GameMasterLLM:
             )
             data = data[0]
         if not isinstance(data, dict):
-            raise ValueError(
+            raise StructuredOutputError(
                 f"LLM returned {type(data).__name__} but a mapping was expected for {response_model.__name__}."
             )
         return data
@@ -1277,31 +1342,30 @@ class GameMasterLLM:
         content = response.choices[0].message.content
         finish_reason = response.choices[0].finish_reason
         if not content:
-            logger.error(f"LLM returned empty content. Raw response: {response.model_dump()}")
+            logger.error("LLM returned empty content; finish_reason=%s", finish_reason)
             raise self._empty_content_error(finish_reason)
 
         try:
-            content = self._clean_json_string(self.clean_thinking_tags(content))
+            content = self._clean_json_string(clean_technical_text(content))
             if not content:
                 logger.error(
-                    "LLM returned content that was empty after JSON cleanup. Raw response: %s",
-                    response.model_dump(),
+                    "LLM returned content that was empty after JSON cleanup; finish_reason=%s",
+                    finish_reason,
                 )
                 raise self._empty_content_error(finish_reason)
             data = self._parse_json_payload(self._repair_json(content), finish_reason)
             return response_model(**self._as_mapping(data, response_model))
         except json.JSONDecodeError as exc:
             if finish_reason == "length" or self._is_truncated_json(content):
-                raise ValueError(_TRUNCATED_RESPONSE_MESSAGE) from exc
-            raise ValueError(
-                f"Failed to parse LLM response as JSON. Preview: {self._content_preview(content)}"
-            ) from exc
+                raise StructuredOutputError(_TRUNCATED_RESPONSE_MESSAGE) from exc
+            raise StructuredOutputError("Failed to parse LLM response as JSON.") from exc
         except ValidationError as exc:
-            raise ValueError(
+            raise StructuredOutputError(
                 f"LLM returned JSON that does not match expected schema {response_model.__name__}. "
-                f"Preview: {self._content_preview(content)}. Validation: {exc}"
+                f"Validation errors: {exc.error_count()}."
             ) from exc
 
+    @async_call("structured")
     async def aexecute_complex_task(
         self,
         system_prompt: str,
@@ -1314,9 +1378,12 @@ class GameMasterLLM:
         operation: Optional[str] = None,
         phase: Optional[str] = None,
         metadata: Optional[dict[str, Any]] = None,
+        response_schema: dict | None = None,
+        single_attempt: bool = False,
+        max_input_chars: int | None = None,
     ) -> T:
         """
-        Async version of execute_complex_task.
+        Async structured task; bounded callers can disable retries and require a complete stop.
         """
         log_context = {
             "adventure_id": adventure_id,
@@ -1325,12 +1392,19 @@ class GameMasterLLM:
             "phase": phase,
             "metadata": metadata,
         }
-        request = self._build_structured_request(system_prompt, user_prompt, response_model, model)
+        request = self._build_structured_request(
+            system_prompt, user_prompt, response_model, model, response_schema=response_schema
+        )
+        require_input_budget(request.kwargs, max_input_chars)
+        if single_attempt:
+            request.kwargs.update(_single_attempt=True, num_retries=0, max_retries=0)
         self._log_structured_request(request, response_model, log_context)
 
         response = await self._acompletion_with_openrouter_fallback(request.kwargs)
-        if request.json_mode and self._is_blank_response(response):
-            response = await self._retry_blank_json_content_async(request.kwargs, response)
+        if not single_attempt and request.json_mode and self._is_blank_response(response):
+            response = await self._retry_blank_json_content_async(
+                request.kwargs, response, max_input_chars=max_input_chars
+            )
 
         # Log thinking/reasoning if present
         if adventure_id:
@@ -1339,11 +1413,15 @@ class GameMasterLLM:
             if thinking_text:
                 await self._append_generation_log_async(adventure_id, "thinking", thinking_text)
 
-        self._log_structured_response(
-            request, response, model, user_prompt, response_model, log_context
-        )
+        with capture_completions() as completions:
+            self._log_structured_response(
+                request, response, model, user_prompt, response_model, log_context
+            )
+        if single_attempt:
+            require_complete(completions)
         return self._parse_structured_content(response, response_model)
 
+    @sync_call("structured")
     def execute_complex_task(
         self,
         system_prompt: str,
@@ -1356,6 +1434,7 @@ class GameMasterLLM:
         operation: Optional[str] = None,
         phase: Optional[str] = None,
         metadata: Optional[dict[str, Any]] = None,
+        response_schema: dict | None = None,
     ) -> T:
         """
         Strict mechanics task (Strict Mode).
@@ -1369,7 +1448,9 @@ class GameMasterLLM:
             "phase": phase,
             "metadata": metadata,
         }
-        request = self._build_structured_request(system_prompt, user_prompt, response_model, model)
+        request = self._build_structured_request(
+            system_prompt, user_prompt, response_model, model, response_schema=response_schema
+        )
         self._log_structured_request(request, response_model, log_context)
 
         response = self._completion_with_openrouter_fallback(request.kwargs)

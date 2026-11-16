@@ -8,6 +8,7 @@ from backend.engine.rule_engine import EntityMovement, GameEvent, WorldEntityUpd
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.avatar import Avatar
 from backend.models.chat import ChatMessage
+from backend.models.game_session import GameSession
 from backend.models.session_state import SessionState
 from backend.models.user import User
 from backend.models.world_entity import WorldEntity, WorldScene
@@ -52,6 +53,9 @@ async def _seed_npc_context(db):
         current_scene_id="KITCHEN",
         in_game_time=0,
         entity_states={},
+    )
+    db.add(
+        GameSession(id=state.session_id, user_id=user.id, avatar_id=avatar.id, template_id=adv.id)
     )
     db.add(state)
 

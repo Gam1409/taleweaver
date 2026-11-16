@@ -16,7 +16,7 @@ from backend.core.image_model_detection import detect_preset_template, detect_te
 from backend.core.image_prompt_rules import ImagePromptRules
 from backend.core.image_prompt_templates import TEMPLATES, template_rules
 from backend.core.llm_router import GameMasterLLM
-from backend.engine.image_prompt_adapter import MATURE_THEMES_INSTRUCTION, prepare_prompt
+from backend.engine.image_prompt_adapter import prepare_prompt
 from backend.engine.media_engine import MediaEngine
 from backend.engine.story_visual_presets import story_t2i
 from backend.models.adventure_template import AdventureTemplate
@@ -60,7 +60,7 @@ def preset_options(comfy_options, workflow, **kwargs):
     ("name", "expected"),
     [
         ("models/animagine-xl-4.0-opt.safetensors", "animagine4"),
-        ("models/novaAnimeAM_v6029B.safetensors", "anima"),
+        ("models/novaAnimeAM_v6029B.safetensors", "nova_anime_am"),
         ("models/novaAnimeXL_ilV190.safetensors", None),
         ("ponyDiffusionV6XL_v6StartWithThisOne.safetensors", "pony6"),
         ("illustriousXL_v01.safetensors", "illustrious"),
@@ -180,14 +180,23 @@ async def test_suggestion_uses_manual_profile_and_body_is_not_adapted_twice(
     comfy_options, workflow, monkeypatch, enabled
 ):
     from backend.api.routes.adventures.schemas import SuggestPromptRequest
+    from backend.core import mature_content_prompts
     from backend.engine.preset_prompt_suggestion import suggest_preset_prompt
+
+    marker = "TEST CONTENT PROFILE ADDENDUM"
+    monkeypatch.setattr(mature_content_prompts, "image_prompt_addendum", lambda level: marker)
 
     options = preset_options(comfy_options, workflow, template="pony6")
     options["comfyui_presets"]["detailed"] = named_preset(workflow, template="flux1")
+    options["advanced_model_provider"] = "comfyui"
+    options["comfyui_assignments"]["advanced"] = "detailed"
     options["comfyui_presets"]["art"]["mature_themes"] = enabled
     options["comfyui_presets"]["detailed"]["mature_themes"] = not enabled
     story = SimpleNamespace(
-        original_manifest={"visual_presets": {"advanced": "detailed"}},
+        original_manifest={
+            "visual_preset_source": "current",
+            "nsfw_settings": {"enabled": enabled, "level": "hard"},
+        },
         selected_image_styles=[],
         selected_tone=None,
     )
@@ -199,7 +208,7 @@ async def test_suggestion_uses_manual_profile_and_body_is_not_adapted_twice(
     assert body == "red coat" and "score_9" not in body
     assert '"format": "tags"' in llm.aexecute_simple_task.call_args.kwargs["system_prompt"]
     system = llm.aexecute_simple_task.call_args.kwargs["system_prompt"]
-    assert (MATURE_THEMES_INSTRUCTION in system) is enabled
+    assert (marker in system) is enabled
     prepared = await prepare_prompt(body, {**options, "_prompt_prepared": True})
     assert prepared["positive"] == "score_9, score_8_up, score_7_up, red coat"
     assert llm.aexecute_simple_task.await_count == 1
@@ -207,7 +216,51 @@ async def test_suggestion_uses_manual_profile_and_body_is_not_adapted_twice(
     await suggest_preset_prompt(user, story, payload, "Traveler", "A red coat")
     assert '"format": "description"' in llm.aexecute_simple_task.call_args.kwargs["system_prompt"]
     system = llm.aexecute_simple_task.call_args.kwargs["system_prompt"]
-    assert (MATURE_THEMES_INSTRUCTION in system) is not enabled
+    # The advanced profile has the opposite flag, so both gates are never on.
+    assert marker not in system
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("advanced", [False, True])
+async def test_story_pinned_task_matches_real_generation_despite_quality_override(
+    comfy_options, workflow, monkeypatch, advanced
+):
+    from backend.core.comfyui_config import prompt_rules
+    from backend.engine.preset_prompt_suggestion import suggest_preset_prompt
+    from backend.schemas.adventure_visuals import SuggestPromptRequest
+
+    options = preset_options(comfy_options, workflow, template="pony6")
+    options["comfyui_presets"]["detailed"] = named_preset(workflow, template="flux1")
+    story = SimpleNamespace(
+        original_manifest={"visual_presets": {"advanced": "detailed"}},
+        selected_image_styles=[],
+        selected_tone=None,
+    )
+    user = SimpleNamespace(t2i_settings=options, image_styles_catalog=[], tone_catalog=[])
+    generate = AsyncMock(return_value="/data/synthetic.png")
+    monkeypatch.setattr(MediaEngine, "generate_image", generate)
+    await MediaEngine.generate_entity_image(
+        "A blue coat.",
+        "archive",
+        "keeper",
+        "npc",
+        {"t2i_settings": story_t2i(options, story)},
+        {},
+        use_advanced_model=advanced,
+    )
+    generation_options = generate.await_args.kwargs["provider_options"]
+    expected = prompt_rules(generation_options)
+    assert generation_options["image_purpose"] == "npc" and expected.format == "description"
+    assert generation_options["comfyui_assignments"]["npc"] == "detailed"
+    assert generation_options["comfyui_profile"] == ("advanced" if advanced else "simple")
+    assert select_profile(generation_options).name == "Illustrations"
+    capture = AsyncMock(return_value="blue coat")
+    monkeypatch.setattr("backend.engine.preset_prompt_suggestion.adapt_body", capture)
+    payload = SuggestPromptRequest(
+        target_type="npc", target_id="keeper", use_advanced_model=advanced
+    )
+    await suggest_preset_prompt(user, story, payload, "Keeper", "A blue coat.")
+    assert capture.await_args.args[1] == expected
 
 
 @pytest.mark.asyncio
@@ -222,7 +275,7 @@ async def test_prompt_timeout_does_not_submit_image_job(
 
     llm = SimpleNamespace(model="fake", aexecute_simple_task=slow)
     monkeypatch.setattr(GameMasterLLM, "for_role", lambda *_args: llm)
-    monkeypatch.setattr(image_prompt_adapter, "PROMPT_TIMEOUT", 0.01)
+    monkeypatch.setattr(image_prompt_adapter, "role_timeout", lambda user, role: 0.01)
     options = preset_options(comfy_options, workflow)
     options["_prompt_user"] = object()
     with pytest.raises(asyncio.TimeoutError, match="Small/Utility LLM image-prompt preparation"):
@@ -349,3 +402,12 @@ async def test_prompt_tools_are_admin_only(auth_client):
     assert (
         await auth_client.post("/api/settings/comfyui/detect-template", json={"graph": {}})
     ).status_code == 403
+
+
+def test_nova_automatic_template_uses_tags_without_changing_generic_anima(workflow):
+    workflow["graph"]["model"]["inputs"]["ckpt_name"] = "novaAnimeAM_v6029B.safetensors"
+    preset = ComfyPreset.model_validate(named_preset(workflow, automatic=True))
+    assert preset.prompt_rules.template_id == "nova_anime_am"
+    assert preset.prompt_rules.format == "tags"
+    assert preset.prompt_rules.adapt_with_llm is True
+    assert template_rules("anima").format == "hybrid"

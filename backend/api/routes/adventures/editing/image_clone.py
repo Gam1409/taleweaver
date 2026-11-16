@@ -2,11 +2,12 @@
 
 import logging
 import os
-import shutil
 import uuid
 from typing import Optional
 
 from backend.core.config import settings
+from backend.engine.export_asset_policy import checked_asset_path, read_archive_image
+from backend.utils.async_files import run_file_operation
 from backend.utils.path_security import (
     assert_within_base_dir,
     assert_within_data_dir,
@@ -81,7 +82,7 @@ def _clone_paths(source_image_url: str, new_entity_id: str) -> tuple[str, str]:
     return safe_source_path, candidate_path
 
 
-async def _clone_entity_image(
+def _copy_entity_image_file(
     *,
     source_image_url: Optional[str],
     template_id: str,
@@ -95,11 +96,29 @@ async def _clone_entity_image(
     if not source_image_url:
         return None
     try:
+        local_path = data_url_to_local_path(source_image_url)
+        if local_path is None:
+            return None
+        checked_asset_path(local_path, template_id)
         source_path, candidate_path = _clone_paths(source_image_url, new_entity_id)
-        shutil.copy2(source_path, candidate_path)
+        data = read_archive_image(source_path, template_id)
+        with open(candidate_path, "wb") as target:
+            target.write(data)
     except ValueError:
         return None
     except OSError as exc:
         logger.warning("Failed to clone image for entity %s: %s", new_entity_id, exc)
         return None
     return local_path_to_data_url(candidate_path)
+
+
+async def _clone_entity_image(
+    *, source_image_url: Optional[str], template_id: str, new_entity_id: str
+) -> Optional[str]:
+    """Check and copy editor image bytes off the request event loop."""
+    return await run_file_operation(
+        _copy_entity_image_file,
+        source_image_url=source_image_url,
+        template_id=template_id,
+        new_entity_id=new_entity_id,
+    )

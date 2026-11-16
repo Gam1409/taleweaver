@@ -95,6 +95,12 @@ that narration. 'claimed' means something the character says about themselves/ot
 verified history or infer relationship scores, hidden motives, unseen possessions,
 combat stats, exact ages, gender, or biography. Do not repeat already recorded facts.
 
+MULTIPLE FACTS: Inspect the whole CURRENT NARRATION, not just its most prominent event.
+Return separate observations for independent significant facts, each with its own topic
+and exact supporting quote. One message can establish a promise, a boundary and an item
+transfer; retaining one must not suppress the others. Never merge unrelated facts into
+one general topic. Limits are ceilings, not quotas: do not pad with transient reactions.
+
 SIGNIFICANCE: Memory is for lasting knowledge, not a transcript or a quota. Record only
 a NEW durable fact or a meaningful CHANGE supported by this narration: a promise,
 commitment, stated boundary, consequential decision, lasting relationship change,

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { ref, watch } from 'vue'
 
 interface GameCommand {
   id: string
@@ -37,7 +37,7 @@ const handleMouseEnter = (e: MouseEvent, idx: number) => {
   lastMouseY.value = e.clientY
 }
 
-const handleSelect = (cmd: Command) => {
+const handleSelect = (cmd: GameCommand) => {
   emit('select', cmd.id)
 }
 </script>

@@ -3,11 +3,14 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { Buffer } from 'node:buffer'
 import ts from 'typescript'
+import { uuidModule } from './uuidModule.mjs'
 
 // Exercise the actual service with Vue refs; external requests are replaced.
 const requests = []
 const apiModule = `data:text/javascript;base64,${Buffer.from('export const api = {}').toString('base64')}`
 const { api } = await import(apiModule)
+const confirmationModule = `data:text/javascript;base64,${Buffer.from('export const confirmation = { approved: true }; export const confirmAction = async () => confirmation.approved').toString('base64')}`
+const { confirmation } = await import(confirmationModule)
 Object.assign(api, {
   generateCatalogImage: async body => {
     requests.push(body)
@@ -26,9 +29,26 @@ const compiled = ts
   })
   .outputText.replace("from 'vue'", `from '${import.meta.resolve('vue')}'`)
   .replace("from '@/composables/useApi'", `from '${apiModule}'`)
+  .replace("from '@/utils/uuid'", `from '${uuidModule}'`)
+  .replace("from './confirmAction'", `from '${confirmationModule}'`)
 const { catalogService: service } = await import(
   `data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`
 )
+
+test('catalog removal respects cancellation and removes only the selected catalog item', async () => {
+  service.hydrateCatalogs({
+    image_styles_catalog: [{ id: 'style', name: 'Watercolour' }],
+    tone_catalog: [{ id: 'mystery', name: 'Mystery' }, { id: 'wonder', name: 'Wonder' }]
+  })
+  confirmation.approved = false
+  assert.equal(await service.removeItem('tones', 0), false)
+  assert.equal(service.toneCatalog.value.length, 2)
+  confirmation.approved = true
+  assert.equal(await service.removeItem('tones', 0), true)
+  assert.deepEqual(service.toneCatalog.value.map(item => item.id), ['wonder'])
+  assert.deepEqual(service.imageStylesCatalog.value.map(item => item.id), ['style'])
+  assert.equal(await service.removeItem('tones', 5), false)
+})
 
 test('different localized names and repeated names get separate UUIDs', () => {
   service.hydrateCatalogs({})

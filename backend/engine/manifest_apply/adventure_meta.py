@@ -84,7 +84,7 @@ _FINAL_FIELDS: tuple[tuple[str, Any], ...] = (
 
 def adventure_field(manifest: dict[str, Any], key: str, default: Any = None) -> Any:
     """Reads ``adventure.<key>`` (standard ADV layout) with a top-level fallback."""
-    block = manifest.get("adventure") if isinstance(manifest.get("adventure"), dict) else {}
+    block = raw_adventure if isinstance(raw_adventure := manifest.get("adventure"), dict) else {}
     if block.get(key) is not None:
         return block[key]
     if manifest.get(key) is not None:
@@ -112,10 +112,10 @@ def _apply_quests_awards_sequences(
         quest.setdefault("status", "open")
     for award in awards:
         award.setdefault("is_earned", False)
-    adventure.quests = quests  # type: ignore[assignment]
-    adventure.awards = awards  # type: ignore[assignment]
+    adventure.quests = quests
+    adventure.awards = awards
     if ctx.manifest.get("sequences") and not policy.vn:
-        adventure.sequences = [_clean_sequence(s) for s in ctx.manifest["sequences"]]  # type: ignore[assignment]
+        adventure.sequences = [_clean_sequence(s) for s in ctx.manifest["sequences"]]
     return quests, awards
 
 
@@ -127,7 +127,7 @@ def _apply_narrative(ctx: ApplyContext, adventure: AdventureTemplate) -> None:
     if is_vn(adventure) or getattr(adventure, "sequences", None) or not walkthrough:
         return
     # Legacy manifests with a walkthrough but no sequences get a single main sequence.
-    adventure.sequences = [  # type: ignore[assignment]
+    adventure.sequences = [
         {
             "id": "SEQ_1_MAIN",
             "order": 1,
@@ -155,7 +155,7 @@ def _apply_runtime_settings(ctx: ApplyContext, adventure: AdventureTemplate) -> 
     except ValueError:
         logger.warning("Ignoring invalid start_time %r for %s", start_time, ctx.template_id)
         return
-    adventure.starting_timestamp = hours * 60 + minutes  # type: ignore[assignment]
+    adventure.starting_timestamp = hours * 60 + minutes
 
 
 async def _sync_sessions(ctx: ApplyContext, adventure: AdventureTemplate, quests: list) -> None:
@@ -194,7 +194,7 @@ async def _create_cover(
     user_config, api_keys = t2i_config(ctx)
     cover_url = await MediaEngine.generate_adventure_cover(
         title=adventure.title,
-        original_prompt=adventure.teaser or adventure.original_prompt,
+        original_prompt=adventure.teaser or adventure.original_prompt or "",
         adventure_id=ctx.template_id,
         user_config=user_config,
         api_keys=api_keys,
@@ -216,7 +216,7 @@ async def _ensure_cover(ctx: ApplyContext) -> None:
         if not cover_url:
             return
         ctx.image_counters["successes"] += 1
-        adventure.image_url = cover_url  # type: ignore[assignment]
+        adventure.image_url = cover_url
         if not reused:
             prompt = adventure.teaser or adventure.original_prompt
             await wg._log_image_generation(ctx.db, adventure, prompt, cover_url)
@@ -250,21 +250,29 @@ def apply_final_adventure_fields(ctx: ApplyContext) -> None:
     for key, default in _FINAL_FIELDS:
         fallback = getattr(adventure, key) if default is None else default
         setattr(adventure, key, adventure_field(ctx.manifest, key, fallback))
-    adventure.original_prompt = adventure_field(  # type: ignore[assignment]
+    adventure.original_prompt = adventure_field(
         ctx.manifest, "original_prompt", adventure.original_prompt or ""
     )
-    adventure.scripts_generation_enabled = adventure_field(  # type: ignore[assignment]
+    adventure.scripts_generation_enabled = adventure_field(
         ctx.manifest,
         "scripts_generation_enabled",
         getattr(adventure, "scripts_generation_enabled", False),
     )
-    adventure.is_ready = False  # type: ignore[assignment]
+    adventure.is_ready = False
+    from backend.engine.authoring_settings import preserve_authoring_settings
     from backend.engine.clothing.settings import preserve_clothing_settings
     from backend.engine.npc_cards.settings import preserve_card_settings
+    from backend.engine.nsfw.settings import preserve_nsfw_settings
     from backend.engine.story_visual_presets import preserve_story_presets
 
-    adventure.original_manifest = preserve_clothing_settings(
-        preserve_card_settings(preserve_story_presets(ctx.manifest, adventure), adventure),
+    adventure.original_manifest = preserve_authoring_settings(
+        preserve_nsfw_settings(
+            preserve_clothing_settings(
+                preserve_card_settings(preserve_story_presets(ctx.manifest, adventure), adventure),
+                adventure,
+            ),
+            adventure,
+        ),
         adventure,
-    )  # type: ignore[assignment]
+    )
     normalize_vn_template(adventure)

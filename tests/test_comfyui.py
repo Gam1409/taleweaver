@@ -280,6 +280,23 @@ async def test_timeout_dequeues_own_job(fake_comfy, workflow, monkeypatch, error
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("model", [None, ""])
+async def test_comfy_direct_generation_accepts_workflow_owned_model(
+    fake_comfy, comfy_options, tmp_path, monkeypatch, model
+):
+    monkeypatch.setattr(settings, "DATA_DIR", str(tmp_path))
+    result = await MediaEngine.generate_image(
+        prompt="A portrait",
+        model=model,
+        api_key=None,
+        provider="comfyui",
+        provider_options=comfy_options,
+        target_dir=str(tmp_path),
+    )
+    assert result and result.startswith("/data/")
+
+
+@pytest.mark.asyncio
 async def test_comfy_needs_workflow_not_model_or_key(
     fake_comfy, comfy_options, tmp_path, monkeypatch
 ):
@@ -420,7 +437,11 @@ async def test_manifest_generates_all_visuals_with_correct_profiles(
     assert dimensions == expected_dimensions
     if use_presets:
         assert llm.aexecute_simple_task.await_count == 5
-        assert [g["text"]["inputs"]["text"] for g in graphs] == [
+        from tests.item_image_fixture import ITEM_CARD_COMPOSITION
+
+        expected_prompts = [
             f"{role}_trigger Visual facts"
             for role in ("advanced", "advanced", "simple", "advanced", "simple")
         ]
+        expected_prompts[-1] += f" {ITEM_CARD_COMPOSITION}"
+        assert [g["text"]["inputs"]["text"] for g in graphs] == expected_prompts

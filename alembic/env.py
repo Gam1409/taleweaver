@@ -18,12 +18,13 @@ import backend.models.world_entity  # noqa: F401
 import backend.models.world_map  # noqa: F401
 from alembic import context
 from backend.core.config import settings
+from backend.core.migration_metadata import include_object
 from backend.models.base import Base
 
 config = context.config
 
-if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+if config.config_file_name is not None and config.attributes.get("configure_logger", True):
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 
 def _sync_database_url(url: str) -> str:
@@ -43,6 +44,7 @@ def run_migrations_offline() -> None:
         literal_binds=True,
         compare_type=True,
         render_as_batch=True,
+        include_object=include_object,
     )
 
     with context.begin_transaction():
@@ -62,6 +64,7 @@ def run_migrations_online() -> None:
             target_metadata=target_metadata,
             compare_type=True,
             render_as_batch=True,
+            include_object=include_object,
         )
 
         with context.begin_transaction():

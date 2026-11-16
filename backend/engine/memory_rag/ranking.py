@@ -5,6 +5,7 @@ import re
 from collections import Counter
 
 from backend.engine.memory_rag.documents import MemoryDocument
+from backend.utils.sqlite_text import casefold
 
 _STOP_WORDS = frozenset(
     [
@@ -42,10 +43,27 @@ _LAYER_WEIGHT = {
 
 
 def tokens(text: str) -> set[str]:
-    return set(re.findall(r"[^\W_]+", text.casefold())) - _STOP_WORDS
+    return set(re.findall(r"[^\W_]+", casefold(text))) - _STOP_WORDS
+
+
+def ordered_terms(text: str, limit: int, *, minimum: int = 2) -> list[str]:
+    """The explicit player query precedes contextual expansion; retain that priority."""
+    words = re.findall(r"[^\W_]+", casefold(text))
+    return list(
+        dict.fromkeys(word for word in words if len(word) >= minimum and word not in _STOP_WORDS)
+    )[:limit]
 
 
 def _importance(document: MemoryDocument) -> float:
+    if document.significance in {
+        "boundary",
+        "commitment",
+        "decision",
+        "relationship_change",
+        "durable_fact",
+        "meaningful_consequence",
+    }:
+        return 1.7
     # Journal categories are structured English labels, irrespective of story language.
     category = document.text.split(" — ", 1)[-1].split("/", 1)[0]
     if category in {"preference", "relationship", "promise", "background", "personality", "fact"}:

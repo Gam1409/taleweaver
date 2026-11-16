@@ -17,8 +17,10 @@ class CharacterBase(BaseModel):
     equipment: Optional[dict[str, Any]] = None
     status_effects: Optional[list[str]] = None
 
+
 class CharacterCreate(CharacterBase):
     pass
+
 
 class CharacterUpdate(BaseModel):
     name: Optional[str] = Field(None, max_length=30)
@@ -34,11 +36,13 @@ class CharacterUpdate(BaseModel):
     equipment: Optional[dict[str, Any]] = None
     status_effects: Optional[list[str]] = None
 
+
 class CharacterInDBBase(CharacterBase):
     id: str
     user_id: str
 
     model_config = {"from_attributes": True}
+
 
 class CharacterSchema(CharacterInDBBase):
     pass

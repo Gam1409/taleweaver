@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useWorkspaceTheme } from '@/composables/useWorkspaceTheme'
+useWorkspaceTheme()
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { configState } from '@/store/config'
 import { authState } from '@/store/auth'
@@ -63,6 +65,8 @@ const {
   templates,
   sessions,
   isLoading,
+  errorMsg,
+  isImporting,
   showDeleteConfirm,
   templateToDelete,
   showDeleteSessionConfirm,
@@ -114,6 +118,7 @@ const {
   exportAdventureAdv,
   removeFailedPendingCard,
   cancelAdventure,
+  retryPendingAdventure,
   trackNewAdventure,
   startLoadingWords,
   stopLoadingWords,
@@ -184,6 +189,7 @@ function openCreateModal() {
 }
 
 async function createEmptyAdventure() {
+  errorMsg.value = ''
   setLoadingState(true)
   try {
     const payload = {
@@ -206,7 +212,7 @@ async function createEmptyAdventure() {
 }
 
 async function onDeleteAllAdventures() {
-  if (templates.length === 0 || isDeleting.value) return
+  if (templates.value.length === 0 || isDeleting.value) return
   showDeleteAllAdventuresConfirm.value = true
 }
 
@@ -220,7 +226,7 @@ async function confirmDeleteAllAdventures() {
 }
 
 async function onDeleteAllSessions() {
-  if (sessions.length === 0 || isDeletingSession.value) return
+  if (sessions.value.length === 0 || isDeletingSession.value) return
   showDeleteAllSessionsConfirm.value = true
 }
 
@@ -276,7 +282,9 @@ onMounted(() => {
   if (newId) {
     trackNewAdventure(newId, newTitle)
     // Remove tracking params from URL but keep the section so the library stays visible
-    const { new_id: _a, new_title: _b, ...remainingQuery } = route.query
+    const remainingQuery = { ...route.query }
+    delete remainingQuery.new_id
+    delete remainingQuery.new_title
     router.replace({ name: 'portal', query: remainingQuery })
   }
 })
@@ -322,7 +330,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="flex h-full min-h-0 bg-[#050b14] text-slate-200 font-ui overflow-hidden">
+  <div class="workspace-view flex h-full min-h-0 bg-[#050b14] text-slate-200 font-ui overflow-hidden">
     <PortalSidebar
       :is-admin="isAdmin"
       :active-section="activeSection"
@@ -336,9 +344,14 @@ onUnmounted(() => {
     <!-- Main Content Area -->
     <main class="flex-1 flex flex-col relative overflow-hidden min-w-0">
       <!-- Scrollable Content -->
-      <div class="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-10" :class="activeSection === 'profile' ? 'lg:p-10' : ''">
+      <div class="workspace-content flex-1 overflow-y-auto p-4 sm:p-6 lg:p-10" :class="activeSection === 'profile' ? 'lg:p-10' : ''">
         
         <SetupWarningBanner :active-section="activeSection" />
+
+        <div v-if="errorMsg" role="alert" class="mb-4 flex items-start justify-between gap-4 rounded-xl border border-red-500/30 bg-red-950/40 p-4 text-sm text-red-200">
+          <p>{{ errorMsg }}</p>
+          <button type="button" @click="errorMsg = ''" aria-label="Dismiss error" class="shrink-0 rounded-lg px-2 py-1 font-bold hover:bg-red-500/20">Dismiss</button>
+        </div>
 
         <PortalLibraryToolbar
           @browse-catalog="adventureLibrary.openDialog()"
@@ -406,6 +419,7 @@ onUnmounted(() => {
               @import-samples="handleImportSamplesClick"
               @remove-failed-pending="removeFailedPendingCard"
               @cancel-pending="cancelAdventure"
+              @retry-pending="retryPendingAdventure"
               @start-session="startSession"
               @resume="playSession"
               @update-adventure="updateAdventure"
@@ -439,6 +453,7 @@ onUnmounted(() => {
               @import-samples="handleImportSamplesClick"
               @remove-failed-pending="removeFailedPendingCard"
               @cancel-pending="cancelAdventure"
+              @retry-pending="retryPendingAdventure"
               @start-session="startSession"
               @resume="playSession"
               @update-adventure="updateAdventure"
@@ -621,9 +636,9 @@ onUnmounted(() => {
 
       <div
         v-if="isStartingSession"
-        class="fixed inset-0 z-[220] bg-slate-950/75 backdrop-blur-sm flex items-center justify-center px-6"
+        class="workspace-dialog-overlay fixed inset-0 z-[220] bg-slate-950/75 backdrop-blur-sm flex items-center justify-center px-6"
       >
-        <div class="w-full max-w-md rounded-2xl border border-white/15 bg-slate-900/95 p-7 shadow-2xl">
+        <div class="workspace-dialog w-full max-w-md rounded-2xl border border-white/15 bg-slate-900/95 p-7 shadow-2xl">
           <div class="flex items-start gap-4">
             <div class="w-12 h-12 rounded-xl bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center shrink-0">
               <i class="ra ra-cycle animate-spin text-emerald-400 text-xl"></i>

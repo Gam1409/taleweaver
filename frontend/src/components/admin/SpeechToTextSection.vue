@@ -27,7 +27,7 @@ watch(() => props.gameForm, (newVal) => {
     <div class="bg-slate-900 border border-slate-800 rounded-3xl p-8 shadow-2xl space-y-6">
       <div class="p-6 bg-slate-950/40 border border-slate-800/40 rounded-2xl space-y-6">
         <!-- Provider (Preselected / Read-only) -->
-        <div class="flex items-center justify-between p-4 bg-slate-900/60 rounded-xl border border-white/5">
+        <div class="flex flex-col gap-4 sm:flex-row sm:items-center justify-between p-4 bg-slate-900/60 rounded-xl border border-white/5">
           <div>
             <div class="text-sm font-bold text-white">Speech-to-Text Provider</div>
             <div class="text-xs text-slate-500">Currently, only local Whisper is supported for STT.</div>
@@ -38,14 +38,14 @@ watch(() => props.gameForm, (newVal) => {
         </div>
 
         <!-- Speech-to-Text Model (Whisper) Settings -->
-        <div class="flex items-center justify-between p-4 bg-slate-900/60 rounded-xl border border-white/5">
+        <div class="flex flex-col gap-4 sm:flex-row sm:items-center justify-between p-4 bg-slate-900/60 rounded-xl border border-white/5">
           <div>
             <div class="text-sm font-bold text-white">Whisper Model Size</div>
             <div class="text-xs text-slate-500">Choose the Whisper model size. Larger models are more accurate but consume more CPU/RAM.</div>
           </div>
           <select 
             v-model="localForm.whisper_model"
-            class="bg-slate-950 border border-slate-800 text-white text-xs rounded-lg focus:ring-emerald-500 focus:border-emerald-500 block p-2 px-4 outline-none"
+            class="min-w-0 w-full sm:w-auto bg-slate-950 border border-slate-800 text-white text-xs rounded-lg focus:ring-emerald-500 focus:border-emerald-500 block p-2 px-4 outline-none"
           >
             <option value="tiny">Tiny (Default - fastest)</option>
             <option value="base">Base</option>

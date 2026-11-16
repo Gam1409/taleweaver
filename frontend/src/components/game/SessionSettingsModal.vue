@@ -1,8 +1,15 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted } from 'vue'
+import SessionSettingsFrame from './SessionSettingsFrame.vue'
+import SessionMemorySettings from './SessionMemorySettings.vue'
 import VnNarrationSettings from './VnNarrationSettings.vue'
+import SessionContentSettings from './SessionContentSettings.vue'
 import DynamicLocationSettings from './DynamicLocationSettings.vue'
-import { Sliders, X, BrainCircuit, Sparkles } from 'lucide-vue-next'
+import StoryVisualPresets from '../editor/StoryVisualPresets.vue'
+import LivingWorldSettings from './LivingWorldSettings.vue'
+import ChpmSettings from './ChpmSettings.vue'
+import SessionPortraitSettings from './SessionPortraitSettings.vue'
+import NarratorSettings from './NarratorSettings.vue'
 
 const props = defineProps<{
   sessionId?: string
@@ -16,20 +23,79 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'close'): void
-  (e: 'save', payload: { turns: number; enableCompression: boolean; autoSpeakNarration: boolean; autoSpeakDialogues: boolean }): void
+  (
+    e: 'save',
+    payload: {
+      turns: number
+      enableCompression: boolean
+      autoSpeakNarration: boolean
+      autoSpeakDialogues: boolean
+    }
+  ): void
 }>()
 
+type Section = 'story' | 'memory' | 'characters' | 'living_world' | 'npc_personality'
+const section = ref<Section>('story')
+const frame = ref<InstanceType<typeof SessionSettingsFrame> | null>(null)
+async function showFailure(value: Section) {
+  section.value = value
+  await frame.value?.revealErrors()
+}
+
+const narrator = ref<InstanceType<typeof NarratorSettings> | null>(null)
 const vnNarration = ref<InstanceType<typeof VnNarrationSettings> | null>(null)
+const contentSettings = ref<InstanceType<typeof SessionContentSettings> | null>(null)
 const exploration = ref<InstanceType<typeof DynamicLocationSettings> | null>(null)
+const visualPresets = ref<InstanceType<typeof StoryVisualPresets> | null>(null)
+const livingWorld = ref<InstanceType<typeof LivingWorldSettings> | null>(null)
+const portraitSettings = ref<InstanceType<typeof SessionPortraitSettings> | null>(null)
+const chpm = ref<InstanceType<typeof ChpmSettings> | null>(null)
 const savingExploration = ref(false)
 async function saveAll(): Promise<void> {
   if (savingExploration.value || props.isSaving) return
   savingExploration.value = true
   try {
-    if (vnNarration.value && !await vnNarration.value.save()) return
-    if (exploration.value && !await exploration.value.save()) return
-    emit('save', { turns: turns.value, enableCompression: enableCompression.value, autoSpeakNarration: autoSpeakNarration.value, autoSpeakDialogues: autoSpeakDialogues.value })
-  } finally { savingExploration.value = false }
+    if (contentSettings.value && !(await contentSettings.value.save())) {
+      await showFailure('story')
+      return
+    }
+    if (vnNarration.value && !(await vnNarration.value.save())) {
+      await showFailure('story')
+      return
+    }
+    if (narrator.value && !(await narrator.value.save())) {
+      await showFailure('story')
+      return
+    }
+    if (exploration.value && !(await exploration.value.save())) {
+      await showFailure('story')
+      return
+    }
+    if (livingWorld.value && !(await livingWorld.value.save())) {
+      await showFailure('living_world')
+      return
+    }
+    if (portraitSettings.value && !(await portraitSettings.value.save())) {
+      await showFailure('characters')
+      return
+    }
+    if (chpm.value && !(await chpm.value.save())) {
+      await showFailure('npc_personality')
+      return
+    }
+    if (visualPresets.value && !(await visualPresets.value.save())) {
+      await showFailure('story')
+      return
+    }
+    emit('save', {
+      turns: turns.value,
+      enableCompression: enableCompression.value,
+      autoSpeakNarration: autoSpeakNarration.value,
+      autoSpeakDialogues: autoSpeakDialogues.value
+    })
+  } finally {
+    savingExploration.value = false
+  }
 }
 
 const turns = ref(10)
@@ -51,219 +117,88 @@ onMounted(() => {
     autoSpeakDialogues.value = props.initialAutoSpeakDialogues
   }
 })
-
-const tokenProfile = computed(() => {
-  if (turns.value <= 10) {
-    return {
-      label: 'Balanced Default (10 turns)',
-      class: 'text-amber-400 border-amber-500/30 bg-amber-500/10',
-      description: 'Default setting (10 turns). Balances rich narrative continuity across scenes with efficient token usage before compacting.'
-    }
-  }
-  if (turns.value <= 30) {
-    return {
-      label: 'Extended Memory',
-      class: 'text-cyan-400 border-cyan-500/30 bg-cyan-500/10',
-      description: 'Retains more uncompacted turns. Moderately increased token consumption per turn.'
-    }
-  }
-  return {
-    label: 'Deep Memory',
-    class: 'text-purple-400 border-purple-500/30 bg-purple-500/10',
-    description: 'Extensive narrative recall over many turns. Best for intricate plots, but consumes significantly more LLM tokens each turn.'
-  }
-})
-
-function handleInput(event: Event) {
-  const raw = Number((event.target as HTMLInputElement).value)
-  if (!isNaN(raw)) {
-    turns.value = Math.min(100, Math.max(1, raw))
-  }
-}
 </script>
 
 <template>
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 animate-fade-in" @click.self="emit('close')">
-    <div class="w-full max-w-lg rounded-3xl bg-slate-900 border border-white/10 shadow-2xl overflow-hidden" @click.stop>
-      <!-- Header -->
-      <div class="px-6 py-5 border-b border-white/10 flex items-center justify-between bg-slate-950/40">
-        <div class="flex items-center gap-3">
-          <div class="w-10 h-10 rounded-2xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center shrink-0 shadow-inner">
-            <Sliders class="w-5 h-5 text-amber-400" />
-          </div>
-          <div>
-            <h3 class="text-base sm:text-lg font-black text-white font-display uppercase tracking-wider">Session Memory & Settings</h3>
-            <p class="text-xs text-slate-400">Configure LLM context memory for this active session.</p>
-          </div>
-        </div>
-        <button 
-          class="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-white/5 transition-colors"
-          @click="emit('close')"
-          title="Close"
-        >
-          <X class="w-5 h-5" />
-        </button>
-      </div>
-
-      <!-- Content -->
-      <div class="px-6 py-6 flex flex-col gap-6 max-h-[65dvh] overflow-y-auto">
-        <VnNarrationSettings v-if="sessionId && mode === 'vn'" ref="vnNarration" :session-id="sessionId" />
-        <DynamicLocationSettings v-if="sessionId" ref="exploration" :session-id="sessionId" :embedded="true" />
-        <!-- Memory Turns Slider Panel -->
-        <div class="space-y-4">
-          <div class="flex justify-between items-start gap-4">
-            <div>
-              <label class="block text-xs font-black uppercase tracking-widest text-slate-300">Narrator Turn Memory</label>
-              <p class="text-xs text-slate-400 mt-1">
-                Number of past turns passed to the narrator in this session.
-              </p>
-            </div>
-            <div class="flex items-center gap-2 bg-black/60 border border-white/15 px-3 py-1.5 rounded-xl shrink-0">
-              <input
-                type="number"
-                min="1"
-                max="100"
-                :value="turns"
-                @input="handleInput"
-                class="w-12 bg-transparent text-center text-white font-mono font-bold text-sm focus:outline-none"
-              />
-              <span class="text-[11px] font-bold text-amber-400 uppercase tracking-wider">Turns</span>
-            </div>
-          </div>
-
-          <!-- Slider -->
-          <div class="space-y-2 pt-2">
-            <input
-              type="range"
-              min="1"
-              max="100"
-              :value="turns"
-              @input="handleInput"
-              class="w-full accent-amber-500 cursor-pointer h-2 bg-slate-800 rounded-lg"
-            />
-            <div class="flex justify-between items-center text-[10px] text-slate-500 uppercase tracking-widest">
-              <span>1 Turn</span>
-              <span class="text-amber-400 font-bold">10 Default</span>
-              <span>100 Turns</span>
-            </div>
-          </div>
-
-          <!-- Token Impact Profile Badge & Explanation -->
-          <div :class="['rounded-2xl border p-4 space-y-2 transition-all', tokenProfile.class]">
-            <div class="flex items-center justify-between">
-              <div class="flex items-center gap-2">
-                <BrainCircuit class="w-4 h-4" />
-                <span class="text-xs font-black uppercase tracking-wider">{{ tokenProfile.label }}</span>
-              </div>
-              <span class="text-[11px] font-mono font-bold">{{ turns }} / 100 turns</span>
-            </div>
-            <p class="text-xs opacity-90 leading-relaxed">
-              {{ tokenProfile.description }}
-            </p>
-          </div>
-        </div>
-
-        <!-- Automatic History Compression Checkbox/Toggle -->
-        <div class="flex items-start justify-between gap-4 p-4 rounded-2xl bg-white/[0.03] border border-white/10 hover:border-white/20 transition-all">
-          <div class="space-y-1">
-            <div class="flex items-center gap-2">
-              <label class="block text-xs font-black uppercase tracking-widest text-slate-200 cursor-pointer" @click="enableCompression = !enableCompression">
-                Automatic History Compression
-              </label>
-              <span class="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                English
-              </span>
-            </div>
-            <p class="text-xs text-slate-400 leading-relaxed">
-              When turns exceed the memory limit, older turns are automatically compressed into an English chronicle summary and passed to the narrator.
-            </p>
-          </div>
-          <label class="relative inline-flex items-center cursor-pointer shrink-0 mt-0.5">
-            <input type="checkbox" v-model="enableCompression" class="sr-only peer">
-            <div class="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-slate-400 after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500 peer-checked:after:bg-white"></div>
-          </label>
-        </div>
-
-        <!-- Auto Speak Narrator Checkbox -->
-        <div class="flex items-start justify-between gap-4 p-4 rounded-2xl bg-white/[0.03] border border-white/10 hover:border-white/20 transition-all">
-          <div class="space-y-1">
-            <div class="flex items-center gap-2">
-              <label class="block text-xs font-black uppercase tracking-widest text-slate-200 cursor-pointer" @click="autoSpeakNarration = !autoSpeakNarration">
-                Auto-Speak Game Master
-              </label>
-              <span class="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-blue-500/20 text-blue-300 border border-blue-500/30">
-                Audio
-              </span>
-            </div>
-            <p class="text-xs text-slate-400 leading-relaxed">
-              Automatically generate and play voice audio for the Game Master's narration texts when Auto-Speak is enabled.
-            </p>
-          </div>
-          <label class="relative inline-flex items-center cursor-pointer shrink-0 mt-0.5">
-            <input type="checkbox" v-model="autoSpeakNarration" class="sr-only peer">
-            <div class="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-slate-400 after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500 peer-checked:after:bg-white"></div>
-          </label>
-        </div>
-
-        <!-- Auto Speak Dialogues Checkbox -->
-        <div class="flex items-start justify-between gap-4 p-4 rounded-2xl bg-white/[0.03] border border-white/10 hover:border-white/20 transition-all">
-          <div class="space-y-1">
-            <div class="flex items-center gap-2">
-              <label class="block text-xs font-black uppercase tracking-widest text-slate-200 cursor-pointer" @click="autoSpeakDialogues = !autoSpeakDialogues">
-                Auto-Speak Characters
-              </label>
-              <span class="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-blue-500/20 text-blue-300 border border-blue-500/30">
-                Audio
-              </span>
-            </div>
-            <p class="text-xs text-slate-400 leading-relaxed">
-              Automatically generate and play voice audio for NPC and player character dialogue bubbles when Auto-Speak is enabled.
-            </p>
-          </div>
-          <label class="relative inline-flex items-center cursor-pointer shrink-0 mt-0.5">
-            <input type="checkbox" v-model="autoSpeakDialogues" class="sr-only peer">
-            <div class="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-slate-400 after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500 peer-checked:after:bg-white"></div>
-          </label>
-        </div>
-
-        <!-- Helpful tip note -->
-        <div class="flex items-start gap-3 p-3.5 rounded-xl bg-white/[0.03] border border-white/5 text-slate-400 text-xs leading-relaxed">
-          <Sparkles class="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-          <span>
-            Changes take effect immediately on your next action. Intermediate game events (such as dice rolls) are formatted automatically without consuming extra turns.
-          </span>
-        </div>
-      </div>
-
-      <!-- Footer -->
-      <div class="px-6 py-4 border-t border-white/10 flex justify-end gap-3 bg-slate-950/40">
-        <button
-          type="button"
-          class="px-4 py-2 rounded-xl border border-white/15 text-slate-300 text-xs font-bold uppercase tracking-wider hover:bg-white/5 transition-colors"
-          @click="emit('close')"
-        >
-          Cancel
-        </button>
-        <button
-          type="button"
-          class="px-5 py-2 rounded-xl bg-amber-500 text-slate-950 text-xs font-black uppercase tracking-widest hover:bg-amber-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-lg shadow-amber-500/20 cursor-pointer"
-          :disabled="props.isSaving || savingExploration"
-          @click="saveAll"
-        >
-          <span v-if="props.isSaving" class="w-4 h-4 border-2 border-slate-950/30 border-t-slate-950 rounded-full animate-spin"></span>
-          {{ props.isSaving ? 'Saving...' : 'Save Settings' }}
-        </button>
-      </div>
-    </div>
-  </div>
+  <SessionSettingsFrame
+    ref="frame"
+    v-model:section="section"
+    :saving="props.isSaving || savingExploration"
+    @close="emit('close')"
+    @save="saveAll"
+  >
+    <template #story>
+      <VnNarrationSettings
+        v-if="sessionId && mode === 'vn'"
+        ref="vnNarration"
+        :session-id="sessionId"
+        class="settings-widget"
+      />
+      <NarratorSettings
+        v-if="sessionId"
+        ref="narrator"
+        :endpoint="`/adventures/${encodeURIComponent(sessionId)}/narrator-settings`"
+        class="settings-widget"
+      />
+      <SessionContentSettings
+        v-if="sessionId"
+        ref="contentSettings"
+        :session-id="sessionId"
+        class="settings-widget"
+      />
+      <DynamicLocationSettings
+        v-if="sessionId"
+        ref="exploration"
+        :session-id="sessionId"
+        :embedded="true"
+        class="settings-widget"
+      />
+      <StoryVisualPresets
+        v-if="sessionId"
+        ref="visualPresets"
+        :adventure-id="sessionId"
+        session
+        embedded
+        class="settings-widget"
+      />
+    </template>
+    <template #memory>
+      <SessionMemorySettings
+        v-model:turns="turns"
+        v-model:enable-compression="enableCompression"
+        v-model:auto-speak-narration="autoSpeakNarration"
+        v-model:auto-speak-dialogues="autoSpeakDialogues"
+      />
+    </template>
+    <template #characters>
+      <SessionPortraitSettings
+        v-if="sessionId"
+        ref="portraitSettings"
+        :session-id="sessionId"
+        class="settings-widget"
+      />
+      <p class="mt-5 text-xs leading-relaxed text-slate-500">
+        Changes apply to future actions. Existing replies and images are kept.
+      </p>
+    </template>
+    <template #living_world>
+      <LivingWorldSettings
+        v-if="sessionId"
+        ref="livingWorld"
+        :session-id="sessionId"
+        class="settings-widget"
+      />
+    </template>
+    <template #npc_personality>
+      <ChpmSettings
+        v-if="sessionId && mode === 'vn'"
+        ref="chpm"
+        :session-id="sessionId"
+        class="settings-widget"
+      />
+      <p v-else class="text-xs leading-relaxed text-slate-400">
+        NPC Personality is available in Visual Novel sessions.
+      </p>
+    </template>
+  </SessionSettingsFrame>
 </template>
-
-<style scoped>
-.animate-fade-in {
-  animation: fadeIn 0.2s ease-out forwards;
-}
-@keyframes fadeIn {
-  from { opacity: 0; transform: scale(0.98); }
-  to { opacity: 1; transform: scale(1); }
-}
-</style>

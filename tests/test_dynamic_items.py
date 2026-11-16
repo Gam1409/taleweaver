@@ -7,6 +7,7 @@ from backend.api.routes.adventures.gameplay_logic import GameTurnManager
 from backend.engine.rule_engine import GameEvent, InventoryItem
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.avatar import Avatar
+from backend.models.game_session import GameSession
 from backend.models.session_state import SessionState
 from backend.models.user import User
 from backend.models.world_entity import WorldEntity
@@ -49,6 +50,9 @@ async def _seed_game_context(db):
         user_id=user.id,
         current_scene_id="START",
         in_game_time=0,
+    )
+    db.add(
+        GameSession(id=state.session_id, user_id=user.id, avatar_id=avatar.id, template_id=adv.id)
     )
     db.add(state)
     await db.commit()

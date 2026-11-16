@@ -218,6 +218,14 @@ async def test_template_copy_export_import_and_new_session_preserve_preference(
         template.rule_enforcement_mode = "vn"
         template.is_ready = True
         await db.commit()
+        from backend.models.world_entity import WorldScene
+
+        db.add(
+            WorldScene(
+                id="TOWER", template_id=template.id, label="Tower", description="A stone tower"
+            )
+        )
+        await db.flush()
         exported = await AdventureExporter.build_full_manifest(db, template.id)
         assert exported[MANIFEST_KEY] == {"show_state": True}
         exported["adventure"]["title"] = "Imported card settings"

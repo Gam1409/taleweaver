@@ -4,8 +4,12 @@ This module contains all LLM prompts used across the system, centralized for
 better maintainability and documentation.
 """
 
+from backend.core.item_description_prompts import ITEM_DESCRIPTION_STYLE
+from backend.core.item_image_prompts import ITEM_COMPOSITION
+from backend.core.narration_contracts import PLAYER_ACTION_ATTRIBUTION
 from backend.core.npc_inventory_prompts import NPC_POSSESSIONS_MECHANICS, NPC_POSSESSIONS_RULES
 from backend.core.voice_tags import build_voice_tag_catalog_prompt_block
+from backend.engine.npc_presence import PRESENCE_INSTRUCTION
 
 PUZZLE_JSON_ENFORCEMENT_BLOCK = (
     "PUZZLE ENGINE CONTRACT (CRITICAL):\n"
@@ -68,7 +72,7 @@ WORLD_GENERATION_SYSTEM_PROMPT = (
     "NPC & OBJECT SPATIAL LOGIC:\n"
     "Every NPC and Object must have a 'spatial_position' relative to items in the room.\n"
     "NPC 'description' (bio) MUST be max 400 characters.\n"
-    "NPC 'goal' (motivation) and 'character' (traits) fields MUST be concise (max 200 characters each).\n"
+    "NPC 'goal' (motivation) and 'character' (traits) fields MUST be concise (max 300 characters each).\n"
     "For OBJECTS, assign a specific 'item_type': CONSUMABLE, WEARABLE, STATIC, CONSTRUCTABLE, PICKABLE, WEAPON, TOOL, KEY, READABLE, CONTAINER, SWITCH. (COMBINABLE is deprecated — use CONSTRUCTABLE for any combine/craft puzzle.)\n"
     "If an OBJECT has item_type READABLE, include text_log_content (max 1000 characters, MUST be non-empty) and text_log_format (DOCUMENT, SCROLL, BOOK, SIGN).\n"
     "If an OBJECT has item_type CONTAINER, decide whether it is open or locked based on story context.\n"
@@ -85,8 +89,9 @@ WORLD_GENERATION_SYSTEM_PROMPT = (
     "For every locked container, place at least one discoverable hint or puzzle clue in the world that explains how to unlock it (code clue, key location clue, or explicit riddle).\n"
     "For NPCs, assign an 'npc_type': HUMANOID, ANIMAL, MONSTER, BEING.\n"
     "Every NPC MUST also have a 'goal' and a 'character' description (both strings).\n\n"
+    "For every NPC, fill all seven personality_profile choices from the schema enums, consistent with their biography, character and goal. These are flexible tendencies, never compulsory actions.\n"
     "PROTAGONIST:\n"
-    "The protagonist must also have a 'goal' (primary motivation, max 200 chars) and 'character' (personality traits, max 200 chars).\n"
+    "The protagonist must also have a 'goal' (primary motivation, max 300 chars) and 'character' (personality traits, max 300 chars).\n"
     "These help the GM understand how the player character thinks and acts.\n\n"
     "STATS & RESOURCES:\n"
     "For NPCs, always assign 'hp' (range 40-100) and 'stamina' (range 50-100). Default to 0 if not relevant.\n"
@@ -131,6 +136,7 @@ WORLD_GENERATION_SYSTEM_PROMPT = (
     "- `guard_expression`: optional deterministic Python boolean condition evaluated by the engine. Empty string if none.\n\n"
     + PUZZLE_JSON_ENFORCEMENT_BLOCK
     + PUZZLE_DESIGN_PATTERNS_BLOCK
+    + ITEM_DESCRIPTION_STYLE
 )
 """
 The primary system prompt for generating a complete world manifest (scenes, NPCs, items, protagonist).
@@ -183,7 +189,7 @@ Variables: title, original_prompt.
 
 PORTRAIT_COMPOSITION_INSTRUCTION = (
     "Single-character portrait for a character card. Exactly one subject, centered, "
-    "chest-up framing with the face clearly visible and a simple unobtrusive background. "
+    "waist-up framing with the entire head visible, the crop at the waist, and a simple unobtrusive background. "
     "Preserve known visible appearance and clothing. Do not depict other characters "
     "mentioned in the biography, hidden possessions, captions, text, borders, collages "
     "or multiple views. Portrait orientation."
@@ -194,7 +200,7 @@ PROTAGONIST_IMAGE_PROMPT_TEMPLATE = (
 )
 
 SCENE_IMAGE_PROMPT_TEMPLATE = (
-    "Background scene: {name}. {description}. 3:2 aspect ratio, dramatic cinematic lighting, highly detailed digital painting. "
+    "Background scene: {name}. {description}. 16:9 aspect ratio, dramatic cinematic lighting, highly detailed digital painting. "
     "NO borders, NO dividers, NO comic strip, NO storyboard, NO multiple views, NO TEXT. "
 )
 """
@@ -207,7 +213,8 @@ NPC_IMAGE_PROMPT_TEMPLATE = (
 )
 
 OBJECT_IMAGE_PROMPT_TEMPLATE = (
-    "Item asset: {name}. {description}. Centered, isolated on simple background."
+    "Item asset: {name}. {description}. Centered, isolated on simple background. "
+    + ITEM_COMPOSITION
 )
 ITEM_IMAGE_PROMPT_TEMPLATE = OBJECT_IMAGE_PROMPT_TEMPLATE
 """
@@ -385,19 +392,24 @@ GM_NARRATION_MANDATORY_FORMATTING = (
     "Separate narrative prose from speech with a blank line. "
     'NO COLONS IN NARRATION: NEVER use colons (:) in descriptive or narrative prose. Colons are strictly reserved for speaker dialogue attribution (Character Name: "..."). Use dashes (—), periods, or commas instead.\n\n'
     "NO SUMMARIES OR SEPARATORS: Do NOT append lists like 'AVAILABLE INTERACTIONS', 'Suggestions', or 'What do you do?'. Do NOT use horizontal rules or lines like '---' in your output.\n\n"
-    "CRITICAL: DO NOT output any JSON, code blocks, or curly braces { } in your response. Your entire response MUST be purely narrative prose/story."
+    "CRITICAL: DO NOT output any JSON, code blocks, or curly braces { } in your response. Your entire response MUST be purely narrative prose/story.\n"
+    + PLAYER_ACTION_ATTRIBUTION
 )
 
 
 def get_vocal_direction_prompt(provider: str = "google") -> str:
     return (
-        "VOICE DIRECTION: Actively use tone tags and inline vocalizations to give your narration and dialogue life and atmosphere. "
+        "VOICE DIRECTION: Delivery tags are optional, sparse annotations of this line's actual delivery. "
+        "Ordinary untagged dialogue is the default; do not add a cue merely to decorate a reply. "
         "Tags MUST come from the fixed catalogs below and MUST ALWAYS be in English. "
         + build_voice_tag_catalog_prompt_block(provider)
-        + "1. TONE TAGS: Open a paragraph or dialogue line with one tone tag from the Tone Catalog to set the sustained mood (for example [excited], [whispers], [shouting], [very fast]). "
+        + "1. TONE TAGS: When an emotional or delivery distinction matters, use one Tone Catalog tag at the start of the paragraph or dialogue line. "
         "A tone tag applies to the entire paragraph or dialogue line it opens — start a new paragraph when switching to a different tag. Do not nest tags.\n"
-        "2. INLINE VOCALIZATIONS: Insert momentary human sounds exactly where they happen using angle brackets from the Vocal Bursts Catalog (for example <cough>, <sigh>, <short pause>, <laugh>, <throat-clearing>).\n"
-        "Use both whenever the mood calls for it — combat tension, hushed secrets, desperate warnings."
+        "2. INLINE VOCALIZATIONS: Use a Vocal Bursts Catalog cue only for a meaningful sound occurring now. "
+        "Do not fill pauses with tag chains or repeat a sound out of habit. "
+        "Past delivery is not a permanent character trait; stop carrying a cue forward when its cause ends. "
+        "A continuing physical condition may justify repetition, but earlier tags alone do not. "
+        "Express the scene primarily through words and actions; there is no tag quota."
     )
 
 
@@ -538,8 +550,8 @@ TRAIT_GENERATION_SYSTEM_PROMPT = (
     "concise and evocative 'Goal/Motivation' and 'Character/Traits' based on a character's description.\n\n"
     "JSON STRUCTURE:\n"
     "Respond with a single JSON object containing:\n"
-    "- 'goal': A short string describing what drives the character (max 200 chars).\n"
-    "- 'character': A short string describing personality and behavior (max 200 chars)."
+    "- 'goal': A short string describing what drives the character (max 300 chars).\n"
+    "- 'character': A short string describing personality and behavior (max 300 chars)."
 )
 
 TRAIT_GENERATION_USER_PROMPT_TEMPLATE = (
@@ -974,3 +986,9 @@ AGENT_PLAYER_TURN_SYSTEM_PROMPT = (
 System prompt for the autonomous play agent (incl. Monkey Mode robustness tests).
 Output is expected to be a strict JSON action object. Variables are pre-formatted by the caller.
 """
+
+
+# Availability is operational state, never a journal fact.
+
+GM_MECHANICS_SUFFIX += "\n" + PRESENCE_INSTRUCTION
+GM_CHAT_PROGRESSION_RULES_PROMPT += "\n" + PRESENCE_INSTRUCTION

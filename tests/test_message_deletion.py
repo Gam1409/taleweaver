@@ -4,11 +4,11 @@ from httpx import AsyncClient
 from sqlalchemy import select
 
 from backend.core.config import settings
-from backend.models.chat import ChatMessage
-from backend.models.session_state import SessionState
-from backend.models.game_session import GameSession
-from backend.models.avatar import Avatar
 from backend.models.adventure_template import AdventureTemplate
+from backend.models.avatar import Avatar
+from backend.models.chat import ChatMessage
+from backend.models.game_session import GameSession
+from backend.models.session_state import SessionState
 from backend.models.user import User
 from tests.conftest import TestSessionLocal
 
@@ -22,10 +22,12 @@ async def client(auth_client: AsyncClient) -> AsyncClient:
 
 
 async def test_delete_message_endpoints(client: AsyncClient, monkeypatch):
-    """Verifies message deletion succeeds only in debug mode, and returns correct statuses."""
+    """Debug access alone cannot delete history without a safe rollback snapshot."""
     # Fetch seed user
     async with TestSessionLocal() as session:
-        user = (await session.execute(select(User).where(User.username == "test_user"))).scalar_one()
+        user = (
+            await session.execute(select(User).where(User.username == "test_user"))
+        ).scalar_one()
         user_id = user.id
 
         # Seed template
@@ -89,22 +91,27 @@ async def test_delete_message_endpoints(client: AsyncClient, monkeypatch):
 
     # Enable debug mode on the state (in-game debug mode)
     async with TestSessionLocal() as session:
-        state = (await session.execute(select(SessionState).where(SessionState.session_id == game_id))).scalar_one()
+        state = (
+            await session.execute(select(SessionState).where(SessionState.session_id == game_id))
+        ).scalar_one()
         state.is_debug_enabled = True
         await session.commit()
 
-    # Try deleting again (should succeed with 200)
+    # No pre-turn snapshot exists: preserve the whole branch and require Chronicles.
     resp = await client.delete(f"/api/adventures/sessions/{game_id}/messages/{msg1_id}")
-    assert resp.status_code == 200
-    assert resp.json()["status"] == "deleted"
-    assert resp.json()["message_id"] == msg1_id
+    assert resp.status_code == 409
+    assert "checkpoint" in resp.json()["detail"].lower()
 
-    # Verify that the message is actually deleted from the database
+    # Neither the action nor the reply may be removed without their consequences.
     async with TestSessionLocal() as session:
-        msg_in_db = (await session.execute(select(ChatMessage).where(ChatMessage.id == msg1_id))).scalar_one_or_none()
-        assert msg_in_db is None
+        msg_in_db = (
+            await session.execute(select(ChatMessage).where(ChatMessage.id == msg1_id))
+        ).scalar_one_or_none()
+        assert msg_in_db is not None
 
-        msg2_in_db = (await session.execute(select(ChatMessage).where(ChatMessage.id == msg2_id))).scalar_one_or_none()
+        msg2_in_db = (
+            await session.execute(select(ChatMessage).where(ChatMessage.id == msg2_id))
+        ).scalar_one_or_none()
         assert msg2_in_db is not None
 
     # Try deleting a non-existent message ID (should return 404)

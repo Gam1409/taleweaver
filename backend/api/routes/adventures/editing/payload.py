@@ -1,8 +1,9 @@
 """Serializes the editor world state (scenes, entities, exits, protagonist)."""
 
 import logging
+from collections.abc import Callable, Sequence
 from types import SimpleNamespace
-from typing import Any, Optional
+from typing import Any, Optional, overload
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
@@ -16,16 +17,18 @@ from backend.api.routes.adventures.editing.common import (
     _resolve_library_image_url,
     _restore_missing_template_avatar,
 )
-from backend.api.routes.adventures.logic import AdventureLogic
 from backend.api.routes.adventures.schemas import (
     AdventureTemplateDebugResponse,
 )
 from backend.api.routes.adventures.sessions import _backfill_avatar_items_from_template_entities
 from backend.core.auth import get_current_user
 from backend.core.database import get_db
+from backend.engine.character_identity import identity_facts
+from backend.engine.gameplay.world import AdventureLogic
 from backend.engine.media_engine import MediaEngine
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.avatar import Avatar
+from backend.models.base import Base
 from backend.models.user import User
 from backend.models.world_entity import WorldEntity, WorldExit, WorldScene
 
@@ -120,6 +123,9 @@ def _adventure_extras(adventure: AdventureTemplate, _data: dict[str, Any]) -> di
 
 def _switch_fields(metadata_json: dict[str, Any]) -> dict[str, Any]:
     switch_config = metadata_json.get("switch") or {}
+    script_source = (
+        switch_config if isinstance(metadata_json.get("switch"), dict) else metadata_json
+    )
 
     def pick(flat_key: str, nested_key: str, default: Any) -> Any:
         return metadata_json.get(flat_key) or switch_config.get(nested_key) or default
@@ -128,8 +134,8 @@ def _switch_fields(metadata_json: dict[str, Any]) -> dict[str, Any]:
         "switch_states": pick("switch_states", "states", []),
         "switch_initial_state": pick("switch_initial_state", "initial_state", ""),
         "switch_transitions": pick("switch_transitions", "transitions", []),
-        "on_success_script": pick("on_success_script", "on_success_script", ""),
-        "on_failure_script": pick("on_failure_script", "on_failure_script", ""),
+        "on_success_script": script_source.get("on_success_script") or "",
+        "on_failure_script": script_source.get("on_failure_script") or "",
     }
 
 
@@ -159,7 +165,7 @@ def _entity_extras(entity: WorldEntity, _data: dict[str, Any]) -> dict[str, Any]
     return {}
 
 
-_EXTRAS_BY_TYPE = (
+_EXTRAS_BY_TYPE: tuple[tuple[type[Base], Callable[..., dict[str, Any]]], ...] = (
     (WorldScene, _scene_extras),
     (WorldExit, _exit_extras),
     (Avatar, _avatar_extras),
@@ -168,10 +174,20 @@ _EXTRAS_BY_TYPE = (
 )
 
 
-def _serialize_model(obj):
+@overload
+def _serialize_model(obj: Base) -> dict[str, Any]: ...
+
+
+@overload
+def _serialize_model(obj: None) -> None: ...
+
+
+def _serialize_model(obj: Base | None) -> dict[str, Any] | None:
     if not obj:
         return None
     data = {c.name: getattr(obj, c.name) for c in obj.__table__.columns}
+    if isinstance(obj, (Avatar, WorldEntity)):
+        data.update(identity_facts(obj))
     for model_type, extras in _EXTRAS_BY_TYPE:
         if isinstance(obj, model_type):
             data.update(extras(obj, data))
@@ -179,7 +195,7 @@ def _serialize_model(obj):
 
 
 def _serialize_protagonist_with_items(
-    avatar: Optional[Avatar], entities: list[WorldEntity]
+    avatar: Optional[Avatar], entities: Sequence[WorldEntity]
 ) -> Optional[dict[str, Any]]:
     """Serialize the avatar with inventory/equipment backfilled as full item dicts.
 
@@ -328,7 +344,7 @@ async def get_adventure_editor_assets(
     template_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> AdventureTemplateDebugResponse:
     """Returns full world/editor asset data for the AdventureTemplate Editor UI (owner only)."""
     await _get_owned_adventure_or_404(db, template_id, current_user.id)
     return await _build_adventure_editor_assets(template_id, db)
@@ -339,7 +355,7 @@ async def get_adventure_debug(
     template_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> AdventureTemplateDebugResponse:
     """Legacy debug endpoint (owner only)."""
     await _get_owned_adventure_or_404(db, template_id, current_user.id)
     return await _build_adventure_editor_assets(template_id, db)

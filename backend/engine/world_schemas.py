@@ -11,6 +11,8 @@ from typing import Any, Literal, Optional
 from pydantic import BaseModel, Field, model_serializer, model_validator
 
 from backend.engine.clothing.schema import Garment, VisualProfile
+from backend.engine.personality.profile import PersonalityProfile
+from backend.schemas.character_identity import CharacterIdentityFields
 
 
 class WorldBaseSchema(BaseModel):
@@ -268,7 +270,11 @@ class SpecialActionSchema(WorldBaseSchema):
     model_config = {"extra": "forbid"}
 
 
-class WorldNPCSchema(WorldBaseSchema):
+class WorldNPCSchema(WorldBaseSchema, CharacterIdentityFields):
+    personality_profile: PersonalityProfile = Field(
+        default_factory=PersonalityProfile,
+        description="Choose all seven personality tendencies consistent with this NPC's biography, goal and character. Use schema enum values. These are tendencies, not absolute rules.",
+    )
     visual_profile: Optional[VisualProfile] = Field(
         default=None,
         description="Optional stable appearance and canonical owned worn-item references.",
@@ -280,11 +286,11 @@ class WorldNPCSchema(WorldBaseSchema):
     )
     goal: str = Field(
         ...,
-        description="Concise description of the NPC's primary motivation or intention, max 200 characters.",
+        description="Concise description of the NPC's primary motivation or intention, max 300 characters.",
     )
     character: str = Field(
         ...,
-        description="Concise description of the NPC's personality, demeanor, or character traits, max 200 characters.",
+        description="Concise description of the NPC's personality, demeanor, or character traits, max 300 characters.",
     )
     start_scene_id: str = Field(..., description="The ID of the scene where the NPC starts.")
     spatial_position: str = Field(
@@ -482,7 +488,10 @@ class WorldObjectSchema(WorldBaseSchema):
     )
     id: str = Field(..., description="Unique slug for the object, e.g., GOLDEN_KEY")
     name: str = Field(..., description="Human-readable name")
-    description: str = Field(..., description="Physical characteristics and details.")
+    description: str = Field(
+        ...,
+        description="Detailed literary description of the object itself, in complete sentences with correct spelling and punctuation, at most 1000 characters. Describe intrinsic appearance, material, shape and construction; exclude acquisition, current owner, use and temporary status.",
+    )
     start_scene_id: str = Field(..., description="The ID of the scene where the object starts.")
     spatial_position: str = Field(
         ...,
@@ -808,7 +817,7 @@ class EquipmentSchema(WorldBaseSchema):
     model_config = {"extra": "forbid"}
 
 
-class ProtagonistSchema(WorldBaseSchema):
+class ProtagonistSchema(WorldBaseSchema, CharacterIdentityFields):
     visual_profile: Optional[VisualProfile] = Field(
         default=None,
         description="Optional stable appearance and canonical owned worn-item references.",
@@ -818,11 +827,11 @@ class ProtagonistSchema(WorldBaseSchema):
     description: str = Field(..., description="Narrative description of appearance and backstory.")
     goal: str = Field(
         ...,
-        description="The protagonist's primary motivation or personal driving goal, max 200 characters.",
+        description="The protagonist's primary motivation or personal driving goal, max 300 characters.",
     )
     character: str = Field(
         ...,
-        description="Concise description of the protagonist's personality, quirks, and character traits, max 200 characters.",
+        description="Concise description of the protagonist's personality, quirks, and character traits, max 300 characters.",
     )
     strength: int = Field(..., description="Base strength stat (1-99)")
     dexterity: int = Field(..., description="Base dexterity stat (1-99)")

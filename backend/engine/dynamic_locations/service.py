@@ -1,14 +1,37 @@
 """Validate and materialize one bounded local scene before normal movement guards."""
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any, Protocol, cast
+
+from pydantic import BaseModel
+
+from backend.engine.dynamic_locations.schema import LocationPolicy
+
+if TYPE_CHECKING:
+    from backend.engine.gameplay.manager import GameTurnManager
+
 import asyncio
 import json
 import logging
-import unicodedata
 from uuid import uuid4
 
 from sqlalchemy import or_, select
 
+from backend.core.diagnostic_failures import failure_details, failure_reason
 from backend.core.llm_router import GameMasterLLM
+from backend.core.state_rejection_trace import reject
+from backend.engine.dynamic_locations.companions import (
+    bind_companions,
+    finish_arrival,
+    present_companions,
+    record_arrival,
+)
+from backend.engine.dynamic_locations.identity import (
+    place_catalog,
+    request_clarification,
+    resolve_identity,
+)
 from backend.engine.dynamic_locations.prompts import CONFIRM
 from backend.engine.dynamic_locations.schema import (
     MAX_CHILDREN,
@@ -22,14 +45,23 @@ from backend.engine.dynamic_locations.schema import (
 )
 from backend.models.world_entity import WorldExit, WorldScene
 
+
+class _SceneIntent(Protocol):
+    new_scene_id: str | None
+
+
 logger = logging.getLogger(__name__)
 
 
-def normalized(value: str) -> str:
-    return "".join(c for c in unicodedata.normalize("NFKC", value).casefold() if c.isalnum())
-
-
-async def _context(manager, proposal, user_msg, history, language):
+async def _context(
+    manager: GameTurnManager,
+    proposal: PlaceProposal,
+    user_msg: str,
+    history: list[dict[str, Any]],
+    language: str | None,
+) -> tuple[list[WorldScene], list[WorldExit], dict[str, Any], str]:
+    if manager.state is None or manager.adventure is None:
+        raise RuntimeError("Turn context must be initialized")
     scenes = list(
         (
             await manager.db.scalars(
@@ -57,6 +89,7 @@ async def _context(manager, proposal, user_msg, history, language):
     context = {
         "content_language": language or "English",
         "player_action": user_msg,
+        "present_npcs": await present_companions(manager),
         "proposal": proposal.model_dump(),
         "current_scene_id": manager.state.current_scene_id,
         "in_game_time": manager.state.in_game_time,
@@ -70,6 +103,9 @@ async def _context(manager, proposal, user_msg, history, language):
         "original_map": [
             {"id": s.id, "label": s.label} for s in scenes if s.id not in data.get("places", {})
         ][:80],
+        "existing_place_catalog": place_catalog(
+            scenes, exits, manager.state.current_scene_id, data
+        ),
         "local_places": {
             sid: p
             for sid, p in data.get("places", {}).items()
@@ -85,11 +121,10 @@ async def _context(manager, proposal, user_msg, history, language):
     return scenes, exits, context, recent
 
 
-def _confirmed_arrival(decision, proposal, user_msg):
+def _confirmed_arrival(decision: PlaceDecision, proposal: PlaceProposal, user_msg: str) -> bool:
     return (
         decision.arrival_now
         and decision.player_moves
-        and decision.local_to_current_scene
         and decision.access_allowed
         and not decision.contradicts_world
         and bool(proposal.action_quote.strip())
@@ -99,7 +134,14 @@ def _confirmed_arrival(decision, proposal, user_msg):
     )
 
 
-def _eligible(decision, user_msg, recent, data, selected, parent_id):
+def _eligible(
+    decision: PlaceDecision,
+    user_msg: str,
+    recent: str,
+    data: dict[str, Any],
+    selected: LocationPolicy,
+    parent_id: str,
+) -> bool:
     places = data.get("places") or {}
     depth = int(places.get(parent_id, {}).get("depth", 0)) + 1
     if depth > MAX_DEPTH or decision.granularity == "detail":
@@ -119,18 +161,7 @@ def _eligible(decision, user_msg, recent, data, selected, parent_id):
     return not (scale == "regional" and decision.granularity == "site" and depth > 1)
 
 
-def _existing(decision, proposal, scenes, exits, data, parent):
-    if decision.existing_scene_id:
-        return decision.existing_scene_id
-    names = {normalized(proposal.label), normalized(decision.label)} - {""}
-    local_ids = {
-        sid for sid, place in data.get("places", {}).items() if place.get("parent_id") == parent
-    }
-    local_ids.update(e.to_scene_id if e.from_scene_id == parent else e.from_scene_id for e in exits)
-    return next((s.id for s in scenes if s.id in local_ids and normalized(s.label) in names), None)
-
-
-def _open_exit(exits, current, target):
+def _open_exit(exits: list[WorldExit], current: str, target: str) -> WorldExit | None:
     return next(
         (
             e
@@ -149,17 +180,36 @@ def _open_exit(exits, current, target):
     )
 
 
-async def materialize(manager, proposal, decision, user_msg, recent, scenes, exits) -> str | None:
+async def materialize(
+    manager: GameTurnManager,
+    proposal: PlaceProposal,
+    decision: PlaceDecision,
+    user_msg: str,
+    recent: str,
+    scenes: list[WorldScene],
+    exits: list[WorldExit],
+    *,
+    catalog_complete: bool = True,
+) -> str | None:
     state = manager.state
+    if state is None:
+        raise RuntimeError("Turn state must be initialized")
     data = registry(state)
     selected = policy(state)
     parent = state.current_scene_id
     if not _confirmed_arrival(decision, proposal, user_msg):
         return None
-    existing = _existing(decision, proposal, scenes, exits, data, parent)
-    if existing:
-        return existing if _open_exit(exits, parent, existing) else None
-    if not _eligible(decision, user_msg, recent, data, selected, parent):
+    identity = resolve_identity(decision, proposal, scenes, exits, data, parent)
+    if identity.scene_id:
+        return identity.scene_id if _open_exit(exits, parent, identity.scene_id) else None
+    if (
+        identity.uncertain
+        or not catalog_complete
+        or not decision.local_to_current_scene
+        or not _eligible(decision, user_msg, recent, data, selected, parent)
+    ):
+        if identity.uncertain or not catalog_complete:
+            request_clarification(manager, decision, scenes, exits)
         return None
     places = dict(data.get("places") or {})
     if (
@@ -207,13 +257,34 @@ async def materialize(manager, proposal, decision, user_msg, recent, scenes, exi
     return scene_id
 
 
-async def resolve_proposal(manager, intent, user_msg, history, language) -> None:
+async def resolve_proposal(
+    manager: GameTurnManager,
+    intent: BaseModel,
+    user_msg: str,
+    history: list[dict[str, Any]],
+    language: str | None,
+) -> None:
+    if manager.state is None or manager.user is None:
+        raise RuntimeError("Turn context must be initialized")
+    manager._location_question = None
     raw = getattr(intent, "new_local_place", None)
-    if not raw or not policy(manager.state).enabled or intent.new_scene_id:
+    if not raw or not policy(manager.state).enabled or getattr(intent, "new_scene_id", None):
         return
+    context: dict[str, Any] = {}
+    decision: Any = None
     try:
         proposal = PlaceProposal.model_validate(raw)
         if proposal.action_quote not in user_msg:
+            reject(
+                "movement",
+                "dynamic_location.source_mismatch",
+                "The proposed arrival lacks exact evidence in the current player message.",
+                proposal=raw,
+                player_message=user_msg,
+                history=history,
+                source_context=manager.state.entity_states,
+                session_id=manager.game_id,
+            )
             return
         scenes, exits, context, recent = await _context(
             manager, proposal, user_msg, history, language
@@ -231,21 +302,69 @@ async def resolve_proposal(manager, intent, user_msg, history, language) -> None
             timeout=90,
         )
         decision = PlaceDecision.model_validate(decision)
-    except (ValueError, TimeoutError):
+    except (ValueError, TimeoutError) as exc:
+        reject(
+            "movement",
+            "dynamic_location.confirmation_timeout"
+            if isinstance(exc, TimeoutError)
+            else "dynamic_location.invalid_proposal",
+            failure_reason(
+                exc,
+                "Local place confirmation timed out."
+                if isinstance(exc, TimeoutError)
+                else "Local place proposal failed validation.",
+            ),
+            proposal=raw,
+            decision=decision,
+            context=context,
+            player_message=user_msg,
+            history=history,
+            source_context=manager.state.entity_states,
+            session_id=manager.game_id,
+            error_type=type(exc).__name__,
+            **failure_details(exc),
+        )
         logger.warning("Local place proposal rejected or timed out for session %s", manager.game_id)
         return
-    except Exception:
+    except Exception as exc:
+        reject(
+            "movement",
+            "dynamic_location.confirmation_failed",
+            failure_reason(exc, "Local place generation failed."),
+            proposal=raw,
+            decision=decision,
+            context=context,
+            player_message=user_msg,
+            history=history,
+            source_context=manager.state.entity_states,
+            session_id=manager.game_id,
+            error_type=type(exc).__name__,
+            **failure_details(exc),
+        )
         logger.exception("Local place generation failed for session %s", manager.game_id)
         return
     async with manager.db.begin_nested():
-        intent.new_scene_id = await materialize(
-            manager, proposal, decision, user_msg, recent, scenes, exits
+        destination = await materialize(
+            manager,
+            proposal,
+            decision,
+            user_msg,
+            recent,
+            scenes,
+            exits,
+            catalog_complete=context["existing_place_catalog"]["complete"],
         )
+        cast(_SceneIntent, intent).new_scene_id = destination
+        bind_companions(intent, decision, destination, context, user_msg)
+        record_arrival(manager, decision, destination, context, user_msg)
 
 
-async def discard_unentered(manager) -> None:
+async def discard_unentered(manager: GameTurnManager) -> None:
     from backend.engine.dynamic_locations.lifecycle import prune
 
+    if manager.state is None:
+        raise RuntimeError("Turn state must be initialized")
+    finish_arrival(manager)
     ids = set(getattr(manager, "_dynamic_scene_images", []))
     removed = ids - {manager.state.current_scene_id}
     if not removed:

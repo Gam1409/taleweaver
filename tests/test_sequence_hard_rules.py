@@ -8,6 +8,7 @@ from backend.api.routes.adventures.turn_state_applier import TurnStateApplier
 from backend.core.world_validator import validate_adventure
 from backend.engine.rule_engine import GameEvent, WorldEntityUpdate
 from backend.engine.world_schemas import SequenceSchema as ManifestSequenceSchema
+from backend.models.world_entity import WorldEntity
 from backend.schemas.adventure import SequenceSchema
 
 
@@ -20,6 +21,7 @@ def _setup_mock_manager(active_seq_id="SEQ_1"):
     )
     mock_manager.db = MagicMock()
     mock_manager.db.execute = AsyncMock(return_value=mock_res)
+    mock_manager.db.scalar = AsyncMock(return_value=None)
     mock_manager.db.flush = AsyncMock()
     mock_manager.db.add = MagicMock()
     mock_manager.game_id = "test_game"
@@ -176,6 +178,9 @@ async def test_hard_rule_defeated_npc_completion():
     """Verify that defeating the required NPC triggers sequence completion."""
     mock_manager = _setup_mock_manager("SEQ_1")
     mock_manager.state.entity_states = {"BOSS_DRAGON": {"hp": 100, "is_defeated": False}}
+    mock_manager.db.execute.return_value.scalars.return_value.all.return_value = [
+        WorldEntity(id="BOSS_DRAGON", name="Dragon", inventory=[], metadata_json={})
+    ]
     mock_manager.adventure.sequences = [
         {
             "id": "SEQ_1",

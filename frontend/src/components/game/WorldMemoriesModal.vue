@@ -223,7 +223,7 @@ function getEmotionBadge(emotion?: string) {
 
 <style scoped>
 .font-display {
-  font-family: 'Acme', sans-serif;
+  font-family: var(--session-font, 'Alegreya Sans'), sans-serif;
   letter-spacing: 0.05em;
 }
 

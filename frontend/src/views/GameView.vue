@@ -8,13 +8,15 @@
 import { ref, watch, computed, onBeforeUnmount, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import CharacterSheetModal from '@/components/game/CharacterSheetModal.vue'
-import NpcPortraitModal from '@/components/game/NpcPortraitModal.vue'
-import SessionCharactersModal from '@/components/game/SessionCharactersModal.vue'
+import SessionNpcModals from '@/components/game/SessionNpcModals.vue'
 import { useSessionPortrait } from '@/composables/useSessionPortrait'
+import { useSessionPlaytime } from '@/composables/useSessionPlaytime'
+import { useLivingWorldPresence } from '@/composables/useLivingWorldPresence'
 import MapModal from '@/components/game/MapModal.vue'
 import QuestsModal from '@/components/game/QuestsModal.vue'
 import WalkthroughModal from '@/components/game/WalkthroughModal.vue'
 import GameOverScreen from '@/components/game/GameOverScreen.vue'
+import SessionLoadError from '@/components/game/SessionLoadError.vue'
 import SuccessScreen from '@/components/game/SuccessScreen.vue'
 import ImmersiveGameView from '@/components/game/ImmersiveGameView.vue'
 import { usePlayAgentAutoLoop } from '@/composables/usePlayAgent'
@@ -28,7 +30,6 @@ import TextLogModal from '@/components/game/TextLogModal.vue'
 import AdventureGeneratorModal from '@/components/game/AdventureGeneratorModal.vue'
 import ExitSessionModal from '@/components/game/ExitSessionModal.vue'
 import GameHoverTooltip from '@/components/game/GameHoverTooltip.vue'
-import GameNotificationsOverlay from '@/components/game/GameNotificationsOverlay.vue'
 import ChroniclesModal from '@/components/game/ChroniclesModal.vue'
 import CheckpointRestoreConfirmModal from '@/components/game/CheckpointRestoreConfirmModal.vue'
 import ContextMenu from '@/components/game/ContextMenu.vue'
@@ -36,11 +37,13 @@ import SetupWarningBanner from '@/components/portal/SetupWarningBanner.vue'
 import SessionNoteModal from '@/components/portal/SessionNoteModal.vue'
 import DynamicLocationImage from '@/components/game/DynamicLocationImage.vue'
 import SessionSettingsModal from '@/components/game/SessionSettingsModal.vue'
+import WorldInfoModal from '@/components/game/WorldInfoModal.vue'
 import WorldMemoriesModal from '@/components/game/WorldMemoriesModal.vue'
 import DebugModal from '@/components/game/DebugModal.vue'
 import { api } from '@/composables/useApi'
 import { configState, refreshConfig } from '@/store/config'
 import { useGameSocket } from '@/composables/useGameSocket'
+import { useSessionTypography } from '@/composables/useSessionTypography'
 import { useNotifications } from '@/composables/useNotifications'
 import { useGameAutoSpeak } from '@/composables/useGameAutoSpeak'
 import { useGameUiFeedback } from '@/composables/useGameUiFeedback'
@@ -49,7 +52,7 @@ import { useGameSessionLifecycle } from '@/composables/useGameSessionLifecycle'
 import { useGameCommandFlow } from '@/composables/useGameCommandFlow'
 import { useGameProgressState } from '@/composables/useGameProgressState'
 import { refreshUser } from '@/store/auth'
-import { getImageUrl, getOriginalImageUrl } from '@/utils/game_icons'
+
 import { audioService } from '@/services/audioService'
 import { type GameSettings } from '@/services/gameViewService'
 import { gameCommandService } from '@/services/gameCommandService'
@@ -137,7 +140,7 @@ const saveSessionNote = async (note: string) => {
     statusNote.value = note
     addNotification('Session note updated.', 'success')
     showNoteModal.value = false
-  } catch (err) {
+  } catch {
     addNotification('Failed to update session note.', 'error')
   } finally {
     isSavingNote.value = false
@@ -145,6 +148,7 @@ const saveSessionNote = async (note: string) => {
 }
 
 const showSettingsModal = ref(false)
+const showWorldInfo = ref(false)
 const showMemoriesModal = ref(false)
 const showCharactersModal = ref(false)
 const isSavingSettings = ref(false)
@@ -168,15 +172,16 @@ const saveSessionSettings = async (payload: { turns: number; enableCompression?:
       sheet.value.max_memory_turns = payload.turns
       sheet.value.enable_history_compression = payload.enableCompression
     }
+    await refreshSession()
     addNotification('Session memory settings updated.', 'success')
     showSettingsModal.value = false
-  } catch (err) {
+  } catch {
     addNotification('Failed to update session settings.', 'error')
   } finally {
     isSavingSettings.value = false
   }
 }
-const { notifications, removeNotification, addNotification } = useNotifications()
+const { addNotification } = useNotifications()
 const gameSettings = ref<GameSettings>({
   clock_24h: false,
 })
@@ -184,6 +189,7 @@ const gameSettings = ref<GameSettings>({
 const {
   sheet,
   status,
+  sessionLoadError,
   messages,
   gameOverReason,
   statusNote,
@@ -206,9 +212,9 @@ const {
   suggestionsNotice,
   refreshSuggestions,
   worldMemories,
-  worldRumors,
   statusText,
   debugLogs,
+  systemDebugEnabled,
   inventoryGlow,
   mapGlow,
   questGlow,
@@ -230,6 +236,10 @@ const {
   cancelTurnError,
   isLegacyFormat,
 } = useGameSocket()
+useSessionTypography(useGameSocket().language)
+
+useSessionPlaytime(() => props.id, () => ['connected', 'loading', 'completed', 'game_over'].includes(status.value))
+useLivingWorldPresence(() => props.id, () => status.value !== 'disconnected')
 
 const {
   portraitTarget, portraitBusy, portraitError, portraitUpdated,
@@ -254,7 +264,7 @@ const loadSessionCheckpoints = async () => {
   isLoadingCheckpoints.value = true
   try {
     checkpoints.value = await api.listSessionCheckpoints(props.id)
-  } catch (error) {
+  } catch {
     addNotification('Failed to load Chronicles timeline.', 'error')
   } finally {
     isLoadingCheckpoints.value = false
@@ -291,7 +301,8 @@ const confirmRestoreCheckpoint = async () => {
     showRestoreConfirmModal.value = false
     pendingRestoreCheckpoint.value = null
     addNotification(`Timeline restored. Removed ${result.deleted_messages} future messages.`, 'success')
-  } catch (error) {
+    for (const warning of result.warnings ?? []) addNotification(warning, 'info')
+  } catch {
     addNotification('Failed to restore checkpoint timeline.', 'error')
   } finally {
     restoringCheckpointId.value = null
@@ -544,18 +555,6 @@ const isContainerLocked = (container: any): boolean => {
   }
 
   return container?.locked === true || metadata?.locked === true
-}
-
-const getContainerCodeRequirement = (container: any): string => {
-  let metadata = container?.metadata_json || {}
-  if (typeof metadata === 'string') {
-    try {
-      metadata = JSON.parse(metadata)
-    } catch {
-      metadata = {}
-    }
-  }
-  return String(container?.code_to_unlock || metadata?.code_to_unlock || '').trim()
 }
 
 const markContainerUnlockedLocally = (containerId: string) => {
@@ -1171,7 +1170,7 @@ const handleContainerDropToScene = async () => {
 
 // Split entities into NPCs and Objects, and inject the player as the top-listed NPC
 const npcs = computed(() => {
-  const worldNpcs = entities.value.filter(e => e.entity_type === 'NPC')
+  const worldNpcs = entities.value.filter(e => e.entity_type === 'NPC' && (!e.presence || e.presence === 'present'))
   if (sheet.value && sheet.value.name) {
     const playerEntity = {
       id: 'PLAYER',
@@ -1260,37 +1259,8 @@ const exitDisplayName = (exit: any): string => {
   return raw
 }
 
-interface ExitLockBadge {
-  label: string
-  icon: string
-  detail: string
-}
-
-const exitLockBadge = (exit: any): ExitLockBadge | null => {
-  if (!exit || !isExitLocked(exit)) return null
-  const code = String(exit.code_to_unlock || '').trim()
-  const item = String(exit.item_to_unlock || '').trim()
-  const expr = String(exit.unlock_expression || '').trim()
-  const rule = String(exit.rule_to_unlock || '').trim()
-  const description = String(exit.lock_description || '').trim()
-
-  if (code) {
-    return { label: 'Locked by Code', icon: 'ra ra-key', detail: description || 'Requires a passcode' }
-  }
-  if (item) {
-    return { label: `Requires ${item}`, icon: 'ra ra-key', detail: description || `Requires the ${item}` }
-  }
-  if (expr) {
-    return { label: 'Guarded Exit', icon: 'ra ra-lock', detail: description || 'Protected by scripted condition' }
-  }
-  if (rule) {
-    return { label: `Rule: ${rule}`, icon: 'ra ra-scroll-unfurled', detail: description || `Requires: ${rule}` }
-  }
-  return { label: 'Locked', icon: 'ra ra-lock', detail: description || 'The way is barred' }
-}
-
-
 // Recover from stale snapshots where edges lack the WorldExit UUID by refreshing once.
+let staleExitSignature = ""
 watch(sceneExits, (exits) => {
   if (!exits || exits.length === 0) return
   const needsRefresh = exits.some((e: any) => {
@@ -1298,6 +1268,9 @@ watch(sceneExits, (exits) => {
     return !id
   })
   if (needsRefresh && typeof refreshSession === 'function') {
+    const signature = JSON.stringify([props.id, sheet.value?.scene_id, exits.map((e: any) => [e.from_scene_id, e.to_scene_id, e.label])])
+    if (signature === staleExitSignature) return
+    staleExitSignature = signature
     void refreshSession()
   }
 })
@@ -1394,6 +1367,7 @@ const {
   fullWorldDebug,
   goBack,
   openDebugInspector,
+  executeDebugCommand,
   openWalkthroughPanel,
   revealWalkthrough,
   handlePlayerInput: handlePlayerInputBase,
@@ -1412,7 +1386,7 @@ const {
   emitSystemMessage,
 })
 
-const { speakLatestAssistantMessage } = useGameAutoSpeak({
+useGameAutoSpeak({
   messages,
   status,
   inputLocked,
@@ -1428,17 +1402,6 @@ const { speakLatestAssistantMessage } = useGameAutoSpeak({
 const handleTrackQuest = (questId: string | null) => {
   setTrackedQuest(questId)
   showQuests.value = false
-}
-
-const brokenImages = ref<Record<string, boolean>>({})
-
-const handleImageError = (path?: string | null) => {
-  if (!path) return
-  brokenImages.value[path] = true
-}
-
-const showImage = (path?: string | null) => {
-  return !!path && !brokenImages.value[path]
 }
 
 useGameSessionLifecycle({
@@ -1459,10 +1422,14 @@ useGameSessionLifecycle({
 
 const {
   hoveredEntity,
-  mousePos,
   tooltipImageFailed,
   contextMenu,
   tooltipStyle,
+  tooltipTarget,
+  retainHover,
+  leaveHover,
+  closeHover,
+  setTooltipElement,
   isConsumableHover,
   handleHover,
   handleChatNpcHover,
@@ -1472,7 +1439,6 @@ const {
   handleMenuSelect,
 } = useGameInteractionState({
   isActionInputBlocked,
-  ruleMode: computed(() => sheet.value?.rule_enforcement_mode),
   npcMetadata,
   npcEntities: npcs,
   playerSheet: sheet,
@@ -1506,8 +1472,6 @@ const {
     return openContainerByHint(hint)
   },
 })
-
-
 
 const handleEquipFromSheet = async (name: string) => {
   sheetDirty.value = true
@@ -1676,6 +1640,7 @@ usePlayAgentAutoLoop()
       :input-locked="isActionInputBlocked"
       :sheet="sheet"
       :game-id="props.id"
+      :system-debug-enabled="systemDebugEnabled"
       :current-scene-image="currentSceneImage"
       :adventure-image="adventureImage"
       :current-scene-name="currentSceneName"
@@ -1707,14 +1672,15 @@ usePlayAgentAutoLoop()
       @open-memories="showMemoriesModal = true"
       @open-characters="showCharactersModal = true"
       @open-settings="showSettingsModal = true"
+      @open-world-info="showWorldInfo = true"
       @open-debug="openDebugInspector"
       @open-walkthrough="openWalkthroughPanel"
       @npc-hover="(ent, event) => typeof ent === 'object' && ent !== null ? handleHover(ent, event) : handleChatNpcHover(ent, event)"
-      @npc-leave="hoveredEntity = null"
+      @npc-leave="leaveHover"
       @npc-click="(name) => handleEntityClick({ name, entity_type: 'NPC' })"
-      @npc-portrait="(npc) => { hoveredEntity = null; openPortrait(npc) }"
+      @npc-portrait="(npc) => { closeHover(); openPortrait(npc) }"
       @item-hover="(item, event) => handleHover({ ...item, entity_type: 'ITEM', description: item.description || 'A mysterious item in your possession.' }, event)"
-      @item-leave="hoveredEntity = null"
+      @item-leave="leaveHover"
       @item-click="handleEntityClick"
       @take-direct="handleTakeDirect"
       @npc-contextmenu="(entity, event) => openContextMenu(entity, event)"
@@ -1724,20 +1690,18 @@ usePlayAgentAutoLoop()
       @exit-session="showExitModal = true"
     />
 
-    <SessionCharactersModal
-      v-if="showCharactersModal"
+    <SessionNpcModals
+      refined
       :session-id="props.id"
-      @close="showCharactersModal = false"
-      @select="openPortrait"
-    />
-    <NpcPortraitModal
-      :session-id="props.id"
-      v-if="portraitTarget"
+      :directory-open="showCharactersModal"
       :npc="portraitTarget"
+      :state-revision="sheet"
       :busy="portraitBusy"
       :error="portraitError"
       :updated="portraitUpdated"
-      @close="closePortrait"
+      @close-directory="showCharactersModal = false"
+      @select="openPortrait"
+      @close-card="closePortrait"
       @generate="regeneratePortrait"
     />
 
@@ -1754,7 +1718,7 @@ usePlayAgentAutoLoop()
       @read-item="openTextLogFromEntity"
       @changed="handleSheetChanged"
       @item-hover="(item, event) => handleHover({ ...item, entity_type: 'ITEM', description: item.description || 'A mysterious item in your possession.' }, event)"
-      @item-leave="hoveredEntity = null"
+      @item-leave="leaveHover"
       @item-contextmenu="(item, event) => openInventoryContextMenu(item, event)"
     />
     <MapModal :open="showMap" :map-data="mapData" :nodes="nodes" :is-debug="!!sheet?.debug_mode" @close="showMap = false" />
@@ -1767,7 +1731,7 @@ usePlayAgentAutoLoop()
       :tracker-hidden="isQuestTrackerHidden"
       @close="showQuests = false" 
       @track-quest="handleTrackQuest"
-      @toggle-tracker="(val) => isQuestTrackerHidden = val"
+      @toggle-tracker="(val: boolean) => isQuestTrackerHidden = val"
     />
     <WalkthroughModal
       :open="showWalkthrough"
@@ -1776,7 +1740,7 @@ usePlayAgentAutoLoop()
       @close="showWalkthrough = false"
       @reveal="revealWalkthrough"
       @item-hover="(item, event) => handleHover({ ...item, entity_type: 'ITEM', description: item.description || 'A mysterious item in your possession.' }, event)"
-      @item-leave="hoveredEntity = null"
+      @item-leave="leaveHover"
     />
     <SessionNoteModal
       v-if="showNoteModal"
@@ -1848,7 +1812,9 @@ usePlayAgentAutoLoop()
       }" 
       :map-data="mapData"
       :nodes="nodes"
-      @execute-command="sendMessage"
+      :execute-command="executeDebugCommand"
+      @open-chronicles="openChroniclesModal"
+      @refresh="refreshSession().then(() => openDebugInspector()).catch(error => addNotification(error.message || 'Could not refresh repaired items.', 'error'))"
       @close="showDebug = false" 
     />
 
@@ -1872,7 +1838,7 @@ usePlayAgentAutoLoop()
       @debug-win="handleCombatDebugWin"
       @debug-loose="handleCombatDebugLoose"
       @entity-hover="(entity, event) => handleHover(entity, event)"
-      @entity-leave="hoveredEntity = null"
+      @entity-leave="leaveHover"
     />
 
     <CombatLootPopup
@@ -1882,7 +1848,7 @@ usePlayAgentAutoLoop()
       @close="closeLootPopup"
       @confirm="handleLootDone"
       @item-hover="(item, event) => handleHover({ ...item, entity_type: 'ITEM', description: item.description || 'Loot recovered from battle.' }, event)"
-      @item-leave="hoveredEntity = null"
+      @item-leave="leaveHover"
     />
 
     <ContainerModal
@@ -1895,7 +1861,7 @@ usePlayAgentAutoLoop()
       @take-item="handleContainerTakeItem"
       @drop-to-scene="handleContainerDropToScene"
       @item-hover="(item, event) => handleHover(item, event)"
-      @item-leave="hoveredEntity = null"
+      @item-leave="leaveHover"
     />
 
     <ContainerUnlockModal
@@ -1959,11 +1925,13 @@ usePlayAgentAutoLoop()
       @close="closeTextLogModal"
     />
 
+    <WorldInfoModal v-if="showWorldInfo" :session-id="props.id" @close="showWorldInfo = false" />
+
     <AdventureGeneratorModal
       :open="showGeneratorModal"
       :proposal="generatorProposal"
       @close="closeGeneratorModal"
-      @completed="(advId, title) => {
+      @completed="(_advId, title) => {
         emitSystemMessage(`SYSTEM: Adventure '${title}' successfully created and added to your archives.`)
         addNotification(`Adventure '${title}' created successfully!`, 'success')
       }"
@@ -1980,11 +1948,16 @@ usePlayAgentAutoLoop()
     <GameHoverTooltip
       :hovered-entity="hoveredEntity"
       :tooltip-style="tooltipStyle"
+      :teleport-target="tooltipTarget"
       :tooltip-image-failed="tooltipImageFailed"
       :shows-mechanics="showsMechanics"
       :is-consumable-hover="isConsumableHover"
       :rule-mode="sheet?.rule_enforcement_mode"
       @image-error="onTooltipImageError"
+      @retain="retainHover"
+      @leave="leaveHover"
+      @close="closeHover(true)"
+      @element="setTooltipElement"
     />
 
     <!-- CONTEXT MENU -->
@@ -1998,6 +1971,10 @@ usePlayAgentAutoLoop()
         @close="contextMenu = null"
         @select="handleMenuSelect"
       />
+    </Teleport>
+
+    <Teleport to="body">
+      <SessionLoadError v-if="sessionLoadError" :message="sessionLoadError" @retry="connect(props.id)" @exit="goBack" />
     </Teleport>
 
     <!-- RESUMING/LOADING OVERLAY -->
@@ -2029,11 +2006,6 @@ usePlayAgentAutoLoop()
     </Teleport>
 
   
-    <!-- TOAST NOTIFICATIONS -->
-    <GameNotificationsOverlay
-      :notifications="notifications"
-      @dismiss="removeNotification"
-    />
   </main>
 </template>
 

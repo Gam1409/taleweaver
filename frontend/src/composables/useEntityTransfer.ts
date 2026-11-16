@@ -1,4 +1,4 @@
-import { ref } from 'vue'
+import { onScopeDispose, ref, watch } from 'vue'
 import type { Ref } from 'vue'
 import { entityService } from '@/services/entityService'
 import type { EntityBundleKind } from '@/services/entityService'
@@ -11,11 +11,11 @@ const KIND_LABELS: Record<EntityBundleKind, string> = {
   npc: 'NPC',
   item: 'Item',
 }
-const PROTAGONIST_IMPORT_CONFIRM =
-  'Importing replaces the current protagonist profile, stats, and portrait. Inventory and equipment are kept. Continue?'
-
 export interface UseEntityTransferResult {
   isTransferring: Ref<boolean>
+  isProtagonistImportPending: Ref<boolean>
+  confirmProtagonistImport: () => void
+  cancelProtagonistImport: () => void
   exportEntity: (kind: EntityBundleKind, entityId: string | null, label: string) => Promise<void>
   importEntity: (kind: EntityBundleKind) => void
 }
@@ -41,6 +41,13 @@ export function useEntityTransfer(
   onImported: () => Promise<void>,
 ): UseEntityTransferResult {
   const isTransferring = ref(false)
+  const isProtagonistImportPending = ref(false)
+
+  function cancelProtagonistImport(): void {
+    isProtagonistImportPending.value = false
+  }
+  watch(adventureId, cancelProtagonistImport, { flush: 'sync' })
+  onScopeDispose(cancelProtagonistImport)
 
   async function exportEntity(kind: EntityBundleKind, entityId: string | null, label: string): Promise<void> {
     isTransferring.value = true
@@ -71,9 +78,20 @@ export function useEntityTransfer(
   }
 
   function importEntity(kind: EntityBundleKind): void {
-    if (kind === 'protagonist' && !confirm(PROTAGONIST_IMPORT_CONFIRM)) {
+    if (kind === 'protagonist') {
+      isProtagonistImportPending.value = true
       return
     }
+    selectBundle(kind)
+  }
+
+  function confirmProtagonistImport(): void {
+    if (!isProtagonistImportPending.value) return
+    isProtagonistImportPending.value = false
+    selectBundle('protagonist')
+  }
+
+  function selectBundle(kind: EntityBundleKind): void {
     const input = document.createElement('input')
     input.type = 'file'
     input.accept = `.${BUNDLE_EXTENSION}`
@@ -87,5 +105,5 @@ export function useEntityTransfer(
     input.click()
   }
 
-  return { isTransferring, exportEntity, importEntity }
+  return { isTransferring, isProtagonistImportPending, confirmProtagonistImport, cancelProtagonistImport, exportEntity, importEntity }
 }

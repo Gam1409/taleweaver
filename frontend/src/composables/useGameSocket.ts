@@ -1,3 +1,6 @@
+import { createAgentSettings, type AgentSettingsPatch } from '@/composables/useAgentSettings'
+export type { AgentSettingsPatch } from '@/composables/useAgentSettings'
+import { apiFetch } from '@/services/http'
 /**
  * useGameSocket — Reactive REST-based composable for the TaleWeaver game loop.
  * 
@@ -5,9 +8,15 @@
  * Manages chat history fetching, message posting, and state synchronization.
  */
 import { ref, watch, type Ref } from 'vue'
+import { updateNpcBehaviorStatus } from '@/composables/useNpcBehaviorStatus'
 import { usePromptSuggestions } from '@/composables/usePromptSuggestions'
 import { useSessionContentLanguage } from '@/composables/useSessionContentLanguage'
 import { useNotifications } from '@/composables/useNotifications'
+import { acknowledgeCorrection, getCorrection } from '@/services/narrationCorrection'
+import { createFailedTurnDrafts, pendingTurnError, savedActionIndex } from '@/services/failedTurnDrafts'
+import { createSnapshotPoller } from '@/services/snapshotPoller'
+import { readSessionSnapshot, snapshotErrorMessage } from '@/services/sessionSnapshot'
+import { readServerEvents } from '@/services/serverEvents'
 import { authState } from '@/store/auth'
 import type { ChatMessage, CharacterSheet, CombatState } from '@/types'
 
@@ -16,6 +25,7 @@ export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'er
 export interface TurnErrorState {
   message: string
   action: string
+  draft?: string
 }
 
 export interface AgentLogEntry {
@@ -24,17 +34,30 @@ export interface AgentLogEntry {
   action: string
 }
 
+interface StoryEventPayload {
+  content: string
+  messages: ChatMessage[]
+  role?: ChatMessage['role']
+  is_debug?: boolean
+  id?: string
+  user_msg_id?: string
+  saved_user_message_id?: string
+  narration_correction_applied?: boolean
+  narration_incomplete?: boolean
+  narration_warning?: string
+  game_over?: boolean
+  game_completed?: boolean
+  input_locked?: boolean
+  game_over_reason?: string
+  status_note?: string
+  detail?: string
+  request?: unknown
+  [key: string]: unknown
+}
+
 const AGENT_LOG_LIMIT = 50
 const AGENT_IDLE_TIMEOUT_MS = 180_000
-
-export interface AgentSettingsPatch {
-  active?: boolean
-  step_by_step?: boolean
-  personality?: string
-  custom_personality?: string
-  allow_walkthrough?: boolean
-  monkey_mode?: boolean
-}
+const CHAT_IDLE_TIMEOUT_MS = 180_000
 
 export interface UseGameSocket {
   messages: Ref<ChatMessage[]>
@@ -50,6 +73,7 @@ export interface UseGameSocket {
   autoVisualize: Ref<boolean>
   adventureImage: Ref<string | null>
   quests: Ref<any[]>
+  activeSequence: Ref<any | null>
   awards: Ref<any[]>
   isCompleted: Ref<boolean>
   isLegacyFormat: Ref<boolean>
@@ -67,6 +91,7 @@ export interface UseGameSocket {
   refreshSuggestions: () => Promise<void>
   worldMemories: Ref<any[]>
   worldRumors: Ref<any[]>
+  systemDebugEnabled: Ref<boolean>
   debugLogs: Ref<{ timestamp: string, content: string }[]>
   inventoryGlow: Ref<boolean>
   mapGlow: Ref<boolean>
@@ -77,13 +102,15 @@ export interface UseGameSocket {
   isSceneTransitioning: Ref<boolean>
   generatorProposal: Ref<any | null>
   showGeneratorModal: Ref<boolean>
+  sessionLoadError: Ref<string | null>
   turnError: Ref<TurnErrorState | null>
   openGeneratorModal: (proposal?: any) => void
   closeGeneratorModal: () => void
   connect: (gameId: string) => Promise<void>
   disconnect: () => void
   haltActiveOperations: () => void
-  sendMessage: (content: string, isRetry?: boolean) => Promise<void>
+  refreshSession: () => Promise<void>
+  sendMessage: (content: string, isRetry?: boolean, replayMessageId?: string) => Promise<void>
   retryLastAction: () => Promise<void>
   cancelTurnError: () => void
   emitSystemMessage: (content: string) => void
@@ -101,9 +128,9 @@ export function useGameSocket(): UseGameSocket {
     return gameSocketSingleton
   }
 
-  const BASE = '/api'
   const { addNotification } = useNotifications()
   const messages = ref<ChatMessage[]>([])
+  const failedTurnDrafts = createFailedTurnDrafts()
   const sheet = ref<CharacterSheet | null>(null)
   const mapData = ref<any | null>(null)
   const nodes = ref<Record<string, any>>({})
@@ -127,11 +154,19 @@ export function useGameSocket(): UseGameSocket {
   const promptSuggestions = ref<string[]>([])
   const worldMemories = ref<any[]>([])
   const worldRumors = ref<any[]>([])
+  const systemDebugEnabled = ref(false)
   const debugLogs = ref<{ timestamp: string, content: string }[]>([])
+  const appendDebugLog = (entry: any): void => {
+    debugLogs.value.push(entry)
+    if (debugLogs.value.length > 200) debugLogs.value.splice(0, debugLogs.value.length - 200)
+  }
   const inventoryGlow = ref(false)
   const mapGlow = ref(false)
   const questGlow = ref(false)
+  let sessionLoadController: AbortController | null = null
   let currentGameId = ''
+  const { updateAgentSettings, resetAgentSettings } = createAgentSettings(() => currentGameId, sheet, addNotification)
+  let snapshotRevision = 0
   const { language, languageSaving, setLanguage } = useSessionContentLanguage(
     () => currentGameId,
     () => status.value !== 'connecting' && status.value !== 'loading' && !sheet.value?.agent_active,
@@ -144,8 +179,8 @@ export function useGameSocket(): UseGameSocket {
     promptSuggestions,
   )
   watch([status, language, languageSaving], () => resetSuggestionsRequest(), { flush: 'sync' })
-  let syncTimer: number | null = null
   let activeAgentController: AbortController | null = null
+  let activeEpilogueController: AbortController | null = null
   let activeChatController: AbortController | null = null
   const agentPaused = ref(false)
   const agentLog = ref<AgentLogEntry[]>([])
@@ -154,7 +189,9 @@ export function useGameSocket(): UseGameSocket {
   let checkpointPulseTimer: number | null = null
   const generatorProposal = ref<any | null>(null)
   const showGeneratorModal = ref(false)
+  const sessionLoadError = ref<string | null>(null)
   const turnError = ref<TurnErrorState | null>(null)
+  let dismissedPendingAction = ''
   const lastUserAction = ref<string>('')
 
   function openGeneratorModal(proposal?: any): void {
@@ -235,33 +272,34 @@ export function useGameSocket(): UseGameSocket {
     return headers
   }
 
-  async function fetchSessionSnapshot(gameId: string): Promise<any | null> {
+  async function fetchSessionSnapshot(gameId: string, options: { signal?: AbortSignal; strict?: boolean; includeMessages?: boolean } = {}): Promise<any | null> {
     try {
-      const res = await fetch(`${BASE}/adventures/${gameId}/chat`, {
-        headers: authHeaders(false)
-      })
-      if (res.status === 401 && authState.isAuthenticated) {
-        window.dispatchEvent(new CustomEvent('auth-unauthorized'))
-        return null
-      }
-      if (!res.ok) return null
-      return await res.json()
-    } catch (err) {
-      console.error('[Session] Snapshot load error:', err)
+      return await readSessionSnapshot(gameId, options.signal, { includeMessages: options.includeMessages })
+    } catch (error) {
+      if (options.strict) throw error
       return null
     }
   }
 
   async function refreshSession(): Promise<void> {
     if (!currentGameId) return
-    const data = await fetchSessionSnapshot(currentGameId)
-    if (data) applySessionSnapshot(data, false)
+    const gameId = currentGameId
+    const revision = snapshotRevision
+    const data = await fetchSessionSnapshot(gameId, { includeMessages: false })
+    if (data && currentGameId === gameId && revision === snapshotRevision && !activeChatController) {
+      applySessionSnapshot(data, false)
+    }
   }
 
   function applySessionSnapshot(data: any, updateMessages = true): void {
     if (!data) return
+    if (!activeChatController && 'pending_turn' in data) turnError.value = pendingTurnError(data.pending_turn, dismissedPendingAction)
+    if ('npc_behavior' in data) updateNpcBehaviorStatus(currentGameId, data.npc_behavior)
+    if (typeof data.system_debug_enabled === 'boolean') {
+      systemDebugEnabled.value = data.system_debug_enabled
+    }
 
-    if (updateMessages && Array.isArray(data.messages)) {
+    if (updateMessages && data.history_included !== false && Array.isArray(data.messages)) {
       messages.value = data.messages.map((m: any) => ({ ...m, timestamp: new Date() }))
     }
 
@@ -326,44 +364,45 @@ export function useGameSocket(): UseGameSocket {
     }
   }
 
-  function startSyncTimer(): void {
-    if (syncTimer !== null) {
-      clearInterval(syncTimer)
+  const snapshotPoller = createSnapshotPoller(async signal => {
+    if (!currentGameId || status.value === 'disconnected' || status.value === 'connecting' || status.value === 'loading') return
+    const gameId = currentGameId
+    const revision = snapshotRevision
+    const snapshot = await fetchSessionSnapshot(gameId, { signal, includeMessages: false })
+    if (!signal.aborted && currentGameId === gameId && revision === snapshotRevision && !activeChatController) {
+      applySessionSnapshot(snapshot, false)
     }
+  })
 
-    syncTimer = window.setInterval(async () => {
-      if (!currentGameId || status.value === 'disconnected' || status.value === 'connecting' || status.value === 'loading') {
-        return
-      }
-
-      const snapshot = await fetchSessionSnapshot(currentGameId)
-      if (currentGameId) {
-        applySessionSnapshot(snapshot, false)
-      }
-    }, 5000)
-  }
-
-  function stopSyncTimer(): void {
-    if (syncTimer !== null) {
-      clearInterval(syncTimer)
-      syncTimer = null
-    }
-  }
+  function startSyncTimer(): void { snapshotPoller.start() }
+  function stopSyncTimer(): void { snapshotPoller.stop() }
 
   /**
    * Loads the current session state and history.
    * If history is empty, triggers the initial world description.
    */
   async function connect(gameId: string): Promise<void> {
+    resetAgentSettings()
+    sessionLoadController?.abort()
+    const controller = new AbortController()
+    sessionLoadController = controller
+    sessionLoadError.value = null
+    failedTurnDrafts.clear()
+    haltActiveOperations()
+    const revision = ++snapshotRevision
+    turnError.value = null
+    lastUserAction.value = ''
+    dismissedPendingAction = ''
     resetSuggestionsRequest()
     currentGameId = gameId
+    systemDebugEnabled.value = false
     status.value = 'loading'
     messages.value = []
     stopSyncTimer()
     
     try {
-      const data = await fetchSessionSnapshot(gameId)
-      if (currentGameId !== gameId) return
+      const data = await fetchSessionSnapshot(gameId, { signal: controller.signal, strict: true })
+      if (currentGameId !== gameId || revision !== snapshotRevision) return
       if (data) {
         language.value = data.language || 'English'
         applySessionSnapshot(data)
@@ -382,12 +421,24 @@ export function useGameSocket(): UseGameSocket {
         status.value = 'error'
       }
     } catch (err) {
-      console.error('[Session] Load error:', err)
+      if (currentGameId !== gameId || revision !== snapshotRevision || controller.signal.aborted) return
+      sessionLoadError.value = snapshotErrorMessage(err)
       status.value = 'error'
+    } finally {
+      if (sessionLoadController === controller) sessionLoadController = null
     }
   }
 
   function disconnect(): void {
+    resetAgentSettings()
+    sessionLoadController?.abort()
+    sessionLoadController = null
+    sessionLoadError.value = null
+    failedTurnDrafts.clear()
+    haltActiveOperations()
+    snapshotRevision += 1
+    turnError.value = null
+    lastUserAction.value = ''
     resetSuggestionsRequest()
     currentGameId = ''
     language.value = ''
@@ -420,11 +471,14 @@ export function useGameSocket(): UseGameSocket {
     promptSuggestions.value = []
     worldMemories.value = []
     worldRumors.value = []
+    systemDebugEnabled.value = false
     debugLogs.value = []
   }
 
   function haltActiveOperations(): void {
     resetSuggestionsRequest()
+    activeEpilogueController?.abort()
+    activeEpilogueController = null
     if (activeChatController) {
       activeChatController.abort()
       activeChatController = null
@@ -442,12 +496,12 @@ export function useGameSocket(): UseGameSocket {
   /**
    * Posts a player message and processes the GM response.
    */
-  async function sendMessage(content: string, isRetry: boolean = false): Promise<void> {
+  async function sendMessage(content: string, isRetry: boolean = false, replayMessageId?: string): Promise<void> {
     if (languageSaving.value) {
       addNotification('Please wait until the game language is saved.', 'info')
       return
     }
-    const normalizedContent = normalizeUiActionInput(content)
+    const normalizedContent = normalizeUiActionInput(content).trim()
     if (['/shuffle', '/suggest', '/suggestions'].includes(normalizedContent.trim().toLowerCase())) {
       await refreshSuggestions()
       return
@@ -455,6 +509,10 @@ export function useGameSocket(): UseGameSocket {
     resetSuggestionsRequest()
     const isAgentOff = ['/playagent off', '/play-agent off'].includes(normalizedContent.trim().toLowerCase())
     const hadActiveChat = !!activeChatController
+    if (hadActiveChat && !isAgentOff) {
+      addNotification('The Game Master is still processing your last action.', 'info')
+      return
+    }
 
     turnError.value = null
 
@@ -463,8 +521,7 @@ export function useGameSocket(): UseGameSocket {
       activeChatController = null
     }
 
-    // A new player action should replace an in-flight turn immediately.
-    // If we just aborted the prior request, clear transient busy state first.
+    // Explicit agent deactivation may cancel a request; ordinary actions wait.
     if (hadActiveChat && (status.value === 'connecting' || status.value === 'loading')) {
       status.value = 'connected'
       statusText.value = ''
@@ -489,17 +546,32 @@ export function useGameSocket(): UseGameSocket {
       addNotification('The Game Master is still processing your last action.', 'info')
       return
     }
-    if (wasGameOver || inputLocked.value) {
+    if ((wasGameOver || inputLocked.value) && !replayMessageId) {
       addNotification('This session is finished. Start a new session to continue playing.', 'info')
       return
     }
 
+    const gameId = currentGameId
+    dismissedPendingAction = ''
+    const correction = getCorrection(gameId)
+    const draft = failedTurnDrafts.prepare(messages.value, normalizedContent)
+    messages.value = draft.messages
+    const beforeAttempt = new Set(messages.value)
+    snapshotRevision += 1
+    snapshotPoller.interrupt()
+    const knownMessageIds = new Set(messages.value.map(message => message.id).filter((id): id is string => !!id))
+    const lastSavedMessage = [...messages.value].reverse().find(message => message.id)
+    const reusableInputId = lastSavedMessage?.role === 'user' && lastSavedMessage.content.trim() === normalizedContent
+      ? lastSavedMessage.id : undefined
+
     const silentCommands = ['/take_direct', '/rule-pass', '/equip', '/unequip', '/consume', '/shuffle', '/suggest', '/suggestions', '/traverse_exit']
     const isSilent = silentCommands.some(cmd => normalizedContent.toLowerCase().startsWith(cmd))
+    // Command handlers may intentionally acknowledge without storing a chat message.
+    const requiresActionReceipt = !!normalizedContent && !normalizedContent.startsWith('/')
 
-    if (normalizedContent && !isSilent) {
+    if (normalizedContent && !isSilent && !replayMessageId && !draft.reusePlayer) {
       lastUserAction.value = normalizedContent
-      if (!isRetry) {
+      if (!isRetry && !draft.retry) {
         _pushMessage('user', normalizedContent)
       } else {
         const lastMsg = messages.value[messages.value.length - 1]
@@ -508,225 +580,234 @@ export function useGameSocket(): UseGameSocket {
         }
       }
     }
-    const preTurnMessageCount = messages.value.length
 
     if (!isAgentOff) {
       status.value = 'connecting' 
       statusText.value = 'Considering...'
     }
     let receivedFinalEvent = false
+    let savedUserMessageId: string | undefined
     let receivedErrorEvent = false
+    let streamErrorDetail = ''
+    let committedReplyId: string | undefined
     const controller = new AbortController()
     activeChatController = controller
-    const timeoutId = window.setTimeout(() => controller.abort(), 90_000)
+    const ownsRequest = () => activeChatController === controller && currentGameId === gameId
+    let finalStatus: ConnectionStatus = 'connected'
+    let narrationWarning = ''
+    let turnId = ''
+    let timedOut = false
+    let timeoutId: number | undefined
+    const resetIdleTimeout = () => {
+      window.clearTimeout(timeoutId)
+      timeoutId = window.setTimeout(() => {
+        timedOut = true
+        controller.abort()
+      }, CHAT_IDLE_TIMEOUT_MS)
+    }
+    const reportTurnError = (reason: string) => {
+      if (!ownsRequest()) return
+      const detail = reason
+      failedTurnDrafts.record(normalizedContent, messages.value, beforeAttempt)
+      addNotification(detail, 'error')
+      if (normalizedContent) turnError.value = { message: detail, action: normalizedContent }
+    }
+    const reconcileInterruptedTurn = async (reason: string) => {
+      window.clearTimeout(timeoutId)
+      const recovery = new AbortController()
+      const recoveryTimeout = window.setTimeout(() => recovery.abort(), 15_000)
+      let snapshot: any = null
+      try {
+        snapshot = await fetchSessionSnapshot(gameId, { signal: recovery.signal })
+      } finally {
+        window.clearTimeout(recoveryTimeout)
+      }
+      if (!ownsRequest()) return
+      const history: ChatMessage[] = Array.isArray(snapshot?.messages) ? snapshot.messages : []
+      const actionIndex = savedActionIndex(history, normalizedContent, knownMessageIds, reusableInputId)
+      const freshAssistant = (message: ChatMessage) => message.role === 'assistant' &&
+        message.id && !knownMessageIds.has(message.id)
+      const confirmed = committedReplyId ? history.some(message => message.role === 'assistant' && message.id === committedReplyId) :
+        normalizedContent ? actionIndex >= 0 && history.slice(actionIndex + 1).some(freshAssistant) : history.some(freshAssistant)
+      if (confirmed) {
+        applySessionSnapshot(snapshot, true)
+        turnError.value = null
+        lastUserAction.value = ''
+        const detail = `${reason} The saved turn was recovered; do not repeat the action.`
+        _pushMessage('system', detail)
+        addNotification(detail, 'info')
+        return
+      }
+      if (committedReplyId) {
+        turnError.value = null
+        lastUserAction.value = ''
+        _pushMessage('system', 'The answer was saved, but history could not be refreshed. Reload the session; do not repeat the action.')
+        return
+      }
+      if (replayMessageId) {
+        if (snapshot) applySessionSnapshot(snapshot, true)
+        turnError.value = null
+        lastUserAction.value = ''
+        addNotification(`${reason} Reopen the session to check recovery before regenerating again.`, 'error')
+        return
+      }
+      reportTurnError(`${reason} Saving could not be confirmed. Your message was kept here; check the latest history before retrying.`)
+    }
+    resetIdleTimeout()
 
     try {
-      const res = await fetch(`${BASE}/adventures/${currentGameId}/chat`, {
+      const res = await apiFetch(`/adventures/${gameId}/chat`, { timeoutMs: null,
         method: 'POST',
         headers: authHeaders(true),
         signal: controller.signal,
         body: JSON.stringify({ 
           content: normalizedContent,
+          replay_message_id: replayMessageId,
+          narration_correction: correction?.text,
           auto_visualize: autoVisualize.value
         })
       })
 
-      const turnId = res.headers.get('x-taleweaver-turn-id') || ''
+      if (!ownsRequest()) return
+      resetIdleTimeout()
+      turnId = res.headers.get('x-taleweaver-turn-id') || ''
       if (turnId) {
-        debugLogs.value.push({
+        appendDebugLog({
           timestamp: new Date().toLocaleTimeString(),
           content: `Turn-ID: ${turnId}`
         })
-        if (sheet.value?.debug_mode) {
-          _pushMessage('system', `[DEBUG] Turn-ID: ${turnId}`, undefined, true)
-        }
       }
 
       if (res.status === 401 && authState.isAuthenticated) {
-        window.dispatchEvent(new CustomEvent('auth-unauthorized'))
-        status.value = 'error'
-        statusText.value = ''
+                finalStatus = 'error'
+        reportTurnError('Your session expired. Sign in again before retrying this action.')
         return
       }
 
       if (!res.ok) {
-        _pushMessage('system', 'The Game Master is currently over capacity. Try once more.')
-        status.value = 'connected'
+        const failure = await res.json().catch(() => ({}))
+        if (!ownsRequest()) return
+        reportTurnError(failure.detail || 'The Game Master could not accept this action. Please retry.')
         return
       }
 
-      const reader = res.body?.getReader()
-      if (!reader) throw new Error('No reader available')
-
-      const decoder = new TextDecoder()
-      let buffer = ''
-
-      // eslint-disable-next-line no-constant-condition
-      while (true) {
-        const { value, done } = await reader.read()
-        if (done) break
-
-        buffer += decoder.decode(value, { stream: true })
-        const parts = buffer.split('\n\n')
-        buffer = parts.pop() || ''
-
-        for (const part of parts) {
-          if (!part.trim()) continue
-          const lines = part.split('\n')
-          let event = 'message'
-          let data = null
-
-          for (const line of lines) {
-            if (line.startsWith('event:')) event = line.slice(6).trim()
-            else if (line.startsWith('data:')) {
-              try {
-                data = JSON.parse(line.slice(5).trim())
-              } catch (e) {
-                console.error('Failed to parse SSE data', e)
-              }
+      if (!res.body) throw new Error('No response stream available')
+      for await (const { event, data } of readServerEvents<StoryEventPayload>(res.body, { signal: controller.signal, onActivity: resetIdleTimeout, isCurrent: ownsRequest })) {
+        if (event === 'replay_history') {
+          messages.value = data.messages.map((m: ChatMessage) => ({ ...m, timestamp: new Date() }))
+          if (data.content) _pushMessage('user', data.content)
+        } else if (event === 'status') {
+          statusText.value = data.content
+          appendDebugLog({
+            timestamp: new Date().toLocaleTimeString(),
+            content: data.content
+          })
+        } else if (event === 'state') {
+          // Early turn snapshot: refresh scene/entities before narration streams in.
+          applySessionSnapshot(data, false)
+        } else if (event === 'system' || event === 'assistant') {
+          const role = data.role || (event === 'assistant' ? 'assistant' : 'system')
+          // If the backend included a user_msg_id (debug command flow), attach it to the
+          // optimistically-pushed user message so the delete button becomes available.
+          if (data.user_msg_id) {
+            for (let i = messages.value.length - 1; i >= 0; i--) {
+              const m = messages.value[i] as any
+              if (m.role === 'user' && !m.id) { m.id = data.user_msg_id; break }
             }
           }
-
-          if (!data) continue
-
-          if (event === 'status') {
-            statusText.value = data.content
-            debugLogs.value.push({
-              timestamp: new Date().toLocaleTimeString(),
-              content: data.content
-            })
-          } else if (event === 'state') {
-            // Early turn snapshot: refresh scene/entities before narration streams in.
-            applySessionSnapshot(data, false)
-          } else if (event === 'system' || event === 'assistant') {
-            const role = data.role || (event === 'assistant' ? 'assistant' : 'system')
-            // If the backend included a user_msg_id (debug command flow), attach it to the
-            // optimistically-pushed user message so the delete button becomes available.
-            if (data.user_msg_id) {
-              for (let i = messages.value.length - 1; i >= 0; i--) {
-                const m = messages.value[i] as any
-                if (m.role === 'user' && !m.id) { m.id = data.user_msg_id; break }
-              }
-            }
-            _pushMessage(role, data.content, undefined, data.is_debug)
-            // Attach the system message DB id (if provided) so it can be deleted.
-            if (data.id) {
-              const lastMsg = messages.value[messages.value.length - 1]
-              if (lastMsg) (lastMsg as any).id = data.id
-            }
-          } else if (event === 'chunk') {
-            let lastMsg = messages.value[messages.value.length - 1]
-            if (!lastMsg || lastMsg.role !== 'assistant' || (lastMsg as any).is_debug) {
-              _pushMessage('assistant', '')
-              lastMsg = messages.value[messages.value.length - 1]
-            }
-            lastMsg.content += data.content
-          } else if (event === 'final') {
-            receivedFinalEvent = true
-            applySessionSnapshot(data, false)
-            if (data.game_over) {
-              status.value = 'game_over'
-              gameOverReason.value = data.game_over_reason || data.status_note || ''
-              stopSyncTimer()
-            } else if (data.game_completed) {
-              gameOverReason.value = data.status_note || ''
-              status.value = data.input_locked ? 'completed' : 'connected'
-            } else {
-              if (status.value === 'connecting' || status.value === 'loading') {
-                status.value = 'connected'
-                statusText.value = ''
-              }
-            }
-          } else if (event === 'error') {
-            receivedErrorEvent = true
-            const detail = data.detail || 'An error occurred.'
-            _pushMessage('system', detail)
-            addNotification(detail, 'error')
-            if (lastUserAction.value) {
-              turnError.value = { message: detail, action: lastUserAction.value }
-            }
-            if (status.value === 'connecting' || status.value === 'loading') {
-              status.value = 'connected'
-              statusText.value = ''
-            }
-          } else if (event === 'scene_transition') {
-            // The story feed starts a new page per scene; previous scenes stay browsable.
-            isSceneTransitioning.value = true
-            applySessionSnapshot(data, false)
-          } else if (event === 'adventure_generator_proposal') {
-            generatorProposal.value = data.request || data
-            window.setTimeout(() => {
-              showGeneratorModal.value = true
-            }, 600)
-          } else if (event === 'checkpoint') {
-            triggerCheckpointPulse()
+          _pushMessage(role, data.content, undefined, data.is_debug)
+          // Attach the system message DB id (if provided) so it can be deleted.
+          if (data.id) {
+            const lastMsg = messages.value[messages.value.length - 1]
+            if (lastMsg) (lastMsg as any).id = data.id
           }
+        } else if (event === 'chunk') {
+          let lastMsg = messages.value[messages.value.length - 1]
+          if (!lastMsg || lastMsg.role !== 'assistant' || (lastMsg as any).is_debug) {
+            _pushMessage('assistant', '')
+            lastMsg = messages.value[messages.value.length - 1]
+          }
+          lastMsg.content += data.content
+        } else if (event === 'final') {
+          savedUserMessageId = typeof data.saved_user_message_id === 'string' ? data.saved_user_message_id : undefined
+          receivedFinalEvent = true
+          acknowledgeCorrection(gameId, correction, data.narration_correction_applied)
+          if (data.narration_incomplete) {
+            narrationWarning = data.narration_warning || 'The model stopped before finishing its response. The turn was saved; do not repeat the action.'
+          }
+          applySessionSnapshot(data, false)
+          finalStatus = data.game_over ? 'game_over' : data.game_completed && data.input_locked ? 'completed' : 'connected'
+          if (data.game_over || data.game_completed) {
+            gameOverReason.value = data.game_over_reason || data.status_note || ''
+          }
+          if (data.game_over) stopSyncTimer()
+          // Keep input locked until this request finishes its authoritative reload.
+          status.value = 'connecting'
+        } else if (event === 'error') {
+          receivedErrorEvent = true
+          committedReplyId = typeof data.committed_assistant_id === 'string' ? data.committed_assistant_id : undefined
+          streamErrorDetail = data.detail || 'An error occurred.'
+          reportTurnError(streamErrorDetail)
+        } else if (event === 'scene_transition') {
+          // The story feed starts a new page per scene; previous scenes stay browsable.
+          isSceneTransitioning.value = true
+          applySessionSnapshot(data, false)
+        } else if (event === 'adventure_generator_proposal') {
+          generatorProposal.value = data.request || data
+          window.setTimeout(() => {
+            showGeneratorModal.value = true
+          }, 600)
+        } else if (event === 'checkpoint') {
+          triggerCheckpointPulse()
         }
       }
 
-      if (receivedFinalEvent) {
-        turnError.value = null
-        lastUserAction.value = ''
-        const snapshot = await fetchSessionSnapshot(currentGameId)
-        if (snapshot) {
-          // Reload the authoritative history (incl. scene/sequence per message).
-          applySessionSnapshot(snapshot, true)
-        }
-      }
-
-      // Fallback for truncated streams without explicit final/error event.
-      if (!receivedFinalEvent && !receivedErrorEvent && (status.value === 'connecting' || isAgentOff)) {
-        const snapshot = await fetchSessionSnapshot(currentGameId)
-        if (snapshot) {
-          applySessionSnapshot(snapshot, false)
-          if (status.value === 'connecting') {
-            status.value = 'connected'
-          }
+      if (!ownsRequest()) return
+      if (receivedFinalEvent && !receivedErrorEvent) {
+        const snapshot = await fetchSessionSnapshot(gameId, { signal: controller.signal })
+        if (!ownsRequest()) return
+        const confirmedAction = !requiresActionReceipt || !snapshot ||
+          (savedUserMessageId
+            ? snapshot.messages?.some((message: ChatMessage) => message.role === 'user' && message.id === savedUserMessageId)
+            : savedActionIndex(snapshot.messages || [], normalizedContent, knownMessageIds, reusableInputId) >= 0)
+        if (!confirmedAction) {
+          reportTurnError('The server did not confirm saving your action. Your message was kept here; check the latest history before retrying.')
         } else {
-          if (status.value === 'connecting') {
-            status.value = 'connected'
+          turnError.value = null
+          lastUserAction.value = ''
+          if (snapshot) applySessionSnapshot(snapshot, true)
+          if (narrationWarning) {
+            _pushMessage('system', narrationWarning)
+            addNotification(narrationWarning, 'info')
           }
         }
-
-        if (!isAgentOff) {
-          const postTurnMessages = messages.value.slice(preTurnMessageCount)
-          const hasTurnResponse = postTurnMessages.some(m => m.role === 'assistant' || m.role === 'system')
-          if (!hasTurnResponse) {
-            const fallbackMsg = 'The turn ended unexpectedly without a response. Please try your action again.'
-            _pushMessage('system', fallbackMsg)
-            addNotification(fallbackMsg, 'error')
-            if (lastUserAction.value) {
-              turnError.value = { message: fallbackMsg, action: lastUserAction.value }
-            }
-          }
-        }
-
-        statusText.value = ''
+      } else if (!receivedErrorEvent || committedReplyId) {
+        await reconcileInterruptedTurn(streamErrorDetail || 'The response stream ended before the turn was confirmed. The answer may be incomplete.')
       }
     } catch (err: any) {
-      if (err.name === 'AbortError') {
-        console.log('Chat/deactivation fetch request was aborted.')
+      if (!ownsRequest()) return
+      if (err.name === 'AbortError' && timedOut) {
+        await reconcileInterruptedTurn('The response stream was inactive for too long.')
+      } else if (err.name === 'AbortError') {
+        await reconcileInterruptedTurn('The response was interrupted before the turn was confirmed.')
       } else {
         console.error('[Session] Chat error:', err)
-        const errMsg = 'The Game Master did not respond in time. Please try again.'
-        _pushMessage('system', errMsg)
-        addNotification(errMsg, 'error')
-        if (lastUserAction.value) {
-          turnError.value = { message: errMsg, action: lastUserAction.value }
-        }
-        if (status.value === 'connecting' || status.value === 'loading') {
-          status.value = 'connected'
-          statusText.value = ''
-        }
+        await reconcileInterruptedTurn('The connection to the Game Master was interrupted.')
       }
     } finally {
-      clearTimeout(timeoutId)
-      isSceneTransitioning.value = false
-      if (activeChatController === controller) {
-        activeChatController = null
+      window.clearTimeout(timeoutId)
+      if (ownsRequest() && replayMessageId && receivedErrorEvent) {
+        const restored = await fetchSessionSnapshot(gameId)
+        if (ownsRequest()) {
+          if (restored) applySessionSnapshot(restored, true)
+          turnError.value = null
+          lastUserAction.value = ''
+        }
       }
-      if ((status.value as any) === 'connecting' || (status.value as any) === 'loading') {
-        status.value = 'connected'
+      if (ownsRequest()) {
+        activeChatController = null
+        isSceneTransitioning.value = false
+        status.value = finalStatus
         statusText.value = ''
       }
     }
@@ -735,41 +816,15 @@ export function useGameSocket(): UseGameSocket {
   async function retryLastAction(): Promise<void> {
     if (!turnError.value?.action) return
     const actionToRetry = turnError.value.action
-    turnError.value = null
     await sendMessage(actionToRetry, true)
   }
 
   function cancelTurnError(): void {
+    dismissedPendingAction = turnError.value?.action || ''
     turnError.value = null
-    if (status.value === 'connecting' || status.value === 'loading') {
+    if (!activeChatController && (status.value === 'connecting' || status.value === 'loading')) {
       status.value = 'connected'
       statusText.value = ''
-    }
-  }
-
-  /**
-   * Updates play-agent settings for the current session and merges the result into the sheet.
-   */
-  async function updateAgentSettings(patch: AgentSettingsPatch): Promise<boolean> {
-    if (!currentGameId) return false
-    try {
-      const res = await fetch(`${BASE}/adventures/${currentGameId}/agent/settings`, {
-        method: 'PATCH',
-        headers: authHeaders(true),
-        body: JSON.stringify(patch)
-      })
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}))
-        addNotification(errData.detail || 'Failed to update Play-Agent settings.', 'error')
-        return false
-      }
-      const agentState = await res.json()
-      if (sheet.value) sheet.value = { ...sheet.value, ...agentState }
-      return true
-    } catch (err) {
-      console.error('[Session] Agent settings error:', err)
-      addNotification('Failed to update Play-Agent settings.', 'error')
-      return false
     }
   }
 
@@ -781,11 +836,18 @@ export function useGameSocket(): UseGameSocket {
     if (!currentGameId) return false
     if (isBusy || languageSaving.value) return false
 
-    status.value = 'connecting' 
+    const gameId = currentGameId
+    const revision = ++snapshotRevision
+    snapshotPoller.interrupt()
+    status.value = 'connecting'
     statusText.value = 'Agent is thinking...'
     let receivedFinalEvent = false
+    let receivedErrorEvent = false
     const controller = new AbortController()
     activeAgentController = controller
+    const ownsRequest = () => activeAgentController === controller &&
+      currentGameId === gameId && revision === snapshotRevision
+    let finalStatus: ConnectionStatus = 'connected'
     // Idle timeout: an agent turn (decision + full GM turn) can legitimately take long,
     // so only abort when the stream stays silent for too long.
     let timedOut = false
@@ -800,14 +862,15 @@ export function useGameSocket(): UseGameSocket {
     resetIdleTimeout()
 
     try {
-      const res = await fetch(`${BASE}/adventures/${currentGameId}/agent/turn`, {
+      const res = await apiFetch(`/adventures/${gameId}/agent/turn`, { timeoutMs: null,
         method: 'POST',
         headers: authHeaders(false),
         signal: controller.signal
       })
 
+      if (!ownsRequest()) return false
       if (res.status === 401 && authState.isAuthenticated) {
-        window.dispatchEvent(new CustomEvent('auth-unauthorized'))
+        finalStatus = 'error'
         status.value = 'error'
         statusText.value = ''
         return false
@@ -820,105 +883,71 @@ export function useGameSocket(): UseGameSocket {
         return false
       }
 
-      const reader = res.body?.getReader()
-      if (!reader) throw new Error('No reader available')
-
-      const decoder = new TextDecoder()
-      let buffer = ''
-
-      while (!controller.signal.aborted) {
-        const { value, done } = await reader.read()
-        if (done) break
-        resetIdleTimeout()
-
-        buffer += decoder.decode(value, { stream: true })
-        const parts = buffer.split('\n\n')
-        buffer = parts.pop() || ''
-
-        for (const part of parts) {
-          if (!part.trim()) continue
-          const lines = part.split('\n')
-          let event = 'message'
-          let data = null
-
-          for (const line of lines) {
-            if (line.startsWith('event:')) event = line.slice(6).trim()
-            else if (line.startsWith('data:')) {
-              try {
-                data = JSON.parse(line.slice(5).trim())
-              } catch (e) {
-                console.error('Failed to parse SSE data', e)
-              }
-            }
+      if (!res.body) throw new Error('No response stream available')
+      for await (const { event, data } of readServerEvents<StoryEventPayload>(res.body, { signal: controller.signal, onActivity: resetIdleTimeout, isCurrent: ownsRequest })) {
+        if (event === 'status') {
+          statusText.value = data.content
+          appendDebugLog({
+            timestamp: new Date().toLocaleTimeString(),
+            content: data.content
+          })
+        } else if (event === 'state') {
+          // Early turn snapshot: refresh scene/entities before narration streams in.
+          applySessionSnapshot(data, false)
+        } else if (event === 'thought') {
+          _pushMessage('thought' as any, data.content)
+          agentLog.value = [...agentLog.value, { timestamp: new Date().toLocaleTimeString(), thought: data.content, action: '' }].slice(-AGENT_LOG_LIMIT)
+        } else if (event === 'player_action') {
+          _pushMessage('user', data.content)
+          const lastEntry = agentLog.value[agentLog.value.length - 1]
+          if (lastEntry && !lastEntry.action) lastEntry.action = data.content
+        } else if (event === 'agent_state') {
+          if (sheet.value) sheet.value = { ...sheet.value, ...data }
+        } else if (event === 'system' || event === 'assistant') {
+          const role = data.role || (event === 'assistant' ? 'assistant' : 'system')
+          _pushMessage(role, data.content, undefined, data.is_debug)
+        } else if (event === 'chunk') {
+          let lastMsg = messages.value[messages.value.length - 1]
+          if (!lastMsg || lastMsg.role !== 'assistant' || (lastMsg as any).is_debug) {
+            _pushMessage('assistant', '')
+            lastMsg = messages.value[messages.value.length - 1]
           }
-
-          if (!data) continue
-
-          if (event === 'status') {
-            statusText.value = data.content
-            debugLogs.value.push({
-              timestamp: new Date().toLocaleTimeString(),
-              content: data.content
-            })
-          } else if (event === 'state') {
-            // Early turn snapshot: refresh scene/entities before narration streams in.
-            applySessionSnapshot(data, false)
-          } else if (event === 'thought') {
-            _pushMessage('thought' as any, data.content)
-            agentLog.value = [...agentLog.value, { timestamp: new Date().toLocaleTimeString(), thought: data.content, action: '' }].slice(-AGENT_LOG_LIMIT)
-          } else if (event === 'player_action') {
-            _pushMessage('user', data.content)
-            const lastEntry = agentLog.value[agentLog.value.length - 1]
-            if (lastEntry && !lastEntry.action) lastEntry.action = data.content
-          } else if (event === 'agent_state') {
-            if (sheet.value) sheet.value = { ...sheet.value, ...data }
-          } else if (event === 'system' || event === 'assistant') {
-            const role = data.role || (event === 'assistant' ? 'assistant' : 'system')
-            _pushMessage(role, data.content, undefined, data.is_debug)
-          } else if (event === 'chunk') {
-            let lastMsg = messages.value[messages.value.length - 1]
-            if (!lastMsg || lastMsg.role !== 'assistant' || (lastMsg as any).is_debug) {
-              _pushMessage('assistant', '')
-              lastMsg = messages.value[messages.value.length - 1]
-            }
-            lastMsg.content += data.content
-          } else if (event === 'final') {
-            receivedFinalEvent = true
-            applySessionSnapshot(data, false)
-            if (data.game_over) {
-              status.value = 'game_over'
-              gameOverReason.value = data.game_over_reason || data.status_note || ''
-              stopSyncTimer()
-            } else if (data.game_completed) {
-              gameOverReason.value = data.status_note || ''
-              status.value = data.input_locked ? 'completed' : 'connected'
-            } else {
-              status.value = 'connected'
-              statusText.value = ''
-            }
-          } else if (event === 'error') {
-            const detail = data.detail || 'An error occurred.'
-            _pushMessage('system', detail)
-            addNotification(detail, 'error')
-            status.value = 'connected'
-            statusText.value = ''
-          } else if (event === 'checkpoint') {
-            triggerCheckpointPulse()
+          lastMsg.content += data.content
+        } else if (event === 'final') {
+          receivedFinalEvent = true
+          applySessionSnapshot(data, false)
+          finalStatus = data.game_over ? 'game_over' : data.game_completed && data.input_locked ? 'completed' : 'connected'
+          if (data.game_over || data.game_completed) {
+            gameOverReason.value = data.game_over_reason || data.status_note || ''
           }
+          if (data.game_over) stopSyncTimer()
+          // Keep input locked until this request finishes its authoritative reload.
+          status.value = 'connecting'
+        } else if (event === 'error') {
+          receivedErrorEvent = true
+          const detail = data.detail || 'An error occurred.'
+          _pushMessage('system', detail)
+          addNotification(detail, 'error')
+          statusText.value = ''
+        } else if (event === 'checkpoint') {
+          triggerCheckpointPulse()
         }
       }
 
+      if (!ownsRequest()) return false
       if (receivedFinalEvent) {
-        const snapshot = await fetchSessionSnapshot(currentGameId)
+        const snapshot = await fetchSessionSnapshot(gameId, { signal: controller.signal })
+        if (!ownsRequest()) return false
         if (snapshot) {
           applySessionSnapshot(snapshot, true)
         }
       }
-      if (!receivedFinalEvent && (timedOut || !controller.signal.aborted)) {
+      if (!receivedFinalEvent && !receivedErrorEvent && (timedOut || !controller.signal.aborted)) {
         _pushMessage('system', timedOut ? 'The Agent did not respond in time.' : 'The Agent turn ended unexpectedly without a result.')
       }
-      return receivedFinalEvent
+      return receivedFinalEvent && !receivedErrorEvent
     } catch (err: any) {
+      if (!ownsRequest()) return false
       if (err.name === 'AbortError' && timedOut) {
         _pushMessage('system', 'The Agent did not respond in time.')
       } else if (err.name === 'AbortError') {
@@ -932,9 +961,9 @@ export function useGameSocket(): UseGameSocket {
       return false
     } finally {
       clearTimeout(timeoutId)
-      activeAgentController = null
-      if (((status.value as any) === 'connecting' || (status.value as any) === 'loading') && sheet.value?.agent_active) {
-        status.value = 'connected'
+      if (ownsRequest()) {
+        activeAgentController = null
+        status.value = finalStatus
         statusText.value = ''
       }
     }
@@ -942,46 +971,94 @@ export function useGameSocket(): UseGameSocket {
 
   async function createTerminalEpilogue(): Promise<void> {
     if (!currentGameId) return
+    const gameId = currentGameId
+    const revision = snapshotRevision
+    activeEpilogueController?.abort()
+    const controller = new AbortController()
+    activeEpilogueController = controller
+    const ownsRequest = () => activeEpilogueController === controller &&
+      currentGameId === gameId && revision === snapshotRevision
     try {
-      const res = await fetch(`${BASE}/adventures/${currentGameId}/terminal-epilogue`, {
+      const res = await apiFetch(`/adventures/${gameId}/terminal-epilogue`, { timeoutMs: null,
         method: 'POST',
         headers: authHeaders(true),
-        body: JSON.stringify({})
+        body: JSON.stringify({}),
+        signal: controller.signal
       })
 
+      if (!ownsRequest()) return
       if (res.status === 401 && authState.isAuthenticated) {
-        window.dispatchEvent(new CustomEvent('auth-unauthorized'))
-        return
+                return
       }
       if (!res.ok) return
 
       const data = await res.json()
+      if (!ownsRequest()) return
       if (data.content) {
         _pushMessage('assistant', data.content)
       }
       applySessionSnapshot(data, false)
     } catch (err) {
-      console.error('[Session] Terminal epilogue error:', err)
+      if (ownsRequest() && !controller.signal.aborted) {
+        console.error('[Session] Terminal epilogue error:', err)
+      }
+    } finally {
+      if (activeEpilogueController === controller) activeEpilogueController = null
     }
   }
 
   async function deleteMessage(messageId: string): Promise<void> {
-    if (!currentGameId || !messageId) return
+    if (!currentGameId || !messageId || ['loading', 'connecting'].includes(status.value)) return
+    const gameId = currentGameId
+    const revision = ++snapshotRevision
+    const previousStatus = status.value
+    const ownsRequest = () => currentGameId === gameId && snapshotRevision === revision
+    let restored = false
+    let requiresReload = true
+    snapshotPoller.interrupt()
+    status.value = 'loading'
+    statusText.value = 'Undoing the last turn...'
     try {
-      const res = await fetch(`${BASE}/adventures/sessions/${currentGameId}/messages/${messageId}`, {
+      const response = await apiFetch(`/adventures/sessions/${encodeURIComponent(gameId)}/messages/${encodeURIComponent(messageId)}`, {
+        timeoutMs: 60_000,
         method: 'DELETE',
-        headers: authHeaders(false)
+        headers: authHeaders(false),
       })
-      if (res.ok) {
-        messages.value = messages.value.filter(m => (m as any).id !== messageId)
-        addNotification('Message deleted.', 'success')
-      } else {
-        const errData = await res.json().catch(() => ({}))
-        addNotification(errData.detail || 'Failed to delete message.', 'error')
+      if (!ownsRequest()) return
+      if (!response.ok) {
+        requiresReload = response.status >= 500
+        const error = await response.json().catch(() => ({}))
+        throw new Error(typeof error.detail === 'string' ? error.detail : 'Could not undo this turn. Use a Chronicles checkpoint.')
       }
-    } catch (err) {
-      console.error('[Session] Delete message error:', err)
-      addNotification('Failed to delete message.', 'error')
+      const result = await response.json()
+      if (!ownsRequest()) return
+      if (!result || typeof result !== 'object' || result.status !== 'undone') throw new Error('The server did not confirm undoing the turn. Refresh the session before retrying.')
+      const snapshot = await fetchSessionSnapshot(gameId, { strict: true })
+      if (!ownsRequest()) return
+      if (!snapshot) throw new Error('The turn was undone, but its restored state could not be loaded. Refresh the session.')
+      failedTurnDrafts.clear()
+      turnError.value = null
+      sessionLoadError.value = null
+      lastUserAction.value = ''
+      applySessionSnapshot(snapshot, true)
+      restored = true
+      startSyncTimer()
+      addNotification('Turn undone. Its action and consequences were restored to the previous state.', 'success')
+    } catch (error) {
+      if (ownsRequest()) {
+        const detail = error instanceof Error ? error.message : 'Could not undo the turn.'
+        if (requiresReload) {
+          stopSyncTimer()
+          inputLocked.value = true
+          sessionLoadError.value = `${detail} Reload the session before continuing.`
+        }
+        addNotification(detail, 'error')
+      }
+    } finally {
+      if (ownsRequest()) {
+        if (!restored) status.value = requiresReload ? 'error' : previousStatus
+        statusText.value = ''
+      }
     }
   }
 
@@ -1017,6 +1094,7 @@ export function useGameSocket(): UseGameSocket {
     refreshSuggestions,
     worldMemories,
     worldRumors,
+    systemDebugEnabled,
     debugLogs,
     inventoryGlow,
     mapGlow,
@@ -1027,6 +1105,7 @@ export function useGameSocket(): UseGameSocket {
     isSceneTransitioning,
     generatorProposal,
     showGeneratorModal,
+    sessionLoadError,
     turnError,
     openGeneratorModal,
     closeGeneratorModal,

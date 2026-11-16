@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useWorkspaceTheme } from '@/composables/useWorkspaceTheme'
+useWorkspaceTheme()
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { configState } from '@/store/config'
@@ -8,11 +10,12 @@ import { userService } from '@/services/userService'
 import { catalogService } from '@/services/catalogService'
 import type { OllamaRole, OllamaTestOptions } from '@/services/ollamaRoleSettings'
 import { testService } from '@/services/testService'
+import type { SamplingProfile } from '@/services/llmSampling'
 
 const router = useRouter()
 
 // ============ NAVIGATION & UI STATE ============
-type Section = 'keys' | 'llm' | 't2i' | 'tts' | 'stt' | 'styles' | 'tones' | 'game' | 'users'
+type Section = 'keys' | 'llm' | 't2i' | 'tts' | 'stt' | 'styles' | 'tones' | 'game' | 'diagnostics' | 'users'
 const activeSection = ref<Section>('keys')
 
 // ============ MODAL STATE (UI only, not shared with services) ============
@@ -36,11 +39,13 @@ const openMenuId = ref<string | null>(null)
 import ProviderKeysSection from '@/components/admin/ProviderKeysSection.vue'
 import IntelligenceSection from '@/components/admin/IntelligenceSection.vue'
 import MemoryRagSettings from '@/components/admin/MemoryRagSettings.vue'
+import InferenceQueue from '@/components/admin/InferenceQueue.vue'
 import VisualsSection from '@/components/admin/VisualsSection.vue'
 import SpeechSection from '@/components/admin/SpeechSection.vue'
 import SpeechToTextSection from '@/components/admin/SpeechToTextSection.vue'
 import CatalogSection from '@/components/admin/CatalogSection.vue'
 import GameSettingsSection from '@/components/admin/GameSettingsSection.vue'
+import SystemDiagnosticsSection from '@/components/admin/SystemDiagnosticsSection.vue'
 import UserManagementSection from '@/components/admin/UserManagementSection.vue'
 import UserEditModal from '@/components/admin/UserEditModal.vue'
 import CatalogEditModal from '@/components/admin/CatalogEditModal.vue'
@@ -99,8 +104,8 @@ const handleSaveGameSettings = async (payload: any) => {
 
 // ============ TEST HANDLERS ============
 
-const handleTestLlm = async (key: string, model: string, provider: string, openrouterProvider?: string, ollamaOptions?: OllamaTestOptions) => {
-  await testService.testLlm(key, model, provider, settingsService.llmForm.value.ollama_url, openrouterProvider, ollamaOptions)
+const handleTestLlm = async (key: string, model: string, provider: string, openrouterProvider?: string, ollamaOptions?: OllamaTestOptions, apiBase?: string, sampling?: SamplingProfile) => {
+  await testService.testLlm(key, model, provider, settingsService.llmForm.value.ollama_url, openrouterProvider, ollamaOptions, apiBase, sampling)
 }
 
 const handleTestVision = async (payload: any) => {
@@ -117,7 +122,7 @@ const handleTestVision = async (payload: any) => {
     payload.sampler_name,
     payload.scheduler,
     payload.min_long_edge,
-    { comfyui_url: payload.comfyui_url, comfyui_timeout: payload.comfyui_timeout, comfyui_profiles: payload.comfyui_profiles, comfyui_profile: payload.comfyui_profile, comfyui_presets: payload.comfyui_presets, comfyui_assignments: payload.comfyui_assignments }
+    { image_purpose: payload.image_purpose, test_prompt: payload.test_prompt, prepared_body: payload.prepared_body, comfyui_url: payload.comfyui_url, comfyui_timeout: payload.comfyui_timeout, comfyui_profiles: payload.comfyui_profiles, comfyui_profile: payload.comfyui_profile, comfyui_presets: payload.comfyui_presets, comfyui_assignments: payload.comfyui_assignments }
   )
 }
 
@@ -175,8 +180,9 @@ const handleSaveCatalogItem = async (item: CatalogTile) => {
 }
 
 const handleRemoveCatalogItem = async (index: number) => {
-  catalogService.removeItem(catalogModalType.value, index)
-  await catalogService.saveCurrentCatalog(catalogModalType.value)
+  if (activeSection.value !== 'styles' && activeSection.value !== 'tones') return
+  const type = activeSection.value
+  if (await catalogService.removeItem(type, index)) await catalogService.saveCurrentCatalog(type)
 }
 
 const openPromptModal = (type: 'styles' | 'tones', item: CatalogTile, index: number) => {
@@ -295,6 +301,13 @@ const navCategories: NavCategory[] = [
         iconColor: 'text-sky-400'
       },
       {
+        id: 'diagnostics',
+        label: 'System Diagnostics',
+        icon: 'ra-gear',
+        activeClass: 'bg-sky-500/15 text-sky-400 border-sky-500/30 shadow-sm shadow-sky-950/20',
+        iconColor: 'text-sky-400'
+      },
+      {
         id: 'users',
         label: 'User Management',
         icon: 'ra-person',
@@ -308,7 +321,7 @@ const navCategories: NavCategory[] = [
 </script>
 
 <template>
-  <div class="min-h-screen bg-slate-950 text-slate-200 font-sans flex overflow-hidden">
+  <div class="workspace-view workspace-admin min-h-screen bg-slate-950 text-slate-200 font-sans flex overflow-hidden">
     
     <!-- SIDEBAR -->
     <aside class="w-72 bg-slate-900/95 backdrop-blur-sm border-r border-slate-800 flex flex-col p-5 h-screen sticky top-0 z-20">
@@ -324,8 +337,14 @@ const navCategories: NavCategory[] = [
         </div>
       </div>
 
+      <label class="mb-2 text-sm text-slate-400 lg:hidden" for="admin-section">Administration section</label>
+      <select id="admin-section" v-model="activeSection" class="mb-2 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-slate-200 lg:hidden">
+        <optgroup v-for="category in navCategories" :key="category.title" :label="category.title">
+          <option v-for="item in category.items" :key="item.id" :value="item.id">{{ item.label }}</option>
+        </optgroup>
+      </select>
       <!-- Grouped Navigation -->
-      <nav class="flex-grow space-y-5 overflow-y-auto pr-1 custom-scrollbar">
+      <nav class="hidden lg:block flex-grow space-y-5 overflow-y-auto pr-1 custom-scrollbar">
         <div v-for="category in navCategories" :key="category.title" class="space-y-1">
           <div class="px-3 text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5">
             {{ category.title }}
@@ -398,11 +417,13 @@ const navCategories: NavCategory[] = [
           :is-submitting="settingsService.isSubmitting.value"
           :is-loading-ollama-models="settingsService.isLoadingOllamaModels.value"
           :ollama-models-by-url="settingsService.ollamaModelsByUrl.value"
+          :custom-open-a-i-models-by-url="settingsService.customOpenAIModelsByUrl.value"
+          :custom-open-a-i-loading-by-url="settingsService.customOpenAILoadingByUrl.value"
           :is-loading-minimax-models="settingsService.isLoadingMinimaxModels.value"
           :is-loading-llm-models="settingsService.isLoadingLlmModels.value"
           :test-results="testService.testResults.value"
           @save="handleSaveLlmSettings"
-          @test="({ key, model, provider, openrouterProvider, ollamaOptions }) => handleTestLlm(key, model, provider, openrouterProvider, ollamaOptions)"
+          @test="({ key, model, provider, openrouterProvider, ollamaOptions, apiBase, sampling }) => handleTestLlm(key, model, provider, openrouterProvider, ollamaOptions, apiBase, sampling)"
           @refresh-ollama-models="handleRefreshOllamaModels"
           @refresh-minimax-models="handleRefreshMinimaxModels"
           @refresh-llm-models="handleRefreshLlmModels"
@@ -410,6 +431,7 @@ const navCategories: NavCategory[] = [
         />
 
         <MemoryRagSettings v-if="activeSection === 'llm'" />
+        <InferenceQueue v-if="activeSection === 'llm'" />
 
         <VisualsSection 
           v-if="activeSection === 't2i'"
@@ -445,7 +467,7 @@ const navCategories: NavCategory[] = [
 
         <CatalogSection 
           v-if="activeSection === 'styles' || activeSection === 'tones'"
-          :type="activeSection as 'styles' | 'tones'"
+          :type="activeSection === 'styles' ? 'styles' : 'tones'"
           :catalog="activeSection === 'styles' ? catalogService.imageStylesCatalog.value : catalogService.toneCatalog.value"
           :is-generating-item="catalogService.isGeneratingItem.value"
           :open-menu-id="openMenuId"
@@ -465,6 +487,8 @@ const navCategories: NavCategory[] = [
           :is-submitting="settingsService.isSubmitting.value"
           @save="handleSaveGameSettings"
         />
+
+        <SystemDiagnosticsSection v-if="activeSection === 'diagnostics'" />
 
         <UserManagementSection 
           v-if="activeSection === 'users'"

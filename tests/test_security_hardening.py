@@ -2,8 +2,8 @@ import os
 
 import pytest
 
-from backend.api.routes.adventures.assets import _build_uploaded_visual_path
 from backend.api.routes.adventures.agent_logic import _resolve_session_issue_log_path
+from backend.api.routes.adventures.assets import _build_uploaded_visual_path
 from backend.api.routes.adventures.editor import _clone_entity_image
 from backend.api.routes.adventures.logic import AdventureLogic
 from backend.api.routes.config_api import _build_catalog_upload_path, _route_error_response
@@ -56,7 +56,9 @@ def test_build_uploaded_visual_path_sanitizes_target_and_extension(tmp_path, mon
 
 
 def test_route_error_response_hides_exception_details():
-    response = _route_error_response("Catalog upload", "Upload failed.", RuntimeError("secret token leaked"))
+    response = _route_error_response(
+        "Catalog upload", "Upload failed.", RuntimeError("secret token leaked")
+    )
 
     assert response == {"status": "error", "message": "Upload failed."}
 
@@ -79,12 +81,14 @@ def test_ensure_within_base_dir_rejects_escape(tmp_path):
 
 @pytest.mark.asyncio
 async def test_clone_entity_image_stays_inside_data_dir(tmp_path, monkeypatch):
+    from PIL import Image
+
     monkeypatch.setattr(settings, "DATA_DIR", str(tmp_path))
 
     entity_dir = tmp_path / "adventures" / "library" / "tpl_1" / "visuals" / "object"
     entity_dir.mkdir(parents=True, exist_ok=True)
     source_file = entity_dir / "item_1.png"
-    source_file.write_bytes(b"test image bytes")
+    Image.new("RGB", (8, 8), "blue").save(source_file)
 
     source_url = "/data/adventures/library/tpl_1/visuals/object/item_1.png"
     cloned_url = await _clone_entity_image(
@@ -103,7 +107,7 @@ async def test_clone_entity_image_stays_inside_data_dir(tmp_path, monkeypatch):
     rel_path = cloned_url.removeprefix("/data/")
     cloned_file = tmp_path / rel_path
     assert cloned_file.is_file()
-    assert cloned_file.read_bytes() == b"test image bytes"
+    assert cloned_file.read_bytes() == source_file.read_bytes()
 
 
 def test_heal_template_avatar_profile_image_stays_inside_data_dir(tmp_path, monkeypatch):
@@ -133,7 +137,9 @@ def test_diagnose_provider_error_does_not_expose_raw_exception_text():
     from backend.core.error_diagnostics import diagnose_provider_error
 
     # Test unknown exception containing sensitive internal database path or stack trace
-    sensitive_exc = RuntimeError("Secret DB connection failed at /var/run/secrets/key.pem with token abc123xyz")
+    sensitive_exc = RuntimeError(
+        "Secret DB connection failed at /var/run/secrets/key.pem with token abc123xyz"
+    )
     diag = diagnose_provider_error(sensitive_exc, provider="custom_provider")
 
     assert "/var/run/secrets" not in diag
@@ -156,11 +162,10 @@ def test_diagnose_provider_error_does_not_expose_raw_exception_text():
 def test_friendly_llm_error_message_does_not_expose_raw_exception_text():
     from backend.api.routes.adventures.gameplay_logic import _friendly_llm_error_message
 
-    sensitive_exc = Exception("Connection refused to internal proxy https://internal-vault.svc.cluster.local:8200/v1/token")
+    sensitive_exc = Exception(
+        "Connection refused to internal proxy https://internal-vault.svc.cluster.local:8200/v1/token"
+    )
     msg = _friendly_llm_error_message(sensitive_exc)
     assert msg is not None
     assert "internal-vault.svc" not in msg
     assert "Connection failed" in msg
-
-
-

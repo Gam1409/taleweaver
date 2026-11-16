@@ -1,0 +1,35 @@
+{
+  "date": "2026-11-07",
+  "application_commit": "059089cfdd19158f0af84faa1bedbe9f1d01cd85",
+  "horde": {
+    "reported_model": "koboldcpp/Qwen_Qwen3-0.6B-IQ4_XS",
+    "attempts": 24,
+    "cases": 12,
+    "full_json_parseable": 11,
+    "full_exact": 0,
+    "full_known_facts_exact": 4,
+    "delta_json_parseable": 8,
+    "delta_raw_exact": 2,
+    "checked_exact_including_unchanged_fallback": 5,
+    "required_fact_updates": 8,
+    "applied_required_updates": 0,
+    "full_median_seconds": 35.47,
+    "delta_median_seconds": 35.58,
+    "compact_attempts": 5,
+    "compact_json_parseable": 4,
+    "compact_exact": 1,
+    "compact_required_updates": 5,
+    "compact_applied_updates": 0,
+    "compact_median_seconds": 39.63
+  },
+  "pollinations": {
+    "attempts": 24,
+    "usable": 2,
+    "http_402": 22
+  },
+  "long_context": {
+    "turns": 40,
+    "prompt_tokens_qwen3": 3478,
+    "outcome": "TimeoutError: Horde did not complete within 100 seconds; canceled"
+  }
+}

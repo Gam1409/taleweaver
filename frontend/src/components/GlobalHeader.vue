@@ -4,7 +4,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { authState, clearAuth } from '@/store/auth'
 import { configState } from '@/store/config'
 import ChangeCredentialsModal from '@/components/portal/ChangeCredentialsModal.vue'
-import { isMobileSidebarOpen, openMobileSidebar } from '@/store/layout'
+import { openMobileSidebar } from '@/store/layout'
 
 const router = useRouter()
 const route = useRoute()
@@ -41,7 +41,7 @@ function handleLogout() {
 </script>
 
 <template>
-  <header v-if="authState.isAuthenticated" class="h-12 bg-[#050b14] border-b border-white/5 px-6 my-1 flex items-center justify-between z-[100] relative">
+  <header v-if="authState.isAuthenticated" class="global-header shrink-0 h-12 bg-[#050b14] border-b border-white/5 px-3 sm:px-6 my-1 flex items-center justify-between z-[100] relative">
     <!-- Left: Branding -->
     <div class="flex items-center gap-3">
       <!-- Mobile Sidebar Toggle -->

@@ -6,7 +6,7 @@ from sqlalchemy import select
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.avatar import Avatar
 from backend.models.user import User
-from backend.models.world_entity import WorldEntity, WorldScene
+from backend.models.world_entity import WorldEntity, WorldExit, WorldScene
 from tests.conftest import TestSessionLocal
 
 pytestmark = pytest.mark.asyncio
@@ -94,3 +94,26 @@ async def test_protagonist_scripts_save_without_inventory(auth_client, setup_tes
         adv = await db.get(AdventureTemplate, template_id)
     assert avatar.stats["on_hp_change_script"] == "set_flag('hurt', True)"
     assert adv.original_manifest["protagonist"]["on_hp_change_script"] == "set_flag('hurt', True)"
+
+
+async def test_null_exit_type_preserves_existing_value(auth_client, setup_test_db):
+    template_id = await _seed()
+    async with TestSessionLocal() as db:
+        world_exit = WorldExit(
+            template_id=template_id,
+            from_scene_id="HALL",
+            to_scene_id="YARD",
+            label="Door",
+            exit_type="one_way",
+        )
+        db.add(world_exit)
+        await db.commit()
+        exit_id = world_exit.id
+    response = await auth_client.patch(
+        f"/api/adventures/{template_id}/editor/entity",
+        json={"target_type": "exit", "target_id": exit_id, "exit_type": None},
+    )
+    assert response.status_code == 200, response.text
+    async with TestSessionLocal() as db:
+        saved = await db.get(WorldExit, exit_id)
+        assert saved.exit_type == "one_way"

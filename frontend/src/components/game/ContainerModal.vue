@@ -1,6 +1,7 @@
 <script setup lang="ts">
+import ItemImagePlaceholder from '@/components/game/ItemImagePlaceholder.vue'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { getItemIcon, getTypeColor, getImageUrl, hasRenderableImagePath } from '@/utils/game_icons'
+import { getImageUrl, hasRenderableImagePath } from '@/utils/game_icons'
 
 const props = defineProps<{
   open: boolean
@@ -85,7 +86,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown))
                     @error="onItemImageError(item)"
                   />
                   <div v-else class="w-full h-full flex items-center justify-center bg-slate-800/60">
-                    <i :class="['ra text-xl', getItemIcon(item.item_type), getTypeColor(item.item_type)]"></i>
+                    <ItemImagePlaceholder />
                   </div>
                 </div>
                 <div class="w-full text-center">

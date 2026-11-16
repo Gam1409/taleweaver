@@ -1,21 +1,22 @@
-import io
-import json
 import logging
-import os
-import zipfile
-from typing import Any
+from copy import deepcopy
+from typing import Any, BinaryIO, cast
 
-from fastapi.encoders import jsonable_encoder
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.engine.chpm.notebook_portability import export_notebooks
+from backend.engine.export_archives import pack_export_ads, pack_export_ads_to
 from backend.engine.memory_rag.lifecycle import export_summaries
+from backend.engine.world_info.portability import export_world_info
 from backend.models.avatar import Avatar
+from backend.models.base import Base
 from backend.models.chat import ChatMessage
 from backend.models.game_session import GameSession
 from backend.models.session_state import SessionState
 from backend.models.world_entity import WorldEntity, WorldExit, WorldScene
 from backend.models.world_map import WorldMap
+from backend.utils.async_files import run_file_operation
 from backend.utils.path_security import ensure_within_data_dir, safe_data_path
 
 logger = logging.getLogger(__name__)
@@ -35,11 +36,15 @@ def localize_session_paths(data: Any, session_id: str) -> Any:
     """
     Recursively replaces session-specific data paths with relative assets/ paths.
     E.g., /data/adventures/sessions/{session_id}/tts/abc.mp3 -> assets/tts/abc.mp3
+    Generation details contain historical prompts and queries, not live asset links.
     """
     prefix = f"/data/adventures/sessions/{session_id}/"
 
     if isinstance(data, dict):
-        return {k: localize_session_paths(v, session_id) for k, v in data.items()}
+        return {
+            k: deepcopy(v) if k == "generation_details" else localize_session_paths(v, session_id)
+            for k, v in data.items()
+        }
     elif isinstance(data, list):
         return [localize_session_paths(item, session_id) for item in data]
     elif isinstance(data, str):
@@ -52,25 +57,47 @@ def localize_session_paths(data: Any, session_id: str) -> Any:
 class SessionExporter:
     @staticmethod
     async def build_session_manifest(db: AsyncSession, session_id: str) -> dict[str, Any]:
-        """
-        Gathers all database entities for a game session and builds a single JSON manifest.
-        """
+        """Detach one consistent SQL snapshot before localizing or packing assets."""
+        async with db.begin_nested():
+            manifest = await SessionExporter._snapshot(db, session_id)
+        world_info = manifest.pop("world_info")
+        notebooks = manifest.pop("npc_notebooks", None)
+        manifest = cast(dict[str, Any], localize_session_paths(manifest, session_id))
+        # Exact source text and evidence bypass generic asset URL rewriting.
+        manifest["world_info"] = world_info
+        if notebooks is not None:
+            manifest["npc_notebooks"] = notebooks
+        return manifest
+
+    @staticmethod
+    async def _snapshot(db: AsyncSession, session_id: str) -> dict[str, Any]:
+        """Refresh identities loaded before this transaction's first actual read."""
         # 1. Fetch core session
-        session_res = await db.execute(select(GameSession).where(GameSession.id == session_id))
+        session_res = await db.execute(
+            select(GameSession)
+            .where(GameSession.id == session_id)
+            .execution_options(populate_existing=True)
+        )
         game_session = session_res.scalars().first()
         if not game_session:
             raise ValueError(f"GameSession {session_id} not found")
 
         # 2. Fetch associated state
         state_res = await db.execute(
-            select(SessionState).where(SessionState.session_id == session_id)
+            select(SessionState)
+            .where(SessionState.session_id == session_id)
+            .execution_options(populate_existing=True)
         )
         session_state = state_res.scalars().first()
 
         # 3. Fetch avatar
         avatar = None
         if game_session.avatar_id:
-            avatar_res = await db.execute(select(Avatar).where(Avatar.id == game_session.avatar_id))
+            avatar_res = await db.execute(
+                select(Avatar)
+                .where(Avatar.id == game_session.avatar_id)
+                .execution_options(populate_existing=True)
+            )
             avatar = avatar_res.scalars().first()
 
         # 4. Fetch chat messages
@@ -78,32 +105,47 @@ class SessionExporter:
             select(ChatMessage)
             .where(ChatMessage.session_id == session_id)
             .order_by(ChatMessage.created_at.asc())
+            .execution_options(populate_existing=True)
         )
         chat_messages = chat_res.scalars().all()
 
         # 5. Fetch world scenes, exits, entities, and map
-        scenes_res = await db.execute(select(WorldScene).where(WorldScene.session_id == session_id))
+        scenes_res = await db.execute(
+            select(WorldScene)
+            .where(WorldScene.session_id == session_id)
+            .execution_options(populate_existing=True)
+        )
         world_scenes = scenes_res.scalars().all()
 
-        exits_res = await db.execute(select(WorldExit).where(WorldExit.session_id == session_id))
+        exits_res = await db.execute(
+            select(WorldExit)
+            .where(WorldExit.session_id == session_id)
+            .execution_options(populate_existing=True)
+        )
         world_exits = exits_res.scalars().all()
 
         entities_res = await db.execute(
-            select(WorldEntity).where(WorldEntity.session_id == session_id)
+            select(WorldEntity)
+            .where(WorldEntity.session_id == session_id)
+            .execution_options(populate_existing=True)
         )
         world_entities = entities_res.scalars().all()
 
-        map_res = await db.execute(select(WorldMap).where(WorldMap.session_id == session_id))
+        map_res = await db.execute(
+            select(WorldMap)
+            .where(WorldMap.session_id == session_id)
+            .execution_options(populate_existing=True)
+        )
         world_map = map_res.scalars().first()
 
         # Helper to convert SQL Alchemy model to dictionary
-        def to_dict(obj):
+        def to_dict(obj: Base | None) -> dict[str, Any] | None:
             if not obj:
                 return None
             return {c.name: getattr(obj, c.name) for c in obj.__table__.columns}
 
         # Build manifest structure
-        manifest = {
+        manifest: dict[str, Any] = {
             "format": "TaleWeaverSession",
             "version": "1.0",
             "original_session_id": session_id,
@@ -119,9 +161,11 @@ class SessionExporter:
             "memory_summaries": await export_summaries(db, session_id),
         }
 
-        # Localize any session URL paths inside the database JSON
-        manifest = localize_session_paths(manifest, session_id)
-
+        manifest["world_info"] = await export_world_info(db, session_id, game_session.user_id)
+        if session_state is not None:
+            notebooks = await export_notebooks(db, session_state, game_session.user_id)
+            if notebooks is not None:
+                manifest["npc_notebooks"] = notebooks
         return manifest
 
     @staticmethod
@@ -131,23 +175,10 @@ class SessionExporter:
         """
         manifest = await SessionExporter.build_session_manifest(db, session_id)
 
-        # Create the ZIP
-        zip_buffer = io.BytesIO()
-        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
-            # 1. Add Manifest
-            encoded_manifest = jsonable_encoder(manifest)
-            zip_file.writestr("session.json", json.dumps(encoded_manifest, indent=2))
+        return await run_file_operation(pack_export_ads, manifest, session_id)
 
-            # 2. Add local assets directory
-            session_dir = _safe_data_path("adventures", "sessions", session_id)
-            if os.path.exists(session_dir):
-                for root, _, files in os.walk(session_dir):
-                    for file in files:
-                        local_full = os.path.join(root, file)
-                        safe_local_full = _ensure_within_data_dir(local_full)
-                        # Compute relative path within zip
-                        rel_path = os.path.relpath(safe_local_full, session_dir)
-                        zip_rel = f"assets/{rel_path.replace(os.sep, '/')}"
-                        zip_file.write(safe_local_full, zip_rel)
-
-        return zip_buffer.getvalue()
+    @staticmethod
+    async def export_ads_to(db: AsyncSession, session_id: str, output: BinaryIO) -> None:
+        """Write a portable archive to a caller-owned seekable temporary file."""
+        manifest = await SessionExporter.build_session_manifest(db, session_id)
+        await run_file_operation(pack_export_ads_to, manifest, session_id, output)

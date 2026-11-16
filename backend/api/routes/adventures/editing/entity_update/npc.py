@@ -1,5 +1,7 @@
 """NPC-specific updates."""
 
+from typing import Any
+
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
 
@@ -12,7 +14,8 @@ from backend.api.routes.adventures.editing.entity_update.fields import (
     template_rows,
     validated_scene_ref,
 )
-from backend.api.routes.adventures.editing.schemas import EntityUpdateRequest
+from backend.api.routes.adventures.editing.schemas import EntityBehaviorFields, EntityUpdateRequest
+from backend.engine.character_identity import update_identity
 from backend.models.world_entity import WorldEntity
 
 _NPC_SCRIPT_FIELDS = (
@@ -22,6 +25,10 @@ _NPC_SCRIPT_FIELDS = (
     "on_protagonist_enters_scene_text",
 )
 INVENTORY_LOCATION = "INVENTORY"
+
+
+def update_npc_events(metadata_json: dict[str, Any], payload: EntityBehaviorFields) -> None:
+    put_metadata(metadata_json, payload, _NPC_SCRIPT_FIELDS, empty_as_none=False)
 
 
 async def _update_inventory(
@@ -52,12 +59,17 @@ async def update_npc(
     db: AsyncSession, template_id: str, npc: WorldEntity, payload: EntityUpdateRequest
 ) -> None:
     copy_given(npc, payload, ("goal", "character", "is_killable"))
+    update_identity(npc, payload)
     if given(payload, "inventory"):
         await _update_inventory(db, template_id, npc, payload)
     _update_movement(npc, payload)
 
     metadata_json = dict(npc.metadata_json or {})
-    put_metadata(metadata_json, payload, _NPC_SCRIPT_FIELDS, empty_as_none=False)
+    if given(payload, "personality_profile"):
+        metadata_json["personality_profile"] = (
+            payload.personality_profile.model_dump() if payload.personality_profile else {}
+        )
+    update_npc_events(metadata_json, payload)
     npc.metadata_json = metadata_json
     flag_modified(npc, "metadata_json")
 

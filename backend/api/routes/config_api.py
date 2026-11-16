@@ -3,15 +3,16 @@ import os
 import re
 import time
 import uuid
-from typing import Any, Optional
+from typing import Annotated, Any, Optional
 
 import httpx
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
-from pydantic import BaseModel, Field
-from sqlalchemy import select, update
+from pydantic import BaseModel, Field, StringConstraints
+from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.routes.comfyui_api import router as comfyui_router
+from backend.api.routes.model_discovery_access import checked_discovery_base
 from backend.api.routes.settings_normalization import (
     DEFAULT_COMPLEX_MAX_TOKENS,
     DEFAULT_GENERATOR_MAX_TOKENS,
@@ -27,6 +28,7 @@ from backend.api.routes.settings_normalization import (
 from backend.api.routes.settings_normalization import (
     normalize_tts_settings as _normalize_tts_settings,
 )
+from backend.api.routes.upload_files import save_catalog_image
 from backend.api.routes.visual_jobs import router as visual_jobs_router
 from backend.core.auth import get_current_admin, get_current_user
 from backend.core.catalog_defaults import DEFAULT_IMAGE_STYLES, DEFAULT_TONES
@@ -34,9 +36,22 @@ from backend.core.catalog_ids import legacy_catalog_id
 from backend.core.comfyui_config import ComfySettings, select_workflow, validate_comfy_settings
 from backend.core.config import settings
 from backend.core.custom_openai_diagnostics import connection_test_diagnostic
+from backend.core.custom_openai_roles import CustomOpenAIRoleSettings
+from backend.core.custom_openai_roles import resolve_url as custom_role_url
+from backend.core.custom_openai_roles import validate_urls as validate_custom_role_urls
 from backend.core.database import get_db
 from backend.core.error_diagnostics import diagnose_provider_error
+from backend.core.global_settings import (
+    normalize_game_settings as _normalize_game_settings,
+)
+from backend.core.global_settings import (
+    resolve_global_settings_owner as _resolve_global_settings_owner,
+)
+from backend.core.image_purposes import ImagePurpose, image_provider, purpose_target
+from backend.core.llm_parallel import ParallelSettings
 from backend.core.llm_router import GameMasterLLM
+from backend.core.llm_sampling import SamplingProfile, SamplingSettings
+from backend.core.llm_sampling import temporary as temporary_sampling
 from backend.core.models_config import (
     IMAGE_PROVIDERS,
     LLM_PROVIDERS,
@@ -52,11 +67,12 @@ from backend.core.ollama_role_config import (
     validate_role_urls,
 )
 from backend.core.security import encryption_util
+from backend.core.style_catalog import normalize_image_styles_catalog
 from backend.engine.media_engine import MediaEngine
 from backend.engine.tts_engine import TTSEngine, TTSModelSwitchSuggestionError
 from backend.models.user import User
+from backend.utils.async_files import run_file_operation
 from backend.utils.path_security import (
-    ensure_within_base_dir,
     ensure_within_data_dir,
     safe_data_path,
     sanitize_path_component,
@@ -81,29 +97,23 @@ _CATALOG_EXT_BY_CONTENT_TYPE = {
 }
 
 
-async def _resolve_global_settings_owner(db: AsyncSession, fallback_user: User) -> User:
-    """Return the user that acts as global settings source (prefer admin)."""
-    admin_res = await db.execute(select(User).where(User.role == "admin").limit(1))
-    admin_user = admin_res.scalars().first()
-    return admin_user or fallback_user
-
-
-async def _broadcast_global_settings(db: AsyncSession, source_user: User) -> None:
-    """Copy global settings from source user to all users efficiently."""
-    # Using a bulk update is much better for SQLite to avoid lock contention
-    # and memory overhead of fetching all user objects.
-    await db.execute(
-        update(User).values(
-            encrypted_api_keys=dict(source_user.encrypted_api_keys or {}),
-            llm_settings=dict(source_user.llm_settings or {}),
-            t2i_settings=dict(source_user.t2i_settings or {}),
-            image_styles_catalog=list(source_user.image_styles_catalog or []),
-            tone_catalog=list(source_user.tone_catalog or []),
-            game_settings=dict(source_user.game_settings or {}),
-            tts_settings=dict(source_user.tts_settings or {}),
-        )
-    )
-    # No need to loop and modify objects manually
+async def _broadcast_global_settings(
+    db: AsyncSession, source_user: User, *, fields: tuple[str, ...]
+) -> None:
+    """Broadcast only explicitly edited settings, preserving concurrent edits elsewhere."""
+    allowed = {
+        "encrypted_api_keys",
+        "llm_settings",
+        "t2i_settings",
+        "image_styles_catalog",
+        "tone_catalog",
+        "game_settings",
+        "tts_settings",
+    }
+    if not fields or not set(fields) <= allowed:
+        raise ValueError("Invalid global settings fields.")
+    values = {field: getattr(source_user, field) for field in fields}
+    await db.execute(update(User).values(**values))
 
 
 def _slugify(value: str) -> str:
@@ -187,7 +197,7 @@ def _default_tone_catalog() -> list[dict[str, Any]]:
 
 
 def _normalize_catalog(
-    catalog: list[dict[str, Optional[Any]]], *, fallback: list[dict[str, Any]]
+    catalog: list[Any] | None, *, fallback: list[dict[str, Any]]
 ) -> list[dict[str, Any]]:
     if not catalog:
         return fallback
@@ -414,52 +424,39 @@ async def _build_available_constants(
     }
 
 
-def _normalize_game_settings(game_settings: Optional[dict]) -> dict:
-    fallback = {
-        "clock_24h": False,
-        "date_format": "DD.MM.YY",
-        "whisper_model": "tiny",
-    }
-    if not game_settings:
-        return fallback
-    normalized = dict(game_settings)
-    if "clock_24h" not in normalized:
-        normalized["clock_24h"] = False
-    if "date_format" not in normalized:
-        normalized["date_format"] = "DD.MM.YY"
-    if "whisper_model" not in normalized:
-        normalized["whisper_model"] = "tiny"
-    return normalized
-
-
-def _is_llm_configured(user: User, db_keys: dict) -> bool:
+def _is_llm_configured(user: User, db_keys: dict | None) -> bool:
     llm = _normalize_llm_settings(user.llm_settings)
     small_provider = llm.get("small_model_provider", "openai")
     complex_provider = llm.get("complex_model_provider", "openai")
     small_model = llm.get("small_model")
     complex_model = llm.get("complex_model")
 
-    def has_key(provider):
+    def has_key(provider: str, role: str) -> bool:
         if provider == "custom_openai":
-            return bool(llm.get("custom_openai_url"))
+            return bool(custom_role_url(llm, role))
         if provider == "ollama":
             return True
-        return bool(settings.get_env_api_key(provider)) or (db_keys and provider in db_keys)
+        return bool(settings.get_env_api_key(provider)) or bool(db_keys and provider in db_keys)
 
     return all(
-        [has_key(small_provider), bool(small_model), has_key(complex_provider), bool(complex_model)]
+        [
+            has_key(small_provider, "small"),
+            bool(small_model),
+            has_key(complex_provider, "complex"),
+            bool(complex_model),
+        ]
     )
 
 
-def _is_t2i_configured(user: User, db_keys: dict) -> bool:
+def _is_t2i_configured(user: User, db_keys: dict | None) -> bool:
     t2i = _normalize_t2i_settings(user.t2i_settings)
     simple_provider = t2i.get("simple_model_provider", "openai")
     simple_model = t2i.get("simple_model")
 
-    def has_key(provider):
+    def has_key(provider: str) -> bool:
         if provider in ("ollama", "stable_diffusion", "comfyui"):
             return True
-        return bool(settings.get_env_api_key(provider)) or (db_keys and provider in db_keys)
+        return bool(settings.get_env_api_key(provider)) or bool(db_keys and provider in db_keys)
 
     if simple_provider == "comfyui":
         try:
@@ -491,7 +488,9 @@ class ApiKeyPayload(BaseModel):
     api_key: str
 
 
-class SettingsPayload(OllamaRoleSettings):
+class SettingsPayload(OllamaRoleSettings, CustomOpenAIRoleSettings):
+    parallel_requests: ParallelSettings = Field(default_factory=ParallelSettings)
+    sampling: SamplingSettings = Field(default_factory=SamplingSettings)
     small_model: str
     small_model_provider: str
     small_max_tokens: int = DEFAULT_SMALL_MAX_TOKENS
@@ -589,7 +588,7 @@ class TTSSettingsPayload(BaseModel):
     use_text_chunking: bool = True
     use_streaming: bool = False
     voice_list: list[str] = Field(default_factory=list)
-    voice_catalog: list[dict[str, Optional[str]]] = None
+    voice_catalog: list[dict[str, Optional[str]]] | None = None
     speech_rate: float = 1.0
 
 
@@ -613,12 +612,12 @@ class CatalogGeneratePayload(BaseModel):
     description: Optional[str] = None
 
 
-@router.get("")
+@router.get("", response_model=None)
 async def get_settings(
     include_available_constants: bool = True,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """Returns the current settings (sanitized keys)."""
     user = await _resolve_global_settings_owner(db, current_user)
 
@@ -637,8 +636,8 @@ async def get_settings(
         }
     )
 
-    def get_keys_status(db_keys):
-        status = {}
+    def get_keys_status(db_keys: dict[str, str] | None) -> dict[str, dict[str, str | bool]]:
+        status: dict[str, dict[str, str | bool]] = {}
         all_providers = (
             {p["id"] for p in LLM_PROVIDERS}
             | {p["id"] for p in IMAGE_PROVIDERS}
@@ -688,9 +687,11 @@ async def get_settings(
         "t2i_settings": _normalize_t2i_settings(user.t2i_settings),
         "is_llm_configured": _is_llm_configured(user, user.encrypted_api_keys),
         "is_t2i_configured": _is_t2i_configured(user, user.encrypted_api_keys),
-        "image_styles_catalog": _normalize_catalog(
-            user.image_styles_catalog,
-            fallback=_default_image_styles_catalog(),
+        "image_styles_catalog": normalize_image_styles_catalog(
+            _normalize_catalog(
+                user.image_styles_catalog,
+                fallback=_default_image_styles_catalog(),
+            )
         ),
         "tone_catalog": _normalize_catalog(
             user.tone_catalog,
@@ -702,11 +703,11 @@ async def get_settings(
     }
 
 
-@router.get("/ollama-models")
+@router.get("/ollama-models", response_model=None)
 async def get_ollama_models(
     ollama_url: Optional[str] = None,
     _user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """Return installed Ollama model names for the configured Ollama endpoint.
 
     Requires authentication. ``ollama_url`` is validated against SSRF
@@ -716,11 +717,11 @@ async def get_ollama_models(
     return {"models": await _fetch_ollama_models(validated_url)}
 
 
-@router.get("/stable-diffusion-models")
+@router.get("/stable-diffusion-models", response_model=None)
 async def get_stable_diffusion_models(
     stable_diffusion_url: Optional[str] = None,
     _user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """Return available Stable Diffusion checkpoints for the configured endpoint.
 
     Requires authentication. ``stable_diffusion_url`` is validated against SSRF.
@@ -729,14 +730,15 @@ async def get_stable_diffusion_models(
     return {"models": await _fetch_stable_diffusion_models(validated_url)}
 
 
-@router.get("/minimax-models")
+@router.get("/minimax-models", response_model=None)
 async def get_minimax_models(
     api_key: Optional[str] = None,
     api_base: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """Return available MiniMax model names for the configured endpoint."""
+    validated_base = checked_discovery_base(current_user, api_base, settings.MINIMAX_API_BASE)
     if not api_key:
         user = await _resolve_global_settings_owner(db, current_user)
         if user and user.encrypted_api_keys and "minimax" in user.encrypted_api_keys:
@@ -745,11 +747,6 @@ async def get_minimax_models(
             api_key = encryption_util.decrypt_key(user.encrypted_api_keys["minimax"])
         elif settings.MINIMAX_API_KEY:
             api_key = settings.MINIMAX_API_KEY
-
-    try:
-        validated_base = validate_provider_url(api_base or settings.MINIMAX_API_BASE)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     return {"models": await _fetch_minimax_models(api_key, validated_base)}
 
@@ -769,13 +766,13 @@ async def _resolve_provider_api_key_for_models(
     return settings.get_env_api_key(provider)
 
 
-@router.get("/llm-models")
+@router.get("/llm-models", response_model=None)
 async def get_llm_models(
     provider: str,
     api_base: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """Return available model names for any OpenAI-compatible LLM provider."""
     provider_lower = provider.lower()
     if provider_lower == "custom_openai":
@@ -788,19 +785,13 @@ async def get_llm_models(
         key = await _resolve_provider_api_key_for_models(db, current_user, "custom_openai")
         return {"models": await discover_models(base, key)}
     if provider_lower == "minimax":
+        validated_base = checked_discovery_base(current_user, api_base, settings.MINIMAX_API_BASE)
         api_key = await _resolve_provider_api_key_for_models(db, current_user, "minimax")
-        try:
-            validated_base = validate_provider_url(api_base or settings.MINIMAX_API_BASE)
-        except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
         models = await _fetch_minimax_models(api_key, validated_base)
     elif provider_lower in _OPENAI_COMPATIBLE_PROVIDERS:
-        api_key = await _resolve_provider_api_key_for_models(db, current_user, provider_lower)
         default_base = _OPENAI_COMPATIBLE_PROVIDERS[provider_lower]["default_base"]
-        try:
-            validated_base = validate_provider_url(api_base or default_base)
-        except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        validated_base = checked_discovery_base(current_user, api_base, default_base)
+        api_key = await _resolve_provider_api_key_for_models(db, current_user, provider_lower)
         models = await _fetch_openai_compatible_models(provider_lower, api_key, validated_base)
     else:
         raise HTTPException(
@@ -809,12 +800,12 @@ async def get_llm_models(
     return {"models": models}
 
 
-@router.post("/keys")
+@router.post("/keys", response_model=None)
 async def update_api_key(
     payload: ApiKeyPayload,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_admin),
-):
+) -> dict[str, Any]:
     """Saves an encrypted API key for the authenticated user."""
     provider_lower = payload.provider.lower()
 
@@ -825,7 +816,7 @@ async def update_api_key(
             detail=f"The API key for {payload.provider} is managed via environment variables and cannot be modified here.",
         )
 
-    user = await _resolve_global_settings_owner(db, current_user)
+    user = await _resolve_global_settings_owner(db, current_user, for_update=True)
 
     normalized_api_key = (payload.api_key or "").strip()
     if (
@@ -845,17 +836,17 @@ async def update_api_key(
     new_keys[provider_lower] = encrypted_key
     user.encrypted_api_keys = new_keys
 
-    await _broadcast_global_settings(db, user)
+    await _broadcast_global_settings(db, user, fields=("encrypted_api_keys",))
     await db.commit()
     return {"status": "success", "message": f"{payload.provider} key saved securely."}
 
 
-@router.delete("/keys/{provider}")
+@router.delete("/keys/{provider}", response_model=None)
 async def delete_api_key(
     provider: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_admin),
-):
+) -> dict[str, Any]:
     """Deletes an encrypted API key for the authenticated user."""
     provider_lower = provider.lower()
     logger.info("[Admin] Deleting API key for provider: %s (lower: %s)", provider, provider_lower)
@@ -868,7 +859,7 @@ async def delete_api_key(
             detail=f"The API key for {provider} is managed via environment variables and cannot be deleted here.",
         )
 
-    user = await _resolve_global_settings_owner(db, current_user)
+    user = await _resolve_global_settings_owner(db, current_user, for_update=True)
     logger.info("[Admin] Settings owner resolved for delete operation")
 
     current_keys = user.encrypted_api_keys or {}
@@ -882,41 +873,44 @@ async def delete_api_key(
     del new_keys[provider_lower]
     user.encrypted_api_keys = new_keys
 
-    await _broadcast_global_settings(db, user)
+    await _broadcast_global_settings(db, user, fields=("encrypted_api_keys",))
     await db.commit()
     logger.info("[Admin] Successfully removed key for %s", provider_lower)
     return {"status": "success", "message": f"{provider} key removed."}
 
 
-@router.post("/llm")
+@router.post("/llm", response_model=None)
 async def update_llm_settings(
     payload: SettingsPayload,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_admin),
-):
+) -> dict[str, Any]:
     """Updates the LLM model preferences."""
-    user = await _resolve_global_settings_owner(db, current_user)
-
     from backend.core.custom_openai import validate_custom_url
 
     validate_role_urls(payload, _safe_provider_url)
+    validate_custom_role_urls(payload, validate_custom_url)
     if payload.custom_openai_url:
         payload.custom_openai_url = validate_custom_url(payload.custom_openai_url)
+    user = await _resolve_global_settings_owner(db, current_user, for_update=True)
     retained_memory = (user.llm_settings or {}).get("memory_rag")
-    user.llm_settings = _normalize_llm_settings(payload.model_dump())
+    updates = payload.model_dump()
+    if "parallel_requests" not in payload.model_fields_set:
+        updates["parallel_requests"] = (user.llm_settings or {}).get("parallel_requests", {})
+    user.llm_settings = _normalize_llm_settings(updates)
     if retained_memory is not None:
         user.llm_settings = {**user.llm_settings, "memory_rag": retained_memory}
-    await _broadcast_global_settings(db, user)
+    await _broadcast_global_settings(db, user, fields=("llm_settings",))
     await db.commit()
     return {"status": "success", "message": "LLM settings updated."}
 
 
-@router.post("/t2i")
+@router.post("/t2i", response_model=None)
 async def update_t2i_settings(
     payload: T2ISettingsPayload,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_admin),
-):
+) -> dict[str, Any]:
     """Updates the Text-to-Image model preferences."""
     user = await _resolve_global_settings_owner(db, current_user)
 
@@ -925,50 +919,60 @@ async def update_t2i_settings(
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
     user.t2i_settings = _normalize_t2i_settings(payload.model_dump())
-    await _broadcast_global_settings(db, user)
+    await _broadcast_global_settings(db, user, fields=("t2i_settings",))
     await db.commit()
     return {"status": "success", "message": "Image generation settings updated."}
 
 
-@router.post("/tts")
+@router.post("/tts", response_model=None)
 async def update_tts_settings(
     payload: TTSSettingsPayload,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_admin),
-):
+) -> dict[str, Any]:
     """Updates the TTS settings."""
     user = await _resolve_global_settings_owner(db, current_user)
 
     # Use full model dump to capture all fields from the UI, then normalize.
     user.tts_settings = _normalize_tts_settings(payload.model_dump())
 
-    await _broadcast_global_settings(db, user)
+    await _broadcast_global_settings(db, user, fields=("tts_settings",))
     await db.commit()
     return {"status": "success", "message": "TTS settings updated."}
 
 
 class TestLLMPayload(OllamaConnectionSettings):
+    sampling: SamplingProfile | None = None
+    custom_openai_url: Optional[str] = None
     model: str
     provider: str
     ollama_url: Optional[str] = None
     openrouter_provider: Optional[str] = None
 
 
-@router.post("/test-llm")
+@router.post("/test-llm", response_model=None)
 async def test_llm_connection(
     payload: TestLLMPayload,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    """Tests the connection to an LLM provider with a simple prompt and measures latency."""
+    current_user: User = Depends(get_current_admin),
+) -> dict[str, Any]:
+    """Test the provider's technical output path in one request and measure latency."""
     user = await _resolve_global_settings_owner(db, current_user)
 
     # Inject temporary ollama_url or openrouter_provider if provided
     old_settings = user.llm_settings or {}
     temp_settings = dict(old_settings)
+    if payload.sampling is not None:
+        temp_settings = temporary_sampling(temp_settings, payload.role, payload.sampling)
     if payload.provider == "ollama":
         temp_settings = temporary_ollama_settings(
-            old_settings, payload, payload.ollama_url, payload.model_fields_set, _safe_provider_url
+            temp_settings, payload, payload.ollama_url, payload.model_fields_set, _safe_provider_url
+        )
+    if payload.provider == "custom_openai" and "custom_openai_url" in payload.model_fields_set:
+        from backend.core.custom_openai import validate_custom_url
+
+        temp_settings[f"{payload.role}_custom_openai_url"] = validate_custom_url(
+            payload.custom_openai_url or ""
         )
     if payload.provider == "openrouter" and payload.openrouter_provider is not None:
         temp_settings["small_openrouter_provider"] = payload.openrouter_provider
@@ -987,16 +991,9 @@ async def test_llm_connection(
         gm = GameMasterLLM.for_role(user, payload.role)
         test_stage = "request_or_response"
         start_time = time.perf_counter()
-        if payload.provider == "custom_openai":
-            from backend.core.custom_openai import test_connection
+        from backend.core.llm_connection_test import test_connection
 
-            response = await test_connection(gm, payload.model)
-        else:
-            response = await gm.aexecute_simple_task(
-                system_prompt="You are a helpful RPG assistant.",
-                user_prompt="Say 'TaleWeaver connection test successful!' in a fantasy style.",
-                model=payload.model,
-            )
+        response = await test_connection(gm, payload.model)
         end_time = time.perf_counter()
         latency = round(end_time - start_time, 2)
         return {"status": "success", "message": response, "response_time": latency}
@@ -1019,6 +1016,15 @@ async def test_llm_connection(
 
 
 class TestVisionPayload(ComfySettings):
+    test_prompt: (
+        Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=12000)]
+        | None
+    ) = None
+    prepared_body: (
+        Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=12000)]
+        | None
+    ) = None
+    image_purpose: ImagePurpose | None = None
     comfyui_profile: str = "simple"
     model: str
     provider: str
@@ -1056,7 +1062,10 @@ def _resolve_vision_api_key(
 
 
 def _build_vision_provider_options(payload: "TestVisionPayload", provider_key: str) -> dict:
-    options: dict[str, Any] = {"visual_target_type": "npc"}
+    options: dict[str, Any] = {
+        "visual_target_type": purpose_target(payload.image_purpose or "npc"),
+        "image_purpose": payload.image_purpose,
+    }
     if provider_key == "comfyui":
         options.update(
             payload.model_dump(
@@ -1077,10 +1086,12 @@ def _build_vision_provider_options(payload: "TestVisionPayload", provider_key: s
         if getattr(payload, key) is not None:
             options[key] = getattr(payload, key)
 
-    # Test vision generates a wizard portrait (CHARACTER/4:5 aspect ratio)
+    # Match the test canvas to the selected image task.
     if provider_key in _LOCAL_IMAGE_PROVIDERS and not payload.width and not payload.height:
         min_long_edge = payload.min_long_edge or 1024
-        width, height = MediaEngine._resolve_sd_dimensions("CHARACTER", min_long_edge)
+        width, height = MediaEngine._resolve_sd_dimensions(
+            purpose_target(payload.image_purpose or "npc"), min_long_edge
+        )
         options["width"] = width
         options["height"] = height
         return options
@@ -1091,13 +1102,15 @@ def _build_vision_provider_options(payload: "TestVisionPayload", provider_key: s
     return options
 
 
-@router.post("/test-vision")
+@router.post("/test-vision", response_model=None)
 async def test_vision_connection(
     payload: TestVisionPayload,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    """Tests the connection to an image provider by generating a wizard portrait."""
+    current_user: User = Depends(get_current_admin),
+) -> dict[str, Any]:
+    """Generate the supplied preset example, or the profile's default smoke-test image."""
+    from backend.engine.vision_test_context import configuration, result_message, test_input
+
     user = await _resolve_global_settings_owner(db, current_user)
     provider_key = payload.provider.lower()
     if provider_key == "comfyui" and current_user.role != "admin":
@@ -1107,24 +1120,33 @@ async def test_vision_connection(
         return error_response
 
     try:
+        prompt, prompt_source = test_input(payload)
+        options = {
+            **_build_vision_provider_options(payload, provider_key),
+            "_prompt_user": user,
+            "_prompt_prepared": payload.prepared_body is not None,
+        }
         test_dir = _safe_data_path("scratch", "test_connection")
-        os.makedirs(test_dir, exist_ok=True)
+        await run_file_operation(os.makedirs, test_dir, exist_ok=True)
         img_url = await MediaEngine.generate_image(
-            prompt="A Wizard portrait",
+            prompt=prompt,
             model=payload.model,
             api_key=api_key,
             provider=payload.provider,
             target_dir=test_dir,
-            provider_options={
-                **_build_vision_provider_options(payload, provider_key),
-                "_prompt_user": user,
-            },
+            provider_options=options,
         )
         if img_url:
+            report = (
+                configuration(options, user.t2i_settings, prompt_source)
+                if provider_key == "comfyui"
+                else None
+            )
             return {
                 "status": "success",
-                "message": "Image generation successful!",
+                "message": result_message(report) if report else "Image generation successful!",
                 "image_url": img_url,
+                **({"test_configuration": report} if report else {}),
             }
         return {"status": "error", "message": "Image generation failed."}
     except Exception as exc:
@@ -1135,11 +1157,11 @@ async def test_vision_connection(
         return {"status": "error", "message": diag}
 
 
-@router.post("/test-tts")
+@router.post("/test-tts", response_model=None)
 async def test_tts_connection(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
+    current_user: User = Depends(get_current_admin),
+) -> dict[str, Any]:
     """Generates a short test sentence to verify TTS configuration."""
     user = await _resolve_global_settings_owner(db, current_user)
     tts_settings = user.tts_settings or {}
@@ -1192,51 +1214,51 @@ async def test_tts_connection(
         return {"status": "error", "message": diag}
 
 
-@router.post("/image-styles")
+@router.post("/image-styles", response_model=None)
 async def update_image_styles_catalog(
     payload: CatalogUpdatePayload,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_admin),
-):
+) -> dict[str, Any]:
     """Updates the admin-managed image styles catalog for adventure generation."""
     user = await _resolve_global_settings_owner(db, current_user)
 
     raw_items = [item.model_dump() for item in payload.items]
-    user.image_styles_catalog = _normalize_catalog(
-        raw_items, fallback=_default_image_styles_catalog()
+    user.image_styles_catalog = normalize_image_styles_catalog(
+        _normalize_catalog(raw_items, fallback=_default_image_styles_catalog())
     )
-    await _broadcast_global_settings(db, user)
+    await _broadcast_global_settings(db, user, fields=("image_styles_catalog",))
     await db.commit()
     return {"status": "success", "message": "Image styles catalog updated."}
 
 
-@router.post("/tones")
+@router.post("/tones", response_model=None)
 async def update_tone_catalog(
     payload: CatalogUpdatePayload,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_admin),
-):
+) -> dict[str, Any]:
     """Updates the admin-managed tone catalog for world generation."""
     user = await _resolve_global_settings_owner(db, current_user)
 
     raw_items = [item.model_dump() for item in payload.items]
     user.tone_catalog = _normalize_catalog(raw_items, fallback=_default_tone_catalog())
-    await _broadcast_global_settings(db, user)
+    await _broadcast_global_settings(db, user, fields=("tone_catalog",))
     await db.commit()
     return {"status": "success", "message": "Tone catalog updated."}
 
 
-@router.post("/catalog/generate")
+@router.post("/catalog/generate", response_model=None)
 async def generate_catalog_image(
     payload: CatalogGeneratePayload,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """Generates an image for a catalog tile (style or tone)."""
     user = await _resolve_global_settings_owner(db, current_user)
 
     t2i = user.t2i_settings or {}
-    provider = (t2i.get("simple_model_provider") or t2i.get("provider", "openai")).lower()
+    provider = image_provider(t2i, "simple", "catalog")
     model = t2i.get("simple_model")
 
     if not model and provider != "comfyui":
@@ -1255,7 +1277,7 @@ async def generate_catalog_image(
             return {"status": "error", "message": "Invalid catalog type."}
 
         catalog_dir = _safe_data_path("catalog", catalog_type)
-        os.makedirs(catalog_dir, exist_ok=True)
+        await run_file_operation(os.makedirs, catalog_dir, exist_ok=True)
 
         base_prompt = payload.prompt
         if not base_prompt:
@@ -1274,7 +1296,12 @@ async def generate_catalog_image(
             provider=provider,
             target_dir=catalog_dir,
             filename=f"{safe_target_id}_{uuid.uuid4().hex[:8]}",
-            provider_options={**t2i, "visual_target_type": "object", "_prompt_user": user},
+            provider_options={
+                **t2i,
+                "visual_target_type": "object",
+                "image_purpose": "catalog",
+                "_prompt_user": user,
+            },
         )
 
         logger.info("Catalog generate result for '%s': img_url=%r", payload.target_id, img_url)
@@ -1293,14 +1320,14 @@ async def generate_catalog_image(
         )
 
 
-@router.post("/catalog/upload")
+@router.post("/catalog/upload", response_model=None)
 async def upload_catalog_image(
     catalog_type: str = Form(...),
     target_id: str = Form(...),
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """Uploads a manual image for a catalog tile."""
     _ = db
     _ = current_user
@@ -1309,21 +1336,10 @@ async def upload_catalog_image(
     if not target_id or sanitize_path_component(target_id) != target_id:
         raise HTTPException(status_code=400, detail="Invalid target ID format.")
     try:
-        safe_ext = _extension_from_content_type(file.content_type)
-        filepath = _build_catalog_upload_path(catalog_type, target_id, f"upload.{safe_ext}")
-
-        safe_filepath = _ensure_within_data_dir(filepath)
-        safe_parent_dir = _ensure_within_data_dir(os.path.dirname(safe_filepath))
-        safe_filepath = ensure_within_base_dir(safe_filepath, safe_parent_dir)
-        # Re-verify containment at the sink so the taint analysis trusts the path.
-        data_root = os.path.realpath(settings.DATA_DIR)
-        if os.path.commonpath([os.path.realpath(safe_filepath), data_root]) != data_root:
-            raise ValueError("Invalid filepath: escapes DATA_DIR.")
-        with open(safe_filepath, "wb") as f:
-            f.write(await file.read())
-
-        rel_path = os.path.relpath(safe_filepath, settings.DATA_DIR).replace("\\", "/")
-        return {"status": "success", "image_url": f"/data/{rel_path}"}
+        content = await file.read()
+        return await run_file_operation(
+            save_catalog_image, catalog_type, target_id, file.content_type, content
+        )
     except (ValueError, RuntimeError, TypeError) as exc:
         return _route_error_response(
             "Catalog image upload",
@@ -1332,24 +1348,59 @@ async def upload_catalog_image(
         )
 
 
-@router.post("/game")
+@router.post("/game", response_model=None)
 async def update_game_settings(
     payload: GameSettingsPayload,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_admin),
-):
+) -> dict[str, Any]:
     """Updates the general game preferences."""
     user = await _resolve_global_settings_owner(db, current_user)
 
     user.game_settings = payload.model_dump()
-    await _broadcast_global_settings(db, user)
+    await _broadcast_global_settings(db, user, fields=("game_settings",))
     await db.commit()
     return {"status": "success", "message": "Game settings updated."}
 
 
-@router.get("/tts/elevenlabs-models")
-async def get_elevenlabs_models():
+@router.get("/tts/elevenlabs-models", response_model=None)
+async def get_elevenlabs_models() -> list[dict[str, Any]]:
     """Returns a list of available ElevenLabs models from central config."""
     models = PREDEFINED_TTS_MODELS.get("elevenlabs", [])
     # Return in the format expected by frontend: {model_id, name}
     return [{"model_id": m["id"], "name": m["name"]} for m in models]
+
+
+__all__ = [
+    "ApiKeyPayload",
+    "CatalogGeneratePayload",
+    "CatalogTilePayload",
+    "CatalogUpdatePayload",
+    "GameSettingsPayload",
+    "SettingsPayload",
+    "T2ISettingsPayload",
+    "TTSSettingsPayload",
+    "TestLLMPayload",
+    "TestVisionPayload",
+    "_normalize_game_settings",
+    "_resolve_global_settings_owner",
+    "delete_api_key",
+    "generate_catalog_image",
+    "get_elevenlabs_models",
+    "get_llm_models",
+    "get_minimax_models",
+    "get_ollama_models",
+    "get_settings",
+    "get_stable_diffusion_models",
+    "test_llm_connection",
+    "test_tts_connection",
+    "test_vision_connection",
+    "update_api_key",
+    "update_game_settings",
+    "update_image_styles_catalog",
+    "update_llm_settings",
+    "update_t2i_settings",
+    "update_tone_catalog",
+    "update_tts_settings",
+    "upload_catalog_image",
+]

@@ -16,12 +16,13 @@ def convert_png_to_jpg(directory):
                         # Convert to RGB if needed (JPEG doesn't support alpha)
                         rgb_img = img.convert("RGB") if img.mode in ("RGBA", "P") else img
                         rgb_img.save(jpg_path, "JPEG", quality=85, optimize=True)
-                    
+
                     # Verify JPG exists before deleting PNG
                     if os.path.exists(jpg_path):
                         os.remove(png_path)
                 except Exception as e:
                     print(f"Failed to convert {file}: {e}")
+
 
 if __name__ == "__main__":
     assets_dir = os.path.join("backend", "static", "assets", "catalog")

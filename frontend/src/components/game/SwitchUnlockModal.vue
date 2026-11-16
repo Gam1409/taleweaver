@@ -1,7 +1,8 @@
 <script setup lang="ts">
+import ItemImagePlaceholder from '@/components/game/ItemImagePlaceholder.vue'
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { Lock, Key, Unlock, AlertCircle, Check } from 'lucide-vue-next'
-import { getItemIcon, getTypeColor, getImageUrl } from '@/utils/game_icons'
+import { getImageUrl } from '@/utils/game_icons'
 
 const brokenImages = ref<Record<string, boolean>>({})
 const showImage = (path?: string | null) => {
@@ -269,7 +270,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown))
                         @error="handleImageError(item.image_url)"
                       />
                       <div v-else class="w-full h-full flex items-center justify-center bg-slate-800/40">
-                        <i :class="['ra text-2xl', getItemIcon(item.item_type ?? undefined), getTypeColor(item.item_type ?? undefined)]"></i>
+                        <ItemImagePlaceholder />
                       </div>
                     </div>
                     <div

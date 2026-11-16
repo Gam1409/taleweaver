@@ -33,12 +33,36 @@ const { useAdventureLibrary } = await import(
     '@/services/adventureLibrary': serviceUrl
   })
 )
+const { useAdventureCatalogFilters } = await import(
+  compile('../src/composables/useAdventureCatalogFilters.ts', { vue: vueUrl })
+)
+const { ref } = await import(vueUrl)
 const item = (id, installed = null, update = false) => ({
   entry: { id, title: id, version: '2', size_bytes: 10 },
   installed_version: installed,
   update_available: update
 })
 const ok = body => ({ ok: true, json: async () => body })
+
+test('catalog browsing filters title, teaser, author and language without changing selection', () => {
+  const entries = ref([
+    { ...item('a'), entry: { title: 'Север', teaser: 'Snow', author: 'Alice', language: 'ru' } },
+    { ...item('b'), entry: { title: 'Harbor', teaser: 'Ships', author: 'Bob', language: 'en' } }
+  ])
+  const filters = useAdventureCatalogFilters(entries)
+  assert.deepEqual(filters.languages.value, ['en', 'ru'])
+  for (const query of ['север', 'SNOW', 'Alice']) {
+    filters.query.value = query
+    assert.equal(filters.filteredItems.value[0].entry.title, 'Север')
+    assert.equal(filters.filteredItems.value.length, 1)
+  }
+  filters.language.value = 'en'
+  assert.equal(filters.filteredItems.value.length, 0)
+  filters.clearFilters()
+  assert.equal(filters.filteredItems.value.length, 2)
+  entries.value = []
+  assert.deepEqual(filters.languages.value, [])
+})
 
 test('catalog and publication requests use scoped routes, explicit export acknowledgment and long install timeout', async () => {
   const requests = []

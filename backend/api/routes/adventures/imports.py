@@ -1,8 +1,6 @@
-import io
 import json
 import logging
 import os
-import zipfile
 from typing import Any
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
@@ -14,89 +12,71 @@ from backend.api.routes.adventures.schemas import ImportCheckItem, ImportCheckRe
 from backend.core.auth import get_current_user
 from backend.core.config import settings
 from backend.core.database import get_db
-from backend.engine.adventure_importer import AdventureTemplateImporter, AdventureConflictError
+from backend.engine.adventure_importer import AdventureConflictError, AdventureTemplateImporter
+from backend.engine.import_candidates import scan_import_candidates
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.user import User
+from backend.utils.async_files import run_file_operation
 
 router = APIRouter(tags=["Adventure Imports"])
 logger = logging.getLogger(__name__)
 
-async def _get_import_check_items(db: AsyncSession, user_id: str, directories: list[str]) -> list[ImportCheckItem]:
+
+async def _get_import_check_items(
+    db: AsyncSession, user_id: str, directories: list[str]
+) -> list[ImportCheckItem]:
     """Scans directories for adventures and checks if they already exist in the user's library."""
     check_items = []
-    
-    for directory in directories:
-        if not os.path.exists(directory):
-            continue
-            
-        files = [f for f in os.listdir(directory) if f.endswith(".adv") or f.endswith(".adz")]
-        for filename in files:
-            file_path = os.path.join(directory, filename)
-            title = None
-            origin_id = None
-            
-            try:
-                if filename.endswith(".adz"):
-                    with open(file_path, "rb") as f:
-                        with zipfile.ZipFile(io.BytesIO(f.read()), "r") as zip_file:
-                            manifest = json.loads(zip_file.read("adventure.adv").decode("utf-8"))
-                            adv_data = manifest.get("adventure") or {}
-                            title = adv_data.get("title")
-                            origin_id = adv_data.get("origin_id") or manifest.get("origin_id")
-                else:
-                    with open(file_path, encoding="utf-8") as f:
-                        payload = json.load(f)
-                        is_session = payload.get("type") == "SESSION_BUNDLE"
-                        title = payload.get("adventure", {}).get("title") if is_session else payload.get("title")
-                        origin_id = payload.get("adventure", {}).get("origin_id") if is_session else payload.get("origin_id")
-                
-                if title:
-                    query = select(AdventureTemplate).where(AdventureTemplate.owner_id == user_id)
-                    if origin_id:
-                        query = query.where(or_(AdventureTemplate.title == title, AdventureTemplate.origin_id == origin_id))
-                    else:
-                        query = query.where(AdventureTemplate.title == title)
-                    
-                    res = await db.execute(query)
-                    existing = res.scalars().first()
-                    
-                    check_items.append(ImportCheckItem(
-                        title=title,
-                        already_exists=existing is not None,
-                        existing_template_id=existing.id if existing else None,
-                        origin_id=origin_id
-                    ))
-            except Exception as e:
-                logger.error(f"Error checking import file {file_path}: {e}")
-                
+    candidates = await run_file_operation(scan_import_candidates, directories)
+    for title, origin_id in candidates:
+        query = select(AdventureTemplate).where(AdventureTemplate.owner_id == user_id)
+        if origin_id:
+            query = query.where(
+                or_(AdventureTemplate.title == title, AdventureTemplate.origin_id == origin_id)
+            )
+        else:
+            query = query.where(AdventureTemplate.title == title)
+        res = await db.execute(query)
+        existing = res.scalars().first()
+        check_items.append(
+            ImportCheckItem(
+                title=title,
+                already_exists=existing is not None,
+                existing_template_id=existing.id if existing else None,
+                origin_id=origin_id,
+            )
+        )
     return check_items
+
 
 @router.get("/check-defaults", response_model=ImportCheckResponse)
 async def check_defaults(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> ImportCheckResponse:
     """Returns a list of default adventures and their existence status."""
     defaults_dir = os.path.join("adventures", "default")
     items = await _get_import_check_items(db, current_user.id, [defaults_dir])
     return ImportCheckResponse(available_imports=items)
 
+
 @router.get("/check-examples", response_model=ImportCheckResponse)
 async def check_examples(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> ImportCheckResponse:
     """Returns a list of example/sample adventures and their existence status."""
     samples_dir = os.path.join("adventures", "samples")
     presets_dir = os.path.join(settings.DATA_DIR, "presets", "adventures")
     items = await _get_import_check_items(db, current_user.id, [samples_dir, presets_dir])
     return ImportCheckResponse(available_imports=items)
 
-@router.post("/import-examples")
+
+@router.post("/import-examples", response_model=None)
 async def import_examples(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """Manually triggers import of example adventures."""
     user_id = current_user.id
     samples_dir = os.path.join("adventures", "samples")
@@ -105,33 +85,37 @@ async def import_examples(
     )
 
     presets_dir = os.path.join(settings.DATA_DIR, "presets", "adventures")
-    if os.path.exists(presets_dir):
+    if await run_file_operation(os.path.exists, presets_dir):
         await AdventureTemplateImporter.import_from_directory(
             db, presets_dir, owner_id=user_id, delete_after=False, overwrite=True
         )
     return {"status": "success", "message": "Example adventures imported successfully."}
 
-@router.post("/import-defaults")
+
+@router.post("/import-defaults", response_model=None)
 async def import_defaults(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """Triggers import of default adventures."""
     if current_user.has_imported_defaults:
         return {"status": "skipped", "message": "Defaults already imported."}
-    
+
     defaults_dir = os.path.join("adventures", "default")
-    await AdventureTemplateImporter.import_from_directory(db, defaults_dir, owner_id=current_user.id, delete_after=False)
-    
+    await AdventureTemplateImporter.import_from_directory(
+        db, defaults_dir, owner_id=current_user.id, delete_after=False
+    )
+
     current_user.has_imported_defaults = True
     await db.commit()
     return {"status": "success", "message": "Default adventures imported successfully."}
 
-@router.post("/reimport-defaults")
+
+@router.post("/reimport-defaults", response_model=None)
 async def reimport_defaults(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """Manually re-triggers import of default adventures (overwrites existing)."""
     defaults_dir = os.path.join("adventures", "default")
     await AdventureTemplateImporter.import_from_directory(
@@ -139,12 +123,13 @@ async def reimport_defaults(
     )
     return {"status": "success", "message": "Default adventures re-imported successfully."}
 
-@router.post("/import", status_code=201)
+
+@router.post("/import", status_code=201, response_model=None)
 async def import_adventure(
     payload: dict[str, Any],
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any] | JSONResponse:
     """Import an adventure from a manifest URL or local path."""
     source_url = payload.get("url")
     if source_url:
@@ -166,11 +151,15 @@ async def import_adventure(
         if not success:
             raise HTTPException(status_code=400, detail="Import failed or manifest invalid.")
 
-        title = manifest_payload.get("title") or (manifest_payload.get("adventure") or {}).get("title")
+        title = manifest_payload.get("title") or (manifest_payload.get("adventure") or {}).get(
+            "title"
+        )
         if title:
             res = await db.execute(
                 select(AdventureTemplate)
-                .where(AdventureTemplate.owner_id == current_user.id, AdventureTemplate.title == title)
+                .where(
+                    AdventureTemplate.owner_id == current_user.id, AdventureTemplate.title == title
+                )
                 .order_by(AdventureTemplate.created_at.desc())
                 .limit(1)
             )
@@ -178,7 +167,10 @@ async def import_adventure(
             if tmpl:
                 return JSONResponse(status_code=201, content={"adventure_id": tmpl.id})
 
-        return JSONResponse(status_code=201, content={"status": "success", "message": "Adventure imported successfully."})
+        return JSONResponse(
+            status_code=201,
+            content={"status": "success", "message": "Adventure imported successfully."},
+        )
     except AdventureConflictError as e:
         return JSONResponse(
             status_code=409,
@@ -196,15 +188,17 @@ async def import_adventure(
         raise
     except Exception as e:
         logger.exception("Import failed")
-        raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail="Adventure import failed. Check the file and server logs."
+        ) from e
 
 
-@router.post("/import/session-bundle")
+@router.post("/import/session-bundle", response_model=None)
 async def import_session_bundle(
     payload: dict[str, Any],
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any] | JSONResponse:
     """Import a SESSION_BUNDLE payload (inline JSON) and restore template + session state."""
     if not payload or payload.get("type") != "SESSION_BUNDLE":
         raise HTTPException(status_code=400, detail="Invalid session bundle payload.")
@@ -227,7 +221,9 @@ async def import_session_bundle(
         if title:
             res = await db.execute(
                 select(AdventureTemplate)
-                .where(AdventureTemplate.owner_id == current_user.id, AdventureTemplate.title == title)
+                .where(
+                    AdventureTemplate.owner_id == current_user.id, AdventureTemplate.title == title
+                )
                 .order_by(AdventureTemplate.created_at.desc())
                 .limit(1)
             )
@@ -253,21 +249,28 @@ async def import_session_bundle(
         raise
     except Exception as e:
         logger.exception("Session bundle import failed")
-        raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail="Adventure import failed. Check the file and server logs."
+        ) from e
 
-@router.post("/import/adz")
+
+@router.post("/import/adz", response_model=None)
 async def import_adventure_adz(
     file: UploadFile = File(...),
     overwrite: bool = False,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any] | JSONResponse:
     """Import an adventure as a portable .adz (ZIP) bundle."""
     try:
         content = await file.read()
-        success = await AdventureTemplateImporter.import_adz(db, content, owner_id=current_user.id, overwrite=overwrite)
+        success = await AdventureTemplateImporter.import_adz(
+            db, content, owner_id=current_user.id, overwrite=overwrite
+        )
         if not success:
-            raise HTTPException(status_code=400, detail="The ADZ file is invalid or could not be processed.")
+            raise HTTPException(
+                status_code=400, detail="The ADZ file is invalid or could not be processed."
+            )
         return {"status": "success", "message": "Adventure imported successfully."}
     except AdventureConflictError as e:
         return JSONResponse(
@@ -278,28 +281,33 @@ async def import_adventure_adz(
                     "title": e.title,
                     "existing_version": e.existing_version,
                     "new_version": e.new_version,
-                    "template_id": e.template_id
-                }
-            }
+                    "template_id": e.template_id,
+                },
+            },
         )
     except HTTPException:
         raise
     except Exception as e:
         logger.exception("ADZ Import failed")
-        raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail="Adventure import failed. Check the file and server logs."
+        ) from e
 
-@router.post("/import/adv")
+
+@router.post("/import/adv", response_model=None)
 async def import_adventure_adv(
     file: UploadFile = File(...),
     overwrite: bool = False,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any] | JSONResponse:
     """Import an adventure as a pure .adv (JSON) manifest."""
     try:
         content = await file.read()
         payload = json.loads(content.decode("utf-8"))
-        success = await AdventureTemplateImporter.import_adv_manifest(db, payload, owner_id=current_user.id, overwrite=overwrite)
+        success = await AdventureTemplateImporter.import_adv_manifest(
+            db, payload, owner_id=current_user.id, overwrite=overwrite
+        )
         if not success:
             raise HTTPException(status_code=400, detail="The ADV manifest is invalid.")
         return {"status": "success", "message": "Adventure imported successfully."}
@@ -312,23 +320,24 @@ async def import_adventure_adv(
                     "title": e.title,
                     "existing_version": e.existing_version,
                     "new_version": e.new_version,
-                    "template_id": e.template_id
-                }
-            }
+                    "template_id": e.template_id,
+                },
+            },
         )
     except HTTPException:
         raise
     except Exception as e:
         logger.exception("ADV Import failed")
-        raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail="Adventure import failed. Check the file and server logs."
+        ) from e
 
 
 @router.get("/generation-sayings", response_model=list[str])
 async def get_generation_sayings(
     current_user: User = Depends(get_current_user),
-):
+) -> list[str]:
     """Returns the list of humorous generation sayings."""
     from backend.core.generation_sayings import GenerationSayings
+
     return GenerationSayings.SAYINGS
-
-

@@ -14,12 +14,14 @@ from backend.api.routes.adventures.editing.ai_fix_patches import (
     _clean_updates,
 )
 from backend.api.routes.adventures.editing.common import _get_owned_adventure_or_404
+from backend.api.routes.adventures.editing.payload import _build_adventure_editor_assets
 from backend.api.routes.adventures.editing.validation import (
     _finding_signature,
     _recount_validation_findings,
 )
 from backend.core.auth import get_current_user
 from backend.core.database import get_db
+from backend.core.world_validator import validate_adventure
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.user import User
 from backend.models.validation_run import ValidationRun
@@ -150,6 +152,10 @@ async def _commit_fix(
     run = await _latest_run(db, template_id, user_id)
     if run is not None:
         _prune_fixed_finding(run, signature)
+        await db.flush()
+        editor = await _build_adventure_editor_assets(template_id, db)
+        run.structural_findings = [finding.model_dump() for finding in validate_adventure(editor)]
+        _recount_validation_findings(run)
     await db.commit()
     await _evict_cached_suggestions(
         db=db, template_id=template_id, user_id=user_id, signature=signature
@@ -160,7 +166,9 @@ async def _commit_fix(
     return _run_snapshot(run)
 
 
-def _apply_result(applied: int, total: int, failed_resolution: bool) -> tuple[str, str]:
+def _apply_result(
+    applied: int, total: int, failed_resolution: bool
+) -> tuple[Literal["applied", "no_op", "partial"], str]:
     status: Literal["applied", "no_op", "partial"] = "no_op"
     if applied:
         status = "partial" if applied < total else "applied"
@@ -179,7 +187,7 @@ async def ai_apply_fix_proposal(
     payload: AIFixApplyRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> AIFixApplyResponse:
     """Apply the chosen fix proposal directly to the adventure template.
 
     The proposal's ``patches[]`` are treated as the authoritative source of
@@ -195,6 +203,7 @@ async def ai_apply_fix_proposal(
             status="no_op",
             applied_targets=[],
             message="The selected proposal contained no patches to apply.",
+            validation_run=None,
         )
 
     applied_tags, failed_resolution = await _apply_patches(db, template_id, adv, proposal_patches)
@@ -203,13 +212,12 @@ async def ai_apply_fix_proposal(
         updated_run_dict = await _commit_fix(db, template_id, user_id, payload.finding_signature)
     else:
         await db.rollback()
-        if failed_resolution:
-            await _evict_cached_suggestions(
-                db=db,
-                template_id=template_id,
-                user_id=user_id,
-                signature=payload.finding_signature,
-            )
+        await _evict_cached_suggestions(
+            db=db,
+            template_id=template_id,
+            user_id=user_id,
+            signature=payload.finding_signature,
+        )
 
     status, message = _apply_result(len(applied_tags), len(proposal_patches), failed_resolution)
     return AIFixApplyResponse(

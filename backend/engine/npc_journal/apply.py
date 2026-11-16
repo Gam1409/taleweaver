@@ -122,6 +122,8 @@ async def _apply_character(
     if created:
         npc = _new_npc(character, message)
         db.add(npc)
+    if npc is None:
+        return None
     if (
         not created
         and _introduction(character, message)
@@ -148,3 +150,6 @@ def _update_appearance(npc: Any, character: CharacterObservation, message: ChatM
     ]
     if appearances and not npc.description:
         npc.description = " ".join(appearances)[:1000]
+        journal = journal_of(npc)
+        journal.update(description_source=message.id, observed_description=npc.description)
+        npc.metadata_json = {**(npc.metadata_json or {}), JOURNAL_KEY: journal}

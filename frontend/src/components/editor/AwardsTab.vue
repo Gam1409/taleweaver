@@ -21,7 +21,7 @@ const emit = defineEmits<{
   (e: 'notify', message: string, type?: 'error' | 'success' | 'info'): void
 }>()
 
-const availableItems = computed(() => {
+const availableItems = computed<Array<{ id: string; name: string }>>(() => {
   const list =
     props.editorObjects && props.editorObjects.length > 0
       ? props.editorObjects
@@ -34,7 +34,7 @@ const availableItems = computed(() => {
     .filter((i: any) => Boolean(i.id))
 })
 
-const availableScenes = computed(() => {
+const availableScenes = computed<Array<{ id: string; name: string }>>(() => {
   const list =
     props.editorScenes && props.editorScenes.length > 0
       ? props.editorScenes
@@ -47,7 +47,7 @@ const availableScenes = computed(() => {
     .filter((s: any) => Boolean(s.id))
 })
 
-const availableNpcs = computed(() => {
+const availableNpcs = computed<Array<{ id: string; name: string }>>(() => {
   const list =
     props.editorNpcs && props.editorNpcs.length > 0
       ? props.editorNpcs
@@ -238,8 +238,8 @@ function confirmDeleteAward() {
 
   <Teleport to="body">
     <Transition name="modal">
-      <div v-if="showModal" class="fixed inset-0 z-[200] flex items-center justify-center p-4 md:p-6 backdrop-blur-xl bg-slate-950/70 overflow-y-auto">
-        <div class="w-full max-w-2xl max-h-[90vh] bg-slate-900 border border-white/10 rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col my-auto">
+      <div v-if="showModal" class="authoring-modal-overlay fixed inset-0 z-[200] flex items-center justify-center p-4 md:p-6 backdrop-blur-xl bg-slate-950/70 overflow-y-auto">
+        <div class="authoring-dialog w-full max-w-2xl max-h-[90vh] bg-slate-900 border border-white/10 rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col my-auto">
           <div class="p-6 md:p-8 overflow-y-auto space-y-6 custom-scrollbar">
             <div class="flex items-center justify-between border-b border-white/5 pb-4">
               <h3 class="text-xs font-black text-emerald-400 uppercase tracking-widest">{{ isNewAward ? 'Add Award' : 'Edit Award' }}</h3>
@@ -477,8 +477,8 @@ function confirmDeleteAward() {
 
   <Teleport to="body">
     <Transition name="modal">
-      <div v-if="showDeleteConfirmModal" class="fixed inset-0 z-[210] flex items-center justify-center p-6 backdrop-blur-sm bg-black/60">
-        <div class="w-full max-w-md bg-slate-900 border border-white/10 rounded-2xl p-6 space-y-4">
+      <div v-if="showDeleteConfirmModal" class="authoring-modal-overlay fixed inset-0 z-[210] flex items-center justify-center p-6 backdrop-blur-sm bg-black/60">
+        <div class="authoring-dialog w-full max-w-md bg-slate-900 border border-white/10 rounded-2xl p-6 space-y-4">
           <h4 class="text-sm font-black text-white">Delete this award?</h4>
           <p class="text-xs text-slate-400">This action removes the selected award from the adventure.</p>
           <div class="flex justify-end gap-3">

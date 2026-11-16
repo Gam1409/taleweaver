@@ -1,6 +1,31 @@
-import { API_BASE, authHeaders } from '@/services/http'
+import type { ClothingDraft } from '@/services/clothingAuthoring'
+import type { CharacterOutfitDraft } from '@/services/characterOutfits'
+import { apiFetch, authHeaders } from '@/services/http'
+import { apiErrorMessage } from '@/services/apiErrors'
 
-export interface EntityEditData {
+export interface ExitBehaviorData {
+  unlock_expression?: string | null
+  on_open_exit_script?: string | null
+  on_open_exit_text?: string | null
+  on_exit_used_script?: string | null
+  on_exit_used_text?: string | null
+  on_unlock_success_script?: string | null
+  on_unlock_success_text?: string | null
+  on_unlock_failure_script?: string | null
+  on_unlock_failure_text?: string | null
+}
+
+export interface EntityEditData extends ExitBehaviorData {
+  craft_guard_expression?: string | null
+  on_craft_success_script?: string | null
+  on_craft_success_text?: string | null
+  on_craft_failure_script?: string | null
+  on_craft_failure_text?: string | null
+  on_read_script?: string | null
+  on_read_text?: string | null
+
+  on_leave_scene_script?: string | null
+  on_leave_scene_text?: string | null
   target_type: string
   target_id: string
   new_id?: string
@@ -13,6 +38,10 @@ export interface EntityEditData {
   mana?: number
   goal?: string
   character?: string
+  gender?: string | null
+  age_years?: number | null
+  personality_profile?: Record<string, string>
+  outfit_completion?: CharacterOutfitDraft | null
   is_killable?: boolean
   moveable?: boolean
   allowed_scenes?: string[]
@@ -28,6 +57,7 @@ export interface EntityEditData {
   text_log_content?: string
   text_log_format?: string
   wearable_slots?: string[]
+  clothing?: ClothingDraft | null
   combination_ingredients?: string[]
   reveal_rule?: string | null
   is_hidden?: boolean | null
@@ -38,6 +68,8 @@ export interface EntityEditData {
   switch_states?: string[] | null
   switch_initial_state?: string | null
   switch_transitions?: any[] | null
+  on_success_script?: string | null
+  on_failure_script?: string | null
   effects?: Record<string, any> | null
   stat_modifier_strength?: number | null
   current_scene_id?: string
@@ -60,10 +92,6 @@ export interface EntityEditData {
   on_unequip_text?: string | null
   on_enter_scene_script?: string | null
   on_enter_scene_text?: string | null
-  on_open_exit_script?: string | null
-  on_open_exit_text?: string | null
-  on_exit_used_script?: string | null
-  on_exit_used_text?: string | null
   on_defeat_script?: string | null
   on_defeat_text?: string | null
   on_protagonist_enters_scene_script?: string | null
@@ -78,7 +106,7 @@ export interface SceneCreateData {
   decorative_objects?: string[]
 }
 
-export interface ExitCreateData {
+export interface ExitCreateData extends ExitBehaviorData {
   from_scene_id: string
   to_scene_id: string
   label: string
@@ -91,6 +119,9 @@ export interface ExitCreateData {
 }
 
 export interface EntityCreateData {
+  is_hidden?: boolean
+  reveal_rule?: string | null
+  spatial_position?: string | null
   entity_id: string
   entity_type: 'NPC' | 'OBJECT'
   scene_id: string
@@ -101,6 +132,9 @@ export interface EntityCreateData {
   is_portable?: boolean
   goal?: string
   character?: string
+  gender?: string | null
+  age_years?: number | null
+  personality_profile?: Record<string, string>
   hp?: number
   stamina?: number
   mana?: number
@@ -110,6 +144,7 @@ export interface EntityCreateData {
   notes?: string
   metadata_json?: Record<string, any>
   wearable_slots?: string[]
+  clothing?: ClothingDraft | null
   combination_ingredients?: string[]
   stat_modifier_strength?: number
   inventory?: any[]
@@ -161,25 +196,25 @@ export interface EntityBundleImportResult {
  */
 export const entityService = {
   async saveEntityText(adventureId: string, data: EntityEditData): Promise<void> {
-    const res = await fetch(`${API_BASE}/adventures/${adventureId}/editor/entity`, {
+    const res = await apiFetch(`/adventures/${adventureId}/editor/entity`, {
       method: 'PATCH',
       headers: authHeaders(true),
       body: JSON.stringify(data),
     })
     if (!res.ok) {
-      const respData = await res.json()
-      throw new Error(respData.detail || 'Failed to save entity text')
+      const respData = await res.json().catch(() => ({}))
+      throw new Error(apiErrorMessage(respData, 'Failed to save entity text', res.status))
     }
   },
 
   async cloneEntity(adventureId: string, entityId: string): Promise<{ new_id: string; source_id: string }> {
-    const res = await fetch(`${API_BASE}/adventures/${adventureId}/editor/entity/${encodeURIComponent(entityId)}/clone`, {
+    const res = await apiFetch(`/adventures/${adventureId}/editor/entity/${encodeURIComponent(entityId)}/clone`, {
       method: 'POST',
       headers: authHeaders(true),
     })
     if (!res.ok) {
-      const data = await res.json()
-      throw new Error(data.detail || 'Failed to clone entity')
+      const data = await res.json().catch(() => ({}))
+      throw new Error(apiErrorMessage(data, 'Failed to clone entity', res.status))
     }
     const payload = await res.json()
     return { new_id: payload.new_id, source_id: payload.source_id }
@@ -190,12 +225,12 @@ export const entityService = {
     const path = kind === 'protagonist'
       ? 'protagonist'
       : `entity/${encodeURIComponent(entityId || '')}`
-    const res = await fetch(`${API_BASE}/adventures/${adventureId}/editor/transfer/${path}`, {
+    const res = await apiFetch(`/adventures/${adventureId}/editor/transfer/${path}`, {
       headers: authHeaders(),
     })
     if (!res.ok) {
       const data = await res.json().catch(() => ({}))
-      throw new Error(data.detail || 'Failed to export entity')
+      throw new Error(apiErrorMessage(data, 'Failed to export entity', res.status))
     }
     return await res.blob()
   },
@@ -205,20 +240,20 @@ export const entityService = {
     const formData = new FormData()
     formData.append('file', file)
     formData.append('expected_kind', expectedKind)
-    const res = await fetch(`${API_BASE}/adventures/${adventureId}/editor/transfer/import`, {
+    const res = await apiFetch(`/adventures/${adventureId}/editor/transfer/import`, {
       method: 'POST',
       headers: authHeaders(),
       body: formData,
     })
     if (!res.ok) {
       const data = await res.json().catch(() => ({}))
-      throw new Error(data.detail || 'Failed to import entity')
+      throw new Error(apiErrorMessage(data, 'Failed to import entity', res.status))
     }
     return await res.json()
   },
 
   async generateTraits(adventureId: string, name: string, description: string, targetType: string, targetField?: 'goal' | 'character'): Promise<{ goal: string, character: string }> {
-    const res = await fetch(`${API_BASE}/adventures/${adventureId}/editor/generate-traits`, {
+    const res = await apiFetch(`/adventures/${adventureId}/editor/generate-traits`, {
       method: 'POST',
       headers: authHeaders(true),
       body: JSON.stringify({
@@ -229,14 +264,14 @@ export const entityService = {
       }),
     })
     if (!res.ok) {
-      const data = await res.json()
-      throw new Error(data.detail || 'Failed to generate traits')
+      const data = await res.json().catch(() => ({}))
+      throw new Error(apiErrorMessage(data, 'Failed to generate traits', res.status))
     }
     return await res.json()
   },
 
   async generateBiography(adventureId: string, name: string, goal: string, character: string, targetType: 'npc' | 'protagonist', adventureTheme?: string): Promise<{ description: string }> {
-    const res = await fetch(`${API_BASE}/adventures/${adventureId}/editor/generate-biography`, {
+    const res = await apiFetch(`/adventures/${adventureId}/editor/generate-biography`, {
       method: 'POST',
       headers: authHeaders(true),
       body: JSON.stringify({
@@ -248,14 +283,14 @@ export const entityService = {
       }),
     })
     if (!res.ok) {
-      const data = await res.json()
-      throw new Error(data.detail || 'Failed to generate biography')
+      const data = await res.json().catch(() => ({}))
+      throw new Error(apiErrorMessage(data, 'Failed to generate biography', res.status))
     }
     return await res.json()
   },
 
   async generateSceneDescription(adventureId: string, name: string, adventureTheme?: string): Promise<{ description: string }> {
-    const res = await fetch(`${API_BASE}/adventures/${adventureId}/editor/generate-scene-description`, {
+    const res = await apiFetch(`/adventures/${adventureId}/editor/generate-scene-description`, {
       method: 'POST',
       headers: authHeaders(true),
       body: JSON.stringify({
@@ -264,8 +299,8 @@ export const entityService = {
       }),
     })
     if (!res.ok) {
-      const data = await res.json()
-      throw new Error(data.detail || 'Failed to generate scene description')
+      const data = await res.json().catch(() => ({}))
+      throw new Error(apiErrorMessage(data, 'Failed to generate scene description', res.status))
     }
     return await res.json()
   },
@@ -276,7 +311,7 @@ export const entityService = {
     existingItems: string[],
     options?: { description?: string; adventureTheme?: string }
   ): Promise<{ items: string[] }> {
-    const res = await fetch(`${API_BASE}/adventures/${adventureId}/editor/generate-decorative-items`, {
+    const res = await apiFetch(`/adventures/${adventureId}/editor/generate-decorative-items`, {
       method: 'POST',
       headers: authHeaders(true),
       body: JSON.stringify({
@@ -287,14 +322,14 @@ export const entityService = {
       }),
     })
     if (!res.ok) {
-      const data = await res.json()
-      throw new Error(data.detail || 'Failed to generate decorative items')
+      const data = await res.json().catch(() => ({}))
+      throw new Error(apiErrorMessage(data, 'Failed to generate decorative items', res.status))
     }
     return await res.json()
   },
 
   async generateQuestDescription(adventureId: string, title: string, isMain: boolean, otherQuests: any[]): Promise<{ description: string }> {
-    const res = await fetch(`${API_BASE}/adventures/${adventureId}/editor/generate-quest-description`, {
+    const res = await apiFetch(`/adventures/${adventureId}/editor/generate-quest-description`, {
       method: 'POST',
       headers: authHeaders(true),
       body: JSON.stringify({
@@ -304,14 +339,14 @@ export const entityService = {
       }),
     })
     if (!res.ok) {
-      const data = await res.json()
-      throw new Error(data.detail || 'Failed to generate quest description')
+      const data = await res.json().catch(() => ({}))
+      throw new Error(apiErrorMessage(data, 'Failed to generate quest description', res.status))
     }
     return await res.json()
   },
 
   async generateNewQuest(adventureId: string, isMain: boolean, otherQuests: any[]): Promise<{ title: string, description: string }> {
-    const res = await fetch(`${API_BASE}/adventures/${adventureId}/editor/generate-new-quest`, {
+    const res = await apiFetch(`/adventures/${adventureId}/editor/generate-new-quest`, {
       method: 'POST',
       headers: authHeaders(true),
       body: JSON.stringify({
@@ -320,129 +355,129 @@ export const entityService = {
       }),
     })
     if (!res.ok) {
-      const data = await res.json()
-      throw new Error(data.detail || 'Failed to generate new quest')
+      const data = await res.json().catch(() => ({}))
+      throw new Error(apiErrorMessage(data, 'Failed to generate new quest', res.status))
     }
     return await res.json()
   },
 
   async createScene(adventureId: string, data: SceneCreateData): Promise<any> {
-    const res = await fetch(`${API_BASE}/adventures/${adventureId}/editor/scene`, {
+    const res = await apiFetch(`/adventures/${adventureId}/editor/scene`, {
       method: 'POST',
       headers: authHeaders(true),
       body: JSON.stringify(data),
     })
     if (!res.ok) {
-      const payload = await res.json()
-      throw new Error(payload.detail || 'Failed to create scene')
+      const payload = await res.json().catch(() => ({}))
+      throw new Error(apiErrorMessage(payload, 'Failed to create scene', res.status))
     }
     return await res.json()
   },
 
   async deleteScene(adventureId: string, sceneId: string): Promise<void> {
-    const res = await fetch(`${API_BASE}/adventures/${adventureId}/editor/scene/${encodeURIComponent(sceneId)}`, {
+    const res = await apiFetch(`/adventures/${adventureId}/editor/scene/${encodeURIComponent(sceneId)}`, {
       method: 'DELETE',
       headers: authHeaders(false),
     })
     if (!res.ok) {
-      const payload = await res.json()
-      throw new Error(payload.detail || 'Failed to delete scene')
+      const payload = await res.json().catch(() => ({}))
+      throw new Error(apiErrorMessage(payload, 'Failed to delete scene', res.status))
     }
   },
 
   async createExit(adventureId: string, data: ExitCreateData): Promise<any> {
-    const res = await fetch(`${API_BASE}/adventures/${adventureId}/editor/exit`, {
+    const res = await apiFetch(`/adventures/${adventureId}/editor/exit`, {
       method: 'POST',
       headers: authHeaders(true),
       body: JSON.stringify(data),
     })
     if (!res.ok) {
-      const payload = await res.json()
-      throw new Error(payload.detail || 'Failed to create exit')
+      const payload = await res.json().catch(() => ({}))
+      throw new Error(apiErrorMessage(payload, 'Failed to create exit', res.status))
     }
     return await res.json()
   },
 
   async deleteExit(adventureId: string, exitId: string): Promise<void> {
-    const res = await fetch(`${API_BASE}/adventures/${adventureId}/editor/exit/${encodeURIComponent(exitId)}`, {
+    const res = await apiFetch(`/adventures/${adventureId}/editor/exit/${encodeURIComponent(exitId)}`, {
       method: 'DELETE',
       headers: authHeaders(false),
     })
     if (!res.ok) {
-      const payload = await res.json()
-      throw new Error(payload.detail || 'Failed to delete exit')
+      const payload = await res.json().catch(() => ({}))
+      throw new Error(apiErrorMessage(payload, 'Failed to delete exit', res.status))
     }
   },
 
   async createEntity(adventureId: string, data: EntityCreateData): Promise<any> {
-    const res = await fetch(`${API_BASE}/adventures/${adventureId}/editor/entity`, {
+    const res = await apiFetch(`/adventures/${adventureId}/editor/entity`, {
       method: 'POST',
       headers: authHeaders(true),
       body: JSON.stringify(data),
     })
     if (!res.ok) {
-      const payload = await res.json()
-      throw new Error(payload.detail || 'Failed to create entity')
+      const payload = await res.json().catch(() => ({}))
+      throw new Error(apiErrorMessage(payload, 'Failed to create entity', res.status))
     }
     return await res.json()
   },
 
   async deleteEntity(adventureId: string, entityId: string): Promise<void> {
-    const res = await fetch(`${API_BASE}/adventures/${adventureId}/editor/entity/${encodeURIComponent(entityId)}`, {
+    const res = await apiFetch(`/adventures/${adventureId}/editor/entity/${encodeURIComponent(entityId)}`, {
       method: 'DELETE',
       headers: authHeaders(false),
     })
     if (!res.ok) {
-      const payload = await res.json()
-      throw new Error(payload.detail || 'Failed to delete entity')
+      const payload = await res.json().catch(() => ({}))
+      throw new Error(apiErrorMessage(payload, 'Failed to delete entity', res.status))
     }
   },
 
   async createQuest(adventureId: string, data: QuestCreateData): Promise<any> {
-    const res = await fetch(`${API_BASE}/adventures/${adventureId}/editor/quest`, {
+    const res = await apiFetch(`/adventures/${adventureId}/editor/quest`, {
       method: 'POST',
       headers: authHeaders(true),
       body: JSON.stringify(data),
     })
     if (!res.ok) {
-      const payload = await res.json()
-      throw new Error(payload.detail || 'Failed to create quest')
+      const payload = await res.json().catch(() => ({}))
+      throw new Error(apiErrorMessage(payload, 'Failed to create quest', res.status))
     }
     return await res.json()
   },
 
   async deleteQuest(adventureId: string, questId: string): Promise<void> {
-    const res = await fetch(`${API_BASE}/adventures/${adventureId}/editor/quest/${encodeURIComponent(questId)}`, {
+    const res = await apiFetch(`/adventures/${adventureId}/editor/quest/${encodeURIComponent(questId)}`, {
       method: 'DELETE',
       headers: authHeaders(false),
     })
     if (!res.ok) {
-      const payload = await res.json()
-      throw new Error(payload.detail || 'Failed to delete quest')
+      const payload = await res.json().catch(() => ({}))
+      throw new Error(apiErrorMessage(payload, 'Failed to delete quest', res.status))
     }
   },
 
   async createAward(adventureId: string, data: AwardCreateData): Promise<any> {
-    const res = await fetch(`${API_BASE}/adventures/${adventureId}/editor/award`, {
+    const res = await apiFetch(`/adventures/${adventureId}/editor/award`, {
       method: 'POST',
       headers: authHeaders(true),
       body: JSON.stringify(data),
     })
     if (!res.ok) {
-      const payload = await res.json()
-      throw new Error(payload.detail || 'Failed to create award')
+      const payload = await res.json().catch(() => ({}))
+      throw new Error(apiErrorMessage(payload, 'Failed to create award', res.status))
     }
     return await res.json()
   },
 
   async deleteAward(adventureId: string, awardKey: string): Promise<void> {
-    const res = await fetch(`${API_BASE}/adventures/${adventureId}/editor/award/${encodeURIComponent(awardKey)}`, {
+    const res = await apiFetch(`/adventures/${adventureId}/editor/award/${encodeURIComponent(awardKey)}`, {
       method: 'DELETE',
       headers: authHeaders(false),
     })
     if (!res.ok) {
-      const payload = await res.json()
-      throw new Error(payload.detail || 'Failed to delete award')
+      const payload = await res.json().catch(() => ({}))
+      throw new Error(apiErrorMessage(payload, 'Failed to delete award', res.status))
     }
   },
 }

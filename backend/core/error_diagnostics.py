@@ -6,9 +6,27 @@ into actionable, human-friendly error messages for the UI.
 """
 
 import logging
-from typing import Optional
+import re
+
+from backend.core.comfyui_errors import ComfyRequestError
+from backend.core.inference.diagnostics import admission_diagnostic
+from backend.core.prompt_preparation_error import PromptPreparationError
 
 logger = logging.getLogger(__name__)
+
+
+def has_http_status(exc: Exception, *codes: int) -> bool:
+    """Prefer transport metadata; a number inside an identifier is not an HTTP code."""
+    for source in (exc, getattr(exc, "response", None)):
+        value = getattr(source, "status_code", None)
+        if isinstance(value, int) and not isinstance(value, bool):
+            return value in codes
+    match = re.search(
+        r"\b(?:http(?:/\d+(?:\.\d+)?)?|status(?:_code|\s+code)?)\s*[:=]?\s*(\d{3})\b",
+        str(exc or ""),
+        flags=re.IGNORECASE,
+    )
+    return bool(match and int(match[1]) in codes)
 
 
 def diagnose_provider_error(
@@ -18,9 +36,101 @@ def diagnose_provider_error(
     context: str = "llm",
 ) -> str:
     """Analyze an exception from an AI provider and return a clear, user-friendly diagnostic message."""
+    if isinstance(exc, ComfyRequestError):
+        return exc.diagnostic()
+    if isinstance(exc, PromptPreparationError):
+        cause = exc.__cause__
+        detail = (
+            diagnose_provider_error(cause, provider=exc.provider, model=exc.model)
+            if isinstance(cause, Exception)
+            else "Check the text-model server and backend logs."
+        )
+        return (
+            "Image-prompt preparation failed in the Small/Utility LLM. "
+            "No ComfyUI image job was submitted. "
+            "Check Administration > Intelligence (LLM) and test the Small/Utility role. " + detail
+        )
+    return _diagnose_provider_error(exc, provider, model)
+
+
+def _diagnose_provider_error(exc: Exception, provider: str, model: str) -> str:
+    queue_message = admission_diagnostic(exc)
+    if queue_message:
+        return queue_message
     lower_text = str(exc or "").lower()
     prov_display = provider.capitalize() if provider else "Provider"
 
+    credential_error = _diagnose_credentials(exc, lower_text, prov_display)
+    if credential_error:
+        return credential_error
+
+    if provider.lower() in {"ollama", "ollama_chat"} and "does not support thinking" in lower_text:
+        return (
+            "This model does not support Ollama's thinking mode. "
+            "Disable Reasoning / Thinking Mode in this role's Advanced Parameters, "
+            "save the settings, and test again; or select a model that supports thinking. "
+            "Enabling the option in another client does not add model support."
+        )
+
+    # 4. Model Not Found / Unsupported Model / No Endpoints (404)
+    if (
+        any(
+            kw in lower_text
+            for kw in (
+                "notfounderror",
+                "no endpoints found",
+                "model not found",
+                "does not exist",
+                "unknown model",
+                "model_not_found",
+                "status_code: 404",
+                "code 404",
+                "404 not found",
+            )
+        )
+        or getattr(exc, "status_code", None) == 404
+    ):
+        model_part = f" '{model}'" if model else ""
+        return (
+            f"Model{model_part} not found on {prov_display} (404). "
+            "Please check the model ID or choose a different model in Settings."
+        )
+
+    # 5. Rate Limit / Quota Exceeded / Out of Credits (429)
+    if (
+        any(
+            kw in lower_text
+            for kw in (
+                "ratelimiterror",
+                "rate limit",
+                "too many requests",
+                "quota exceeded",
+                "insufficient_quota",
+                "credit balance",
+                "out of credits",
+                "status_code: 429",
+                "code 429",
+                "429 too many requests",
+            )
+        )
+        or getattr(exc, "status_code", None) == 429
+    ):
+        return (
+            f"Quota or rate limit exceeded for {prov_display} (429). "
+            "Please verify your account credits/balance or try again later."
+        )
+
+    request_error = _diagnose_request_limits(lower_text, prov_display)
+    # Fallback: Never return raw exception text (str(exc) or exc.message) to the client
+    # to prevent information exposure through an exception (CodeQL py/stack-trace-exposure).
+    # All technical details must be inspected via server logs.
+    return request_error or (
+        f"Connection test failed for {prov_display}. "
+        "Please check your provider configuration, credentials, and server logs for details."
+    )
+
+
+def _diagnose_credentials(exc: Exception, lower_text: str, prov_display: str) -> str | None:
     # 1. ENCRYPTION_KEY / Decryption Errors
     if any(
         kw in lower_text
@@ -47,74 +157,36 @@ def diagnose_provider_error(
             "no api key found",
         )
     ):
-        return (
-            f"No API key configured for {prov_display}. "
-            "Please set your API key in Settings."
-        )
+        return f"No API key configured for {prov_display}. Please set your API key in Settings."
 
     # 3. Authentication / Invalid API Key (401)
-    if any(
-        kw in lower_text
-        for kw in (
-            "invalid authentication",
-            "authenticationerror",
-            "invalid_api_key",
-            "incorrect api key",
-            "unauthorized",
-            "invalid x-api-key",
-            "auth_subrequest_error",
-            "status_code: 401",
-            "code 401",
-            "401 unauthorized",
+    if (
+        any(
+            kw in lower_text
+            for kw in (
+                "invalid authentication",
+                "authenticationerror",
+                "invalid_api_key",
+                "incorrect api key",
+                "unauthorized",
+                "invalid x-api-key",
+                "auth_subrequest_error",
+                "status_code: 401",
+                "code 401",
+                "401 unauthorized",
+            )
         )
-    ) or getattr(exc, "status_code", None) == 401:
+        or getattr(exc, "status_code", None) == 401
+    ):
         return (
             f"Authentication failed for {prov_display} (401): "
             "The API key is invalid, inactive, or expired. Please check your API key in Settings."
         )
 
-    # 4. Model Not Found / Unsupported Model / No Endpoints (404)
-    if any(
-        kw in lower_text
-        for kw in (
-            "notfounderror",
-            "no endpoints found",
-            "model not found",
-            "does not exist",
-            "unknown model",
-            "model_not_found",
-            "status_code: 404",
-            "code 404",
-            "404 not found",
-        )
-    ) or getattr(exc, "status_code", None) == 404:
-        model_part = f" '{model}'" if model else ""
-        return (
-            f"Model{model_part} not found on {prov_display} (404). "
-            "Please check the model ID or choose a different model in Settings."
-        )
+    return None
 
-    # 5. Rate Limit / Quota Exceeded / Out of Credits (429)
-    if any(
-        kw in lower_text
-        for kw in (
-            "ratelimiterror",
-            "rate limit",
-            "too many requests",
-            "quota exceeded",
-            "insufficient_quota",
-            "credit balance",
-            "out of credits",
-            "status_code: 429",
-            "code 429",
-            "429 too many requests",
-        )
-    ) or getattr(exc, "status_code", None) == 429:
-        return (
-            f"Quota or rate limit exceeded for {prov_display} (429). "
-            "Please verify your account credits/balance or try again later."
-        )
 
+def _diagnose_request_limits(lower_text: str, prov_display: str) -> str | None:
     # 6. Connection Refused / Service Offline (Ollama, Stable Diffusion, local URLs)
     if any(
         kw in lower_text
@@ -122,6 +194,7 @@ def diagnose_provider_error(
             "connection refused",
             "connecterror",
             "connectionerror",
+            "connection error",
             "failed to connect",
             "cannot connect to host",
             "name resolution failure",
@@ -168,10 +241,4 @@ def diagnose_provider_error(
             "The request or thinking token budget exceeds the maximum allowed token limit."
         )
 
-    # Fallback: Never return raw exception text (str(exc) or exc.message) to the client
-    # to prevent information exposure through an exception (CodeQL py/stack-trace-exposure).
-    # All technical details must be inspected via server logs.
-    return (
-        f"Connection test failed for {prov_display}. "
-        "Please check your provider configuration, credentials, and server logs for details."
-    )
+    return None

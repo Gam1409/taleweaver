@@ -14,8 +14,12 @@ from backend.api.routes.adventures.editing.common import (
     _normalize_lock_fields,
     _sanitize_object_id,
 )
+from backend.api.routes.adventures.editing.creation_metadata import entity_creation_metadata
+from backend.api.routes.adventures.editing.entity_update.fields import clipped_or_none
+from backend.api.routes.adventures.editing.exit_fields import exit_behavior_values
 from backend.api.routes.adventures.editing.image_clone import _clone_entity_image
 from backend.api.routes.adventures.editing.payload import _serialize_model
+from backend.api.routes.adventures.editing.scene_deletion import sync_deleted_scene_manifest
 from backend.api.routes.adventures.editing.schemas import (
     EntityCreateRequest,
     ExitCreateRequest,
@@ -133,22 +137,7 @@ async def delete_editor_scene(
     )
     await db.delete(scene)
 
-    manifest = deepcopy(adv.original_manifest or {})
-    if (manifest.get("start_scene_id") or "") == scene_id:
-        replacement_scene_res = await db.execute(
-            select(WorldScene.id).where(
-                WorldScene.template_id == template_id,
-                WorldScene.session_id.is_(None),
-                WorldScene.id != scene_id,
-            )
-        )
-        replacement_scene_id = replacement_scene_res.scalars().first()
-        if replacement_scene_id:
-            manifest["start_scene_id"] = replacement_scene_id
-        else:
-            manifest.pop("start_scene_id", None)
-        adv.original_manifest = manifest
-
+    await sync_deleted_scene_manifest(db, adv)
     await db.commit()
     return {"status": "success", "deleted_scene_id": scene_id}
 
@@ -199,8 +188,10 @@ async def create_editor_exit(
         code_to_unlock=code or None,
         item_to_unlock=item or None,
         rule_to_unlock=rule or None,
+        **exit_behavior_values(payload),
     )
     db.add(world_exit)
+    await db.flush()
     if isinstance(adv.original_manifest, dict) and isinstance(
         adv.original_manifest.get("exits"), list
     ):
@@ -218,6 +209,7 @@ async def create_editor_exit(
                 "code_to_unlock": world_exit.code_to_unlock,
                 "item_to_unlock": world_exit.item_to_unlock,
                 "rule_to_unlock": world_exit.rule_to_unlock,
+                **exit_behavior_values(world_exit),
             }
         )
         adv.original_manifest = manifest
@@ -303,35 +295,19 @@ async def create_editor_entity(
     item_type = (
         str(payload.item_type or "").strip().upper() if payload.entity_type == "OBJECT" else None
     )
-    metadata_json = dict(payload.metadata_json or {})
-    if item_type == "SWITCH":
-        switch_config = metadata_json.get("switch") or {}
-        states = switch_config.get("states") or []
-        states_list = [str(s).strip().upper() for s in states if str(s).strip()]
-        if len(states_list) < 2:
-            raise HTTPException(status_code=400, detail="A switch must have at least 2 states.")
-        initial_state = str(switch_config.get("initial_state") or "").strip().upper()
-        if not initial_state:
-            raise HTTPException(
-                status_code=400, detail="An initial state must be defined for the switch."
-            )
-        if initial_state not in states_list:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Initial state '{initial_state}' is not one of the switch states: {', '.join(states_list)}.",
-            )
-        switch_config["states"] = states_list
-        switch_config["initial_state"] = initial_state
-        metadata_json["switch"] = switch_config
+    metadata_json = entity_creation_metadata(payload, item_type)
 
     entity = WorldEntity(
         id=entity_id,
         template_id=template_id,
         session_id=None,
         entity_type=payload.entity_type,
+        gender=payload.gender if payload.entity_type == "NPC" else None,
+        age_years=payload.age_years if payload.entity_type == "NPC" else None,
         name=name,
         description=description,
         current_scene_id=scene_id,
+        spatial_position=clipped_or_none(payload.spatial_position, 255),
         image_url=str(payload.image_url or "").strip() or None,
         item_type=item_type,
         is_hidden=True
@@ -439,6 +415,8 @@ async def clone_editor_entity(
         entity_type=source.entity_type,
         name=source.name,
         description=source.description,
+        gender=source.gender,
+        age_years=source.age_years,
         current_scene_id=source.current_scene_id,
         spatial_position=source.spatial_position,
         image_url=cloned_image_url,

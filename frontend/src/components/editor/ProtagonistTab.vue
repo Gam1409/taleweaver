@@ -2,6 +2,7 @@
 import { ref, watch, computed } from 'vue'
 import { Plus, Trash2, Hammer, Sparkles, HeartPulse, Activity } from 'lucide-vue-next'
 import { formatObjectIds } from '@/utils/editor_utils'
+import CharacterIdentityFields from './CharacterIdentityFields.vue'
 import InlineEditableField from '@/components/editor/InlineEditableField.vue'
 import EntityReferenceCombobox from '@/components/editor/EntityReferenceCombobox.vue'
 import ScriptEditor from '@/components/editor/ScriptEditor.vue'
@@ -505,6 +506,9 @@ function saveEquipmentSlot(slotKey: string, itemId: string) {
             </div>
           </div>
 
+          <CharacterIdentityFields :gender="debugData.protagonist.gender" :age-years="debugData.protagonist.age_years"
+            :disabled="isSavingText" @update:gender="emit('save-field', 'gender', $event)"
+            @update:age-years="emit('save-field', 'age_years', $event)" />
           <div class="grid grid-cols-1 gap-3">
             <div class="space-y-1">
               <span class="text-xs font-black text-slate-500 uppercase tracking-widest px-1">Bio</span>

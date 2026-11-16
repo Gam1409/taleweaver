@@ -1,5 +1,7 @@
 """Language policy for player-facing prose; engine tokens remain canonical."""
 
+from backend.core.narration_contracts import DISPLAY_NAME_IDENTITY
+
 LANGUAGES = {
     "en": "English",
     "de": "German",
@@ -8,6 +10,9 @@ LANGUAGES = {
     "it": "Italian",
     "ja": "Japanese",
     "zh": "Chinese",
+    "zh-hant": "Traditional Chinese",
+    "ar": "Arabic",
+    "ko": "Korean",
     "ru": "Russian",
     "pt": "Portuguese",
 }
@@ -17,14 +22,23 @@ def normalize_language(value: str | None) -> str | None:
     """Accept existing selector names and ISO language codes, including locales."""
     if not value or not value.strip():
         return None
-    token = value.strip().lower()
+    token = value.strip().lower().replace("_", "-")
     if token in LANGUAGES:
         return LANGUAGES[token]
     if token in {name.lower() for name in LANGUAGES.values()}:
         return next(name for name in LANGUAGES.values() if name.lower() == token)
-    base, separator, region = token.replace("_", "-").partition("-")
-    if separator and base in LANGUAGES and region.isalpha() and len(region) in {2, 4}:
-        return LANGUAGES[base]
+    parts = token.split("-")
+    valid_locale = 1 < len(parts) <= 3 and all(
+        part.isalpha() and len(part) in {2, 4} for part in parts[1:]
+    )
+    script = parts[1] if valid_locale else None
+    traditional_chinese = parts[0] == "zh" and (
+        script == "hant" or (script != "hans" and {"tw", "hk", "mo"}.intersection(parts))
+    )
+    if valid_locale and traditional_chinese:
+        return "Traditional Chinese"
+    if valid_locale and parts[0] in LANGUAGES:
+        return LANGUAGES[parts[0]]
     raise ValueError("Unsupported content language.")
 
 
@@ -50,5 +64,8 @@ def prose_language_instruction(language: str, fields: str = "narration and dialo
         "Preserve the required output format. Never translate JSON keys, IDs, references, "
         "enum values, status-effect tokens (e.g. Poisoned), slash commands, command target IDs, "
         "scripts, expressions, unlock codes, voice tags (e.g. [curious]) or speaker identifiers. "
-        "Keep existing entity names consistent with the supplied world; do not rename entities."
+        "Keep existing entity names consistent with the supplied world; do not rename entities. "
+        + DISPLAY_NAME_IDENTITY
+        + " Translate ordinary descriptive words into the chosen content language; "
+        "preserving names and machine tokens does not exempt unrelated scene words."
     )

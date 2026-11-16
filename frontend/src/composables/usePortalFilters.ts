@@ -51,6 +51,7 @@ export function formatCatalogLabel(val?: unknown): string {
 
   const cleaned = text.replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim()
   if (!cleaned) return ''
+  if (['modern shonen anime', 'shonen anime'].includes(cleaned.toLowerCase())) return 'Anime'
   return cleaned.replace(/\b\w/g, (ch) => ch.toUpperCase())
 }
 

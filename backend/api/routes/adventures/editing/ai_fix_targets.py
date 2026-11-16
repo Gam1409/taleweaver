@@ -6,6 +6,7 @@ from typing import Any, Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.engine.authoring_completion import CHARACTER_FIELDS, WEARABLE_FIELDS
 from backend.models.world_entity import WorldEntity, WorldExit, WorldScene
 
 logger = logging.getLogger(__name__)
@@ -130,9 +131,9 @@ def _allowed_fields_for(target_type: str) -> frozenset[str]:
     return {
         "scene": _FIX_SCENE_FIELDS,
         "exit": _FIX_EXIT_FIELDS,
-        "npc": _FIX_NPC_FIELDS,
-        "object": _FIX_OBJECT_FIELDS,
-        "protagonist": _FIX_PROTAGONIST_FIELDS,
+        "npc": _FIX_NPC_FIELDS | CHARACTER_FIELDS,
+        "object": _FIX_OBJECT_FIELDS | WEARABLE_FIELDS,
+        "protagonist": _FIX_PROTAGONIST_FIELDS | (CHARACTER_FIELDS - {"personality_profile"}),
         "adventure": _FIX_ADVENTURE_FIELDS,
     }.get(target_type, frozenset())
 

@@ -1,5 +1,7 @@
 """Ownership and message-version checks for manual VN illustrations."""
 
+from typing import cast
+
 from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -43,16 +45,25 @@ async def owned_context(
 def illustration_status(state: SessionState, message: ChatMessage) -> dict:
     registry = registry_of(state.entity_states)
     snapshot = registry["snapshots"].get(message.id) or {}
-    image = registry["images"].get(message.id) or {}
+    image = getattr(message, "illustration", None)
+    if not isinstance(image, dict) or not image:
+        image = registry["images"].get(message.id) or {}
+    if not isinstance(image, dict):
+        image = {}
     digest = content_hash(message)
     available = snapshot.get("content_hash") == digest
     return {
         "message_id": message.id,
+        "plan_enabled": True,
+        "staging_status": (snapshot.get("visible_facts") or {}).get("staging_status"),
         "available": available,
         "reason": None
         if available
         else "No matching visual snapshot remains for this message. New narrator turns keep the latest 100 snapshots.",
         "image_url": image.get("image_url") if image.get("content_hash") == digest else None,
+        "generation_details": image.get("generation_details")
+        if image.get("content_hash") == digest
+        else None,
         "snapshot_source": "message_time" if available else None,
     }
 
@@ -61,4 +72,16 @@ def require_snapshot(state: SessionState, message: ChatMessage) -> dict:
     status = illustration_status(state, message)
     if not status["available"]:
         raise HTTPException(409, status["reason"])
-    return registry_of(state.entity_states)["snapshots"][message.id]
+    return cast(dict, registry_of(state.entity_states)["snapshots"][message.id])
+
+
+async def plan_enabled(db: AsyncSession, state: SessionState) -> bool:
+    """Match the story policy used by image settings without requiring a provider."""
+    from backend.engine.nsfw.settings import nsfw_settings
+    from backend.models.adventure_template import AdventureTemplate
+
+    snapshot = (state.entity_states or {}).get("__manifest_snapshot__")
+    if isinstance(snapshot, dict) and snapshot:
+        return not nsfw_settings(snapshot.get("original_manifest"))["enabled"]
+    template = await db.get(AdventureTemplate, state.template_id) if state.template_id else None
+    return not nsfw_settings(getattr(template, "original_manifest", None))["enabled"]

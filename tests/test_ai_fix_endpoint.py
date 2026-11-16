@@ -105,7 +105,7 @@ def test_default_ai_fix_suggest_timeout_is_generous():
     Regression guard: bumping the default back to a too-aggressive value would
     re-trigger the timeout cascade users were hitting.
     """
-    assert app_settings.AI_FIX_SUGGEST_TIMEOUT_SECONDS >= 60.0
+    assert app_settings.AI_FIX_SUGGEST_TIMEOUT_SECONDS is None
 
 
 @pytest.fixture
@@ -948,6 +948,7 @@ async def test_apply_fix_evicts_cache(client, setup_test_db, monkeypatch):
         username="fix_user_evict",
         hashed_password="x",
         role="admin",
+        llm_settings={"complex_model_provider": "openai", "complex_model": "gpt-4o"},
     )
     async with TestSessionLocal() as db:
         db.add(user)
@@ -1683,4 +1684,6 @@ async def test_apply_fix_removes_finding_from_persisted_validation_run(client, s
         assert persisted_run is not None
         assert len(persisted_run.ai_findings) == 1
         assert persisted_run.ai_findings[0]["code"] == "plot_hole"
-        assert persisted_run.warning_count == 1
+        assert persisted_run.warning_count == 1 + sum(
+            finding["severity"] == "warn" for finding in persisted_run.structural_findings
+        )

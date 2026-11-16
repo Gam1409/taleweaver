@@ -5,22 +5,26 @@ import logging
 import os
 from copy import deepcopy
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any, Optional, cast
 from uuid import uuid4
 
 from fastapi import HTTPException
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.api.routes.adventures.logic import AdventureLogic
 from backend.api.routes.adventures.schemas import CreateAdventureTemplatePayload
+from backend.api.routes.adventures.session_asset_access import build_asset_copy_cache
 from backend.api.routes.adventures.session_materializer import (
     copy_data_asset_to_session,
     materialize_initial_session_from_template,
 )
+from backend.api.routes.adventures.session_start_avatar import resolve_start_avatar
 from backend.core.config import settings
 from backend.core.game_modes import mode_policy, normalize_vn_template
+from backend.engine.chpm.template_settings import initial_states as personality_initial_states
 from backend.engine.clothing.settings import with_clothing_settings
+from backend.engine.gameplay.world import AdventureLogic
+from backend.engine.generation_bounds import GenerationBounds
 from backend.engine.generation_control import (
     assert_generation_current,
     generation_run,
@@ -28,7 +32,12 @@ from backend.engine.generation_control import (
     register_generation,
     unregister_generation,
 )
+from backend.engine.living_world.template_settings import (
+    initial_state,
+    stored_defaults,
+)
 from backend.engine.npc_cards.settings import creation_manifest
+from backend.engine.nsfw.settings import with_nsfw_settings
 from backend.engine.world_generator import WorldGenerator, is_image_moderation_error
 from backend.models.adventure_template import AdventureTemplate, GenerationCancelled
 from backend.models.avatar import Avatar
@@ -122,7 +131,8 @@ def _pacing_minutes(payload: CreateAdventureTemplatePayload) -> Optional[int]:
     """Backward compatibility for older pacing configs."""
     pacing_minutes = payload.pacing_minutes or payload.time_per_turn
     if payload.pacing and isinstance(payload.pacing, dict):
-        return payload.pacing.get("minutes_per_turn", pacing_minutes)
+        value = payload.pacing.get("minutes_per_turn", pacing_minutes)
+        return int(value) if value is not None else None
     return pacing_minutes
 
 
@@ -134,6 +144,12 @@ def build_template(
         id=template_id,
         owner_id=owner_id,
         title=payload.title,
+        living_world_settings=stored_defaults(payload.living_world_settings),
+        npc_personality_settings=(
+            payload.npc_personality_settings.model_dump(mode="json")
+            if payload.npc_personality_settings
+            else None
+        ),
         original_prompt=payload.original_prompt,
         strict_rules=policy.mechanics,
         rule_enforcement_mode=payload.rule_enforcement_mode or "rpg",
@@ -170,9 +186,13 @@ def build_template(
         npcs_can_damage_protagonist=payload.npcs_can_damage_protagonist,
         is_ready=bool(payload.skip_generation),
         creation_status="Ready" if payload.skip_generation else "Initializing...",
-        original_manifest=with_clothing_settings(
-            creation_manifest(payload.original_manifest, payload.show_npc_state),
-            payload.detailed_clothing,
+        original_manifest=with_nsfw_settings(
+            with_clothing_settings(
+                creation_manifest(payload.original_manifest, payload.show_npc_state),
+                payload.detailed_clothing,
+            ),
+            payload.nsfw_enabled,
+            payload.nsfw_level or "hard",
         ),
         teaser=payload.teaser,
         version=payload.version,
@@ -186,6 +206,11 @@ def build_template(
     )
 
     normalize_vn_template(template)
+    if payload.world_brief:
+        template.original_manifest = {
+            **(template.original_manifest or {}),
+            "world_brief": payload.world_brief.model_dump(),
+        }
     return template
 
 
@@ -214,13 +239,14 @@ def _build_session_state(
 ) -> SessionState:
     return SessionState(
         session_id=session.id,
+        living_world=initial_state(adv),
         user_id=user_id,
         template_id=adv.id,
         avatar_id=avatar.id,
         current_scene_id="START",
         in_game_time=0,
         quests=deepcopy(adv.quests or []),
-        entity_states=entity_states,
+        entity_states=personality_initial_states(adv, entity_states),
         start_datetime=AdventureLogic.resolve_start_datetime(
             adv.original_manifest, time_config=adv.time_config
         ),
@@ -241,7 +267,7 @@ async def _create_initial_session_state(
     db: AsyncSession, adv: AdventureTemplate, session: GameSession, avatar: Avatar, user_id: str
 ) -> None:
     """Snapshot the template manifest and asset mapping for the newly created session."""
-    asset_cache: dict[str, str] = {}
+    asset_cache = await build_asset_copy_cache(db, user_id)
     copied_cover = copy_data_asset_to_session(session.id, "cover", adv.image_url, asset_cache)
     copied_protagonist = copy_data_asset_to_session(
         session.id, "protagonist", avatar.profile_image, asset_cache
@@ -271,6 +297,13 @@ async def create_adventure_records(
     db: AsyncSession, payload: CreateAdventureTemplatePayload, user: User
 ) -> CreatedAdventure:
     """Create template, protagonist, first session and session state (committed)."""
+    from backend.engine.blueprint import BlueprintError
+    from backend.engine.blueprint.generation import prepare_generation_blueprint
+
+    try:
+        prepare_generation_blueprint(payload.original_prompt or "", payload.model_dump())
+    except BlueprintError as exc:
+        raise HTTPException(422, str(exc)) from exc
     await ensure_no_active_generation(db, user.id)
     cover = await resolve_cover_source(db, payload, user.id)
     template_id = payload.id or generate_adventure_id(payload.title)
@@ -293,10 +326,14 @@ async def create_adventure_records(
     db.add(avatar)
     await db.flush()  # Ensure avatar.id is available
 
+    session_avatar = await resolve_start_avatar(db, template_id, user, adv)
+    db.add(session_avatar)
+    await db.flush()
+
     session = GameSession(
         id=generate_session_id(payload.title),
         user_id=user.id,
-        avatar_id=avatar.id,
+        avatar_id=session_avatar.id,
         template_id=template_id,
         adventure_title=payload.title,
         status="active",
@@ -319,7 +356,7 @@ async def create_adventure_records(
             "cover_name": cover.name,
             "cover_source_id": cover.adventure_id,
         }
-    await _create_initial_session_state(db, adv, session, avatar, user.id)
+    await _create_initial_session_state(db, adv, session, session_avatar, user.id)
     await db.commit()
     return CreatedAdventure(template=adv, avatar=avatar, session=session, cover=cover)
 
@@ -343,7 +380,7 @@ def _count_objects_of_type(objects: list[Any], item_type: str) -> int:
 
 def effective_generation_bounds(
     payload: CreateAdventureTemplatePayload, cover_manifest: Optional[dict[str, Any]]
-) -> dict[str, Optional[int]]:
+) -> GenerationBounds:
     """Min/max bounds per category for the world generator.
 
     In cover mode, a category left on "auto" (min=None, max=None) gets tight
@@ -357,7 +394,7 @@ def effective_generation_bounds(
         for edge in ("min", "max")
     }
     if not cover_manifest:
-        return bounds
+        return cast(GenerationBounds, bounds)
 
     objects = cover_manifest.get("objects") or []
     policy = mode_policy(payload.rule_enforcement_mode)
@@ -391,7 +428,7 @@ def effective_generation_bounds(
         is_auto = bounds[f"min_{cat}"] is None and bounds[f"max_{cat}"] is None
         if enabled and is_auto and src_count > 0:
             bounds[f"min_{cat}"], bounds[f"max_{cat}"] = _cover_bounds(src_count, hard_min)
-    return bounds
+    return cast(GenerationBounds, bounds)
 
 
 @dataclass
@@ -411,6 +448,8 @@ async def _load_template(db: AsyncSession, template_id: str) -> Optional[Adventu
 
 
 async def _generate_world(db: AsyncSession, user: Optional[User], job: GenerationJob) -> None:
+    if user is None:
+        raise ValueError("Adventure owner no longer exists.")
     payload = job.payload
     policy = mode_policy(payload.rule_enforcement_mode)
     await WorldGenerator.generate_world(
@@ -434,6 +473,7 @@ async def _generate_world(db: AsyncSession, user: Optional[User], job: Generatio
         can_damage_npcs=payload.can_damage_npcs,
         npcs_can_damage_protagonist=payload.npcs_can_damage_protagonist,
         selected_image_styles=job.selected_image_styles,
+        selected_tone=payload.selected_tone,
         language=payload.language,
         cover_source_manifest=job.cover.manifest,
         cover_source_adventure_id=job.cover.adventure_id,
@@ -462,6 +502,8 @@ async def _record_generation_failure(db: AsyncSession, template_id: str, exc: Ex
 
 async def _generate_and_finalize(db: AsyncSession, job: GenerationJob) -> None:
     user = (await db.execute(select(User).where(User.id == job.user_id))).scalars().first()
+    if user is None:
+        raise ValueError("Adventure owner no longer exists.")
 
     adv = await _load_template(db, job.template_id)
     if adv:

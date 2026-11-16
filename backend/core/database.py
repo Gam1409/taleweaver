@@ -1,11 +1,17 @@
 import logging
+from collections.abc import AsyncIterator
 
+from anyio import CancelScope
 from sqlalchemy import event
+from sqlalchemy.engine.interfaces import DBAPIConnection
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import ConnectionPoolEntry
 
 from backend.core.config import settings
+from backend.utils.sqlite_text import install as install_unicode_search
 
 logger = logging.getLogger(__name__)
+install_unicode_search()
 
 # Create the async engine
 engine = create_async_engine(
@@ -19,13 +25,16 @@ engine = create_async_engine(
 if settings.DATABASE_URL.startswith("sqlite"):
 
     @event.listens_for(engine.sync_engine, "connect")
-    def _set_sqlite_pragmas(dbapi_connection, _connection_record):
+    def _set_sqlite_pragmas(
+        dbapi_connection: DBAPIConnection, _connection_record: ConnectionPoolEntry
+    ) -> None:
         """Reduce lock contention for concurrent background writes + status polling."""
         cursor = dbapi_connection.cursor()
         try:
             cursor.execute("PRAGMA journal_mode=WAL")
             cursor.execute("PRAGMA busy_timeout=30000")
             cursor.execute("PRAGMA synchronous=NORMAL")
+            cursor.execute("PRAGMA foreign_keys=ON")
         finally:
             cursor.close()
 
@@ -35,12 +44,14 @@ AsyncSessionLocal = async_sessionmaker(engine, class_=AsyncSession, expire_on_co
 
 
 # Dependency to get session
-async def get_db():
+async def get_db() -> AsyncIterator[AsyncSession]:
     async with AsyncSessionLocal() as session:
         try:
             yield session
         finally:
-            await session.close()
+            # AnyIO cancellation repeats at each await; let rollback/close finish.
+            with CancelScope(shield=True):
+                await session.close()
 
 
 def run_db_migrations() -> None:
@@ -54,11 +65,13 @@ def run_db_migrations() -> None:
     project_root = Path(__file__).resolve().parent.parent.parent
     alembic_ini = project_root / "alembic.ini"
     if not alembic_ini.exists():
-        logger.warning("alembic.ini not found at %s. Skipping auto-migration.", alembic_ini)
-        return
+        raise RuntimeError(f"Required migration configuration is missing: {alembic_ini}")
 
     logger.info("Applying Alembic migrations (head)...")
     alembic_cfg = Config(str(alembic_ini))
+    alembic_cfg.set_main_option("script_location", str(project_root / "alembic"))
+    # Embedded migrations must preserve Uvicorn and application error/debug logging.
+    alembic_cfg.attributes["configure_logger"] = False
     command.upgrade(alembic_cfg, "head")
     logger.info("Alembic migrations completed successfully.")
 

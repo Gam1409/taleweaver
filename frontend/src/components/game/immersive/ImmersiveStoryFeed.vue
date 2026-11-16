@@ -138,6 +138,7 @@ function isLatestExchange(exIdx: number): boolean {
           v-if="props.mode === 'vn' && props.gameId && exchange.assistantMessage?.id"
           :session-id="props.gameId"
           :message-id="exchange.assistantMessage.id"
+          :message-content="exchange.assistantMessage.content"
           :can-generate="!props.isEvaluating && exchange.assistantMessage.id === latestAssistantId"
         />
         </div>

@@ -40,6 +40,7 @@ INSULT = {
     "effects": [{"target": "target", "stat": "charisma", "amount": "-2"}],
 }
 NPC_META = {
+    "personality_profile": {"trust": "cautious", "value": "knowledge"},
     "special_actions": [INSULT],
     "attack_mode": "ATTACK_ON_SIGHT",
     "attack_trigger": {"required_item_id": "IDOL", "guard_expression": "tw.player.hp > 0"},
@@ -63,6 +64,8 @@ async def _seed(db) -> User:
                 user_id=user.id,
                 template_id=SOURCE_ID,
                 name="Mage",
+                gender="female",
+                age_years=28,
                 hp=80,
                 max_hp=80,
                 stats={"special_actions": [FIREBALL], "unlocked_actions": []},
@@ -73,6 +76,8 @@ async def _seed(db) -> User:
                 template_id=SOURCE_ID,
                 entity_type="NPC",
                 name="Troll",
+                gender="male",
+                age_years=135,
                 description="Big.",
                 current_scene_id="CAVE",
                 hp=40,
@@ -128,6 +133,8 @@ async def test_combat_data_survives_export_and_import(auth_client, setup_test_db
             .first()
         )
 
+        assert (avatar.gender, avatar.age_years) == ("female", 28)
+        assert (troll.gender, troll.age_years) == ("male", 135)
         fireball = avatar.stats["special_actions"][0]
         assert fireball["unlock_required_item_id"] == "TOME"
         assert fireball["unlock_guard_expression"] == "tw.vars.get('studied') == True"
@@ -135,6 +142,7 @@ async def test_combat_data_survives_export_and_import(auth_client, setup_test_db
         assert avatar.stats["unlocked_actions"] == []  # locked specials stay locked
 
         meta = troll.metadata_json
+        assert meta["personality_profile"] == NPC_META["personality_profile"]
         assert meta["special_actions"][0]["id"] == "INSULT"
         assert meta["attack_mode"] == "ATTACK_ON_SIGHT"
         assert meta["attack_trigger"] == NPC_META["attack_trigger"]

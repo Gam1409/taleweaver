@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import ResponseActions from '@/components/game/ResponseActions.vue'
+import NarrationCorrectionButton from '@/components/game/NarrationCorrectionButton.vue'
 
 const props = defineProps<{
   activeActionId?: string | null
   mode?: string
   disabled?: boolean
   suggestions?: string[]
+  gameId?: string
 }>()
 
 const visibleSuggestions = computed(() => {
@@ -33,6 +36,7 @@ const emit = defineEmits<{
       <i class="ra ra-light-bulb text-amber-400 text-base transition-transform duration-300 group-hover:scale-110"></i>
     </button>
 
+    <NarrationCorrectionButton :game-id="gameId" />
     <div class="flex items-center gap-2 overflow-x-auto no-scrollbar flex-grow">
       <button
         v-for="(suggestion, idx) in visibleSuggestions"
@@ -51,6 +55,7 @@ const emit = defineEmits<{
         <span class="max-w-[22rem] truncate">{{ suggestion }}</span>
       </button>
     </div>
+    <ResponseActions :game-id="props.gameId" :disabled="props.disabled" />
   </div>
 </template>
 

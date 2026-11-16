@@ -1,10 +1,13 @@
 import { ref, computed, watch, type Ref } from 'vue'
 import DOMPurify from 'dompurify'
+import { resolveNpc, resolveNpcMetadata } from '@/utils/npcIdentity'
 import type { ChatMessage } from '@/types'
+import { visibleChatMessages } from '@/utils/storyMessages'
 import { buildComicPages, type ComicTurn, type DialogueSegment } from './comicPages'
-import { knownSpeakerNames, normalizeVoiceTag, parseComicDialogue, resolveSpeakerAlias } from './comicDialogue'
+import { cachedComicDialogue, knownSpeakerNames, normalizeVoiceTag, parseComicDialogue } from './comicDialogue'
 
 export { normalizeVoiceTag } from './comicDialogue'
+export { resolveNpc, resolveNpcMetadata } from '@/utils/npcIdentity'
 
 export type { ComicExchange, ComicTurn, DialogueSegment } from './comicPages'
 
@@ -13,60 +16,6 @@ export interface UseComicTurnsOptions {
   entities: Ref<any[]>
   npcMetadata: Ref<Record<string, any>>
   sheet: Ref<any>
-}
-
-export function resolveNpcMetadata(nameOrId: string, metadataMap?: Record<string, any>) {
-  if (!nameOrId || !metadataMap) return null
-  const norm = String(nameOrId).trim().toLowerCase()
-  if (metadataMap[nameOrId]) return metadataMap[nameOrId]
-  if (metadataMap[norm]) return metadataMap[norm]
-  for (const [k, v] of Object.entries(metadataMap)) {
-    if (k.toLowerCase() === norm || (v as any)?.name?.toLowerCase() === norm || (v as any)?.id?.toLowerCase() === norm) {
-      return v
-    }
-  }
-  return null
-}
-
-export function resolveNpc(name: string, entities: any[] = [], metadataMap?: Record<string, any>) {
-  if (!name) return null
-  const norm = name.trim().toLowerCase()
-  let foundEntity = (entities || []).find(
-    (e) => e.entity_type === 'NPC' && (e.name?.toLowerCase() === norm || e.id?.toLowerCase() === norm)
-  ) || (entities || []).find(
-    (e) => e.name?.toLowerCase() === norm || e.id?.toLowerCase() === norm
-  )
-
-  if (!foundEntity) foundEntity = resolveSpeakerAlias(name, entities)
-
-  if (!foundEntity) {
-    foundEntity = (entities || []).find(
-      (e) => e.name && (e.name.toLowerCase().startsWith(norm) || norm.startsWith(e.name.toLowerCase()))
-    )
-  }
-
-  const meta = resolveNpcMetadata(name, metadataMap) || (foundEntity ? resolveNpcMetadata(foundEntity.id, metadataMap) || resolveNpcMetadata(foundEntity.name, metadataMap) : null)
-
-  if (foundEntity || meta) {
-    return {
-      id: foundEntity?.id || meta?.id || norm,
-      entity_type: foundEntity?.entity_type || meta?.entity_type || 'NPC',
-      name: foundEntity?.name || meta?.name || name,
-      description: foundEntity?.description || meta?.description || meta?.backstory || 'A character in this adventure.',
-      image_url: foundEntity?.image_url || meta?.image_url || null,
-      role: foundEntity?.role || meta?.role || null,
-      hp: foundEntity?.hp != null ? foundEntity.hp : meta?.hp != null ? meta.hp : 100,
-      max_hp: foundEntity?.max_hp != null ? foundEntity.max_hp : meta?.max_hp != null ? meta.max_hp : 100,
-      stamina: foundEntity?.stamina != null ? foundEntity.stamina : meta?.stamina != null ? meta.stamina : 50,
-      max_stamina: foundEntity?.max_stamina != null ? foundEntity.max_stamina : meta?.max_stamina != null ? meta.max_stamina : 50,
-      mana: foundEntity?.mana != null ? foundEntity.mana : meta?.mana != null ? meta.mana : 50,
-      max_mana: foundEntity?.max_mana != null ? foundEntity.max_mana : meta?.max_mana != null ? meta.max_mana : 50,
-      inventory: Array.isArray(foundEntity?.inventory) ? foundEntity.inventory : Array.isArray(meta?.inventory) ? meta.inventory : [],
-      stat_modifiers: foundEntity?.stat_modifiers || meta?.stat_modifiers || {},
-      metadata_json: foundEntity?.metadata_json || meta?.metadata_json || {},
-    }
-  }
-  return null
 }
 
 export function parseUserMessage(
@@ -167,8 +116,12 @@ export function parseAssistantContent(
   })
 }
 
-export function renderFormattedHtml(text: string): string {
+const formattedReplies = new WeakMap<object, { text: string; html: string }>()
+
+export function renderFormattedHtml(text: string, message?: object): string {
   if (!text) return ''
+  const previous = message && formattedReplies.get(message)
+  if (previous?.text === text) return previous.html
   const escaped = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
   const withVoiceTags = escaped.replace(/(\[[^\]\n]+\])/g, (match, tag) => {
     const raw = tag.slice(1, -1).trim()
@@ -179,21 +132,35 @@ export function renderFormattedHtml(text: string): string {
   const withBolds = withVoiceTags.replace(/\*\*(.*?)\*\*/g, '<strong class="text-amber-200 font-bold">$1</strong>')
   const withObjectIds = withBolds.replace(/##([A-Za-z0-9_-]+)/g, '<span class="comic-object-tag">$1</span>')
 
-  return DOMPurify.sanitize(withObjectIds, {
+  const html = DOMPurify.sanitize(withObjectIds, {
     ALLOWED_TAGS: ['span', 'strong', 'em', 'br', 'div'],
     ALLOWED_ATTR: ['class'],
   })
+  if (message) formattedReplies.set(message, { text, html })
+  return html
 }
 
 export function useComicTurns(options: UseComicTurnsOptions) {
   const { messages, entities, npcMetadata, sheet } = options
   const viewingTurnIndex = ref<number | null>(null)
 
+  // Rebuild only when identity/portrait context changes, not on each token.
+  const dialogueParser = computed(() => {
+    const cast = (entities.value || []).map(entity => ({ ...entity }))
+    const metadata = Object.fromEntries(Object.entries(npcMetadata.value || {})
+      .map(([key, value]) => [key, { ...value }]))
+    return cachedComicDialogue({
+      playerName: sheet.value?.name,
+      playerAvatar: sheet.value?.profile_image,
+      knownNames: knownSpeakerNames(sheet.value?.name, cast, metadata),
+      resolveSpeaker: name => resolveNpc(name, cast, metadata),
+    })
+  })
+
   const gameTurns = computed<ComicTurn[]>(() =>
-    buildComicPages(messages.value || [], {
+    buildComicPages(visibleChatMessages(messages.value || [], Boolean(sheet.value?.is_debug_enabled ?? sheet.value?.debug_mode)), {
       parseUser: (msg) => parseUserMessage(msg, entities.value, npcMetadata.value),
-      parseAssistant: (content) =>
-        parseAssistantContent(content, sheet.value, entities.value, npcMetadata.value),
+      parseAssistant: dialogueParser.value,
     })
   )
 

@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import ItemImagePlaceholder from '@/components/game/ItemImagePlaceholder.vue'
+import { computed, ref } from 'vue'
 import { Footprints, Lock } from 'lucide-vue-next'
 import type { CharacterSheet, CombatState, InventoryItem, NormalizedSpecialAttack } from '@/types'
-import { getImageUrl, getItemIcon, getTypeColor, hasRenderableImagePath } from '@/utils/game_icons'
+import { getImageUrl, hasRenderableImagePath } from '@/utils/game_icons'
 import {
   CATEGORY_META,
   checkLabel,
@@ -10,6 +11,8 @@ import {
   describeEffects,
   normalizeSpecialAttack,
 } from '@/utils/specialAttacks'
+
+const failedImages = ref<Record<string, boolean>>({})
 
 const props = defineProps<{
   combat: CombatState
@@ -166,8 +169,8 @@ const restHighlighted = computed(() => resources.value.stamina < weapon.value.co
           @mouseleave="emit('leave')"
         >
           <span class="w-6 h-6 rounded overflow-hidden border border-cyan-500/30 bg-slate-950 flex items-center justify-center shrink-0">
-            <img v-if="hasRenderableImagePath(item.image_url as string)" :src="getImageUrl(item.image_url as string)" class="w-full h-full object-cover" :alt="item.name">
-            <i v-else :class="['ra text-xs', getItemIcon(item.item_type), getTypeColor(item.item_type)]"></i>
+            <img v-if="hasRenderableImagePath(item.image_url as string) && !failedImages[item.image_url as string]" :src="getImageUrl(item.image_url as string)" class="w-full h-full object-cover" :alt="item.name" @error="failedImages[item.image_url as string] = true">
+            <ItemImagePlaceholder v-else />
           </span>
           <span class="text-xs font-bold text-cyan-100 truncate max-w-24">{{ item.name }}</span>
         </button>

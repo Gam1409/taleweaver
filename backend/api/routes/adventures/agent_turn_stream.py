@@ -6,19 +6,23 @@ import asyncio
 import json
 import logging
 from collections.abc import AsyncGenerator
+from contextlib import AsyncExitStack, aclosing
 from typing import Any
 
 from fastapi import HTTPException
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.api.routes.adventures.agent_actions import execute_agent_action
 from backend.api.routes.adventures.agent_combat import decide_combat_turn
-from backend.api.routes.adventures.agent_logic import AgentService
-from backend.api.routes.adventures.agent_settings import build_agent_snapshot
-from backend.api.routes.adventures.gameplay_logic import GameTurnManager
-from backend.api.routes.adventures.logic import AdventureLogic
 from backend.core import database as core_database
+from backend.engine.gameplay.agent_actions import execute_agent_action
+from backend.engine.gameplay.agent_logic import AgentDecision, AgentService
+from backend.engine.gameplay.agent_settings import build_agent_snapshot
+from backend.engine.gameplay.manager import GameTurnManager
+from backend.engine.gameplay.world import AdventureLogic
+from backend.engine.memory_rag.scheduling import scheduler
+from backend.engine.visual_novel.concurrency import SessionLease, session_write_lease
 from backend.models.chat import ChatMessage
 from backend.models.user import User
 
@@ -36,14 +40,16 @@ async def ensure_agent_active(game_id: str, current_user: User) -> None:
     # Resolved at call time: tests swap the session factory on the database module.
     async with core_database.AsyncSessionLocal() as db:
         manager = GameTurnManager(db, game_id, current_user)
-        if not await manager.initialize():
+        if not await manager.initialize() or manager.state is None:
             raise HTTPException(status_code=404, detail="Game session not found.")
         agent_state = AgentService.get_agent_state(manager.state)
         if not agent_state.get("active", False):
             raise HTTPException(status_code=400, detail="Agent is not enabled for this session.")
 
 
-async def _decide(db, game_id: str, current_user: User, manager: GameTurnManager):
+async def _decide(
+    db: AsyncSession, game_id: str, current_user: User, manager: GameTurnManager
+) -> tuple[AgentDecision | None, bool]:
     """Returns (decision or None, whether the decision call failed).
 
     Fights and loot phases are played by the deterministic combat tactician.
@@ -51,6 +57,8 @@ async def _decide(db, game_id: str, current_user: User, manager: GameTurnManager
     try:
         if manager._has_combat_phase():
             return await decide_combat_turn(manager), False
+        if manager.state is None or manager.avatar is None or manager.adventure is None:
+            raise RuntimeError("Agent requires an initialized game session.")
         decision = await AgentService.get_decision(
             db, game_id, current_user, manager.state, manager.avatar, manager.adventure, manager
         )
@@ -64,7 +72,7 @@ async def _decide(db, game_id: str, current_user: User, manager: GameTurnManager
     return decision, False
 
 
-def _issue_description(decision: Any, decision_failed: bool) -> str:
+def _issue_description(decision: AgentDecision | None, decision_failed: bool) -> str:
     if decision:
         return decision.issue_description
     if decision_failed:
@@ -72,7 +80,7 @@ def _issue_description(decision: Any, decision_failed: bool) -> str:
     return "Agent did not return a valid decision."
 
 
-async def _recent_history_summary(db, game_id: str) -> str:
+async def _recent_history_summary(db: AsyncSession, game_id: str) -> str:
     hist_res = await db.execute(
         select(ChatMessage)
         .where(ChatMessage.session_id == game_id)
@@ -84,10 +92,16 @@ async def _recent_history_summary(db, game_id: str) -> str:
 
 
 async def _agent_issue_events(
-    db, game_id: str, manager: GameTurnManager, decision: Any, decision_failed: bool
+    db: AsyncSession,
+    game_id: str,
+    manager: GameTurnManager,
+    decision: AgentDecision | None,
+    decision_failed: bool,
 ) -> AsyncGenerator[str, None]:
     """Logs a stuck/failed agent turn, counts the failure, and ends the turn."""
     state = manager.state
+    if state is None:
+        raise RuntimeError("Agent requires an initialized game session.")
     description = _issue_description(decision, decision_failed)
     thoughts = decision.thoughts if decision else "Failed to get decision thoughts."
     action = decision.action if decision else "None"
@@ -105,8 +119,12 @@ async def _agent_issue_events(
     yield await _final_event(db, manager)
 
 
-async def _final_event(db, manager: GameTurnManager) -> str:
+async def _final_event(db: AsyncSession, manager: GameTurnManager) -> str:
     state = manager.state
+    if state is None:
+        raise RuntimeError("Agent requires an initialized game session.")
+    if manager.avatar is None:
+        raise RuntimeError("Agent requires an initialized avatar.")
     final_data = jsonable_encoder(
         {
             "sheet": await AdventureLogic.build_sheet_snapshot(manager.avatar, state, db),
@@ -123,7 +141,7 @@ async def _final_event(db, manager: GameTurnManager) -> str:
 
 
 async def _agent_action_events(
-    db, manager: GameTurnManager, decision: Any
+    db: AsyncSession, manager: GameTurnManager, decision: AgentDecision, lease: SessionLease
 ) -> AsyncGenerator[str, None]:
     """Announces the agent's decision and plays it as a regular turn."""
     yield _sse("thought", {"content": decision.thoughts})
@@ -133,6 +151,8 @@ async def _agent_action_events(
     yield _sse("player_action", {"content": decision.action})
     yield _sse("status", {"content": f"Agent decides: {decision.action}"})
 
+    if manager.state is None:
+        raise RuntimeError("Agent requires an initialized game session.")
     AgentService.reset_failures(manager.state)
     await db.commit()
 
@@ -146,8 +166,11 @@ async def _agent_action_events(
         return
 
     try:
-        async for chunk in manager.process_turn(outcome.turn_command):
-            yield chunk
+        async with aclosing(
+            manager.process_turn(outcome.turn_command, session_lease=lease)
+        ) as stream:
+            async for chunk in stream:
+                yield chunk
     except asyncio.CancelledError:
         logger.info("Agent turn stream cancelled during gameplay process_turn.")
         await db.rollback()
@@ -157,12 +180,16 @@ async def _agent_action_events(
         yield event
 
 
-async def _agent_finish_events(db, manager: GameTurnManager) -> AsyncGenerator[str, None]:
+async def _agent_finish_events(
+    db: AsyncSession, manager: GameTurnManager
+) -> AsyncGenerator[str, None]:
     """Deactivates the agent once the adventure has been won or lost."""
     flags = manager._build_terminal_flags_payload()
     if not (flags.get("game_over") or flags.get("game_completed")):
         return
 
+    if manager.state is None:
+        raise RuntimeError("Agent requires an initialized game session.")
     AgentService.set_agent_active(manager.state, False)
     await db.commit()
     outcome = "lost" if flags.get("game_over") else "won"
@@ -172,7 +199,23 @@ async def _agent_finish_events(db, manager: GameTurnManager) -> AsyncGenerator[s
     yield _sse("agent_state", build_agent_snapshot(manager.state))
 
 
-async def stream_agent_turn(game_id: str, current_user: User) -> AsyncGenerator[str, None]:
+async def stream_agent_turn(
+    game_id: str, current_user: User, *, lease: SessionLease | None = None
+) -> AsyncGenerator[str, None]:
+    """Hold the same lease through decisions, direct actions, narration and final writes."""
+    async with AsyncExitStack() as stack:
+        owned = stack.enter_context(session_write_lease(game_id, lease=lease))
+        await stack.enter_async_context(scheduler.foreground())
+        stream = await stack.enter_async_context(
+            aclosing(_stream_owned_turn(game_id, current_user, owned))
+        )
+        async for event in stream:
+            yield event
+
+
+async def _stream_owned_turn(
+    game_id: str, current_user: User, lease: SessionLease
+) -> AsyncGenerator[str, None]:
     yield _sse("status", {"content": "Agent is thinking..."})
 
     async with core_database.AsyncSessionLocal() as db:
@@ -183,9 +226,10 @@ async def stream_agent_turn(game_id: str, current_user: User) -> AsyncGenerator[
             if not decision or decision.is_stuck_or_bug:
                 events = _agent_issue_events(db, game_id, manager, decision, decision_failed)
             else:
-                events = _agent_action_events(db, manager, decision)
-            async for event in events:
-                yield event
+                events = _agent_action_events(db, manager, decision, lease)
+            async with aclosing(events):
+                async for event in events:
+                    yield event
         except asyncio.CancelledError:
             logger.info("Agent turn stream cancelled, rolling back db session.")
             await db.rollback()

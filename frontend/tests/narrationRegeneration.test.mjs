@@ -1,0 +1,110 @@
+import { test } from 'node:test'
+import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { Buffer } from 'node:buffer'
+import { effectScope, ref } from 'vue'
+import ts from 'typescript'
+import { correctionModuleUrl, corrections } from './correctionModule.mjs'
+import { storyMessageModule } from './storyMessageModule.mjs'
+
+const source = readFileSync(new URL('../src/composables/useNarrationRegeneration.ts', import.meta.url), 'utf8')
+const compiled = ts.transpileModule(source, {
+  compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext },
+}).outputText.replace("from 'vue'", `from '${import.meta.resolve('vue')}'`)
+  .replace("from '@/utils/storyMessages'", `from '${storyMessageModule}'`)
+  .replace("from '@/services/narrationCorrection'", `from '${correctionModuleUrl}'`)
+  .replace(/import .* from '@\/services\/http';/, 'const apiFetch = (...args) => globalThis.fetch(...args);')
+  .replace(/import .* from '@\/composables\/useNotifications';/, 'export const notices = []; const useNotifications = () => ({ addNotification: (...args) => notices.push(args) });')
+const { useNarrationRegeneration, notices } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`)
+
+function fixture(t) {
+  corrections.clearCorrection('session')
+  const socket = {
+    messages: ref([{ id: 'reply', role: 'assistant', content: 'Original' }]),
+    status: ref('connected'), statusText: ref(''), inputLocked: ref(false), sheet: ref({}),
+  }
+  const scope = effectScope()
+  t.after(() => scope.stop())
+  return { socket, scope, ...scope.run(() => useNarrationRegeneration(() => 'session', socket)) }
+}
+
+test('regeneration locks input, prevents double clicks and replaces the same message', async t => {
+  const f = fixture(t)
+  let finish
+  t.mock.method(globalThis, 'fetch', () => new Promise(resolve => { finish = resolve }))
+  const pending = f.regenerate()
+  assert.equal(f.socket.status.value, 'loading')
+  assert.equal(f.busy.value, true)
+  await f.regenerate()
+  assert.equal(globalThis.fetch.mock.callCount(), 1)
+  assert.equal(globalThis.fetch.mock.calls[0].arguments[1].timeoutMs, null)
+  finish(new Response(JSON.stringify({ id: 'reply', role: 'assistant', content: 'Replacement' })))
+  await pending
+  assert.deepEqual(f.socket.messages.value, [{ id: 'reply', role: 'assistant', content: 'Replacement' }])
+  assert.equal(f.socket.status.value, 'connected')
+})
+
+test('failed regeneration keeps the original and displays an error', async t => {
+  const f = fixture(t)
+  t.mock.method(globalThis, 'fetch', async () => new Response(JSON.stringify({ detail: 'Unavailable' }), { status: 502 }))
+  await f.regenerate()
+  assert.equal(f.socket.messages.value[0].content, 'Original')
+  assert.equal(f.socket.status.value, 'connected')
+  assert.equal(notices.at(-1)[0], 'Unavailable')
+})
+
+test('a pending player message disables regeneration', t => {
+  const f = fixture(t)
+  f.socket.messages.value.push({ id: 'action', role: 'user', content: 'Open gate' })
+  assert.equal(f.canRegenerate.value, false)
+})
+
+test('debug toggles keep the original narration selected and other commands still invalidate it', async t => {
+  const f = fixture(t)
+  f.socket.messages.value.push({ id: 'debug-on', role: 'user', content: '/debug on' })
+  f.socket.messages.value.push({ id: 'debug-result', role: 'system', content: 'Enabled.', is_debug: true })
+  f.socket.messages.value.push({ id: 'debug-off', role: 'user', content: '/debug off' })
+  assert.equal(f.canRegenerate.value, true)
+  t.mock.method(globalThis, 'fetch', async (_url, options) => {
+    assert.equal(JSON.parse(options.body).message_id, 'reply')
+    return new Response(JSON.stringify({ id: 'reply', role: 'assistant', content: 'Replacement' }))
+  })
+  await f.regenerate()
+  assert.equal(f.socket.messages.value[0].content, 'Replacement')
+  assert.equal(f.socket.messages.value.length, 4)
+  f.socket.messages.value.push({ id: 'debug-heal', role: 'user', content: '/debug heal' })
+  assert.equal(f.canRegenerate.value, false)
+})
+
+test('leaving the view prevents late writes to a different session', async t => {
+  const f = fixture(t)
+  let finish
+  t.mock.method(globalThis, 'fetch', () => new Promise(resolve => { finish = resolve }))
+  const pending = f.regenerate()
+  f.scope.stop()
+  f.socket.messages.value = []
+  f.socket.status.value = 'connecting'
+  finish(new Response(JSON.stringify({ id: 'reply', role: 'assistant', content: 'Replacement' })))
+  await pending
+  assert.deepEqual(f.socket.messages.value, [])
+  assert.equal(f.socket.status.value, 'connecting')
+})
+
+test('rewrite sends queued feedback separately and consumes only acknowledged success', async t => {
+  const f = fixture(t)
+  corrections.queueCorrection('session', 'Sounds', 'Fewer sound tags.')
+  t.mock.method(globalThis, 'fetch', async (_url, options) => {
+    assert.deepEqual(JSON.parse(options.body), { message_id: 'reply', narration_correction: 'Fewer sound tags.' })
+    return new Response(JSON.stringify({ id: 'reply', content: 'Replacement', role: 'assistant', narration_correction_applied: true }))
+  })
+  await f.regenerate()
+  assert.equal(corrections.getCorrection('session'), null)
+})
+
+test('rewrite failure retains queued feedback', async t => {
+  const f = fixture(t)
+  corrections.queueCorrection('session', 'Sounds', 'Fewer sound tags.')
+  t.mock.method(globalThis, 'fetch', async () => new Response('{}', { status: 502 }))
+  await f.regenerate()
+  assert.equal(corrections.getCorrection('session').text, 'Fewer sound tags.')
+})

@@ -43,7 +43,11 @@ def _asset_refs(value: Any) -> set[str]:
                     "Publication images must be bundled assets. Upload or remove external images first."
                 )
     children = (
-        value.values() if isinstance(value, dict) else value if isinstance(value, list) else []
+        [item for key, item in value.items() if key not in {"extensions", "agent_runtime"}]
+        if isinstance(value, dict)
+        else value
+        if isinstance(value, list)
+        else []
     )
     return set().union(*(_asset_refs(child) for child in children)) if children else set()
 

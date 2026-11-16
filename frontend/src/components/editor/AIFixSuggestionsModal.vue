@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
+import { useDialogFocus } from '@/composables/useDialogFocus'
+import FixPatchDetails from './FixPatchDetails.vue'
 import {
   AlertTriangle,
   ArrowRight,
@@ -23,6 +25,7 @@ const props = defineProps<{
   findingLocation?: string | null
   hasBackupConfirmed: boolean
   errorMessage?: string | null
+  servedProvider?: string | null
 }>()
 
 const emit = defineEmits<{
@@ -32,6 +35,8 @@ const emit = defineEmits<{
   (e: 'toggle-backup', value: boolean): void
   (e: 'retry'): void
 }>()
+const dialog = ref<HTMLElement | null>(null)
+useDialogFocus(dialog, () => { if (!props.applying) emit('close') })
 
 const selectedProposal = computed<FixProposal | null>(() => {
   if (props.selectedIndex < 0) return null
@@ -55,21 +60,25 @@ function describeTarget(targetType: string, targetId?: string | null): string {
 </script>
 
 <template>
+  <Teleport to="body">
   <div
     v-if="props.open"
-    class="fixed inset-0 z-[260] flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4"
+    ref="dialog"
+    class="authoring-modal-overlay fixed inset-0 z-[260] flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4"
     role="dialog"
     aria-modal="true"
+    aria-labelledby="ai-fix-title"
+    tabindex="-1"
     @click.self="emit('close')"
   >
-    <div class="w-full max-w-3xl rounded-2xl border border-violet-500/30 bg-slate-900 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+    <div class="authoring-dialog w-full max-w-3xl rounded-2xl border border-violet-500/30 bg-slate-900 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
       <div class="px-6 py-5 border-b border-white/10 flex items-start justify-between gap-4 shrink-0">
         <div class="flex items-start gap-3 min-w-0">
           <div class="w-10 h-10 rounded-full border border-violet-400/40 bg-violet-500/15 flex items-center justify-center shrink-0 mt-0.5">
             <Wand2 class="w-5 h-5 text-violet-300" />
           </div>
           <div class="min-w-0">
-            <h3 class="text-lg font-black text-white flex items-center gap-2">
+            <h3 id="ai-fix-title" class="text-lg font-black text-white flex items-center gap-2">
               AI Fix Suggestions
               <span class="px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-widest bg-violet-500/15 border border-violet-500/30 text-violet-200">
                 {{ props.proposals.length }} / 3 options
@@ -78,6 +87,7 @@ function describeTarget(targetType: string, targetId?: string | null): string {
             <p class="text-xs text-slate-400 mt-1">
               The AI generated up to three different ways to resolve this finding. Pick one to apply.
             </p>
+            <p v-if="props.servedProvider" class="mt-1 text-xs text-slate-400">Provider: {{ props.servedProvider }}</p>
           </div>
         </div>
         <button
@@ -122,7 +132,7 @@ function describeTarget(targetType: string, targetId?: string | null): string {
           <div class="flex-1 space-y-2 text-sm text-rose-100 leading-relaxed">
             <p class="font-bold">{{ props.errorMessage }}</p>
             <p class="text-[11px] text-rose-200/80">
-              The fix could not be applied. Try generating fresh suggestions, then pick a different option.
+              {{ props.proposals.length ? 'The selected fix was not applied. Resolve the error above before trying again.' : 'No suggestions were generated. Resolve the error above, then retry.' }}
             </p>
             <button
               type="button"
@@ -141,7 +151,15 @@ function describeTarget(targetType: string, targetId?: string | null): string {
           class="rounded-xl border border-white/10 bg-white/5 px-4 py-6 text-center text-sm text-slate-300"
         >
           <ShieldAlert class="w-6 h-6 mx-auto text-slate-400 mb-2" />
-          The AI declined to suggest a fix for this finding. Try fixing it manually or rerun the AI validation.
+          <p>No usable fix was proposed. You can request fresh suggestions or edit the affected fields manually.</p>
+          <button
+            type="button"
+            :disabled="props.applying"
+            class="mx-auto mt-3 flex items-center gap-2 rounded-lg border border-violet-400/50 px-3 py-1.5 text-xs font-bold text-violet-200 hover:bg-violet-500/20 disabled:opacity-50"
+            @click="emit('retry')"
+          >
+            <RefreshCw class="w-3 h-3" /> Generate fresh suggestions
+          </button>
         </div>
 
         <div v-else class="space-y-3">
@@ -191,6 +209,7 @@ function describeTarget(targetType: string, targetId?: string | null): string {
                       <span class="leading-relaxed">
                         <span class="font-bold text-violet-200">{{ describeTarget(patch.target_type, patch.target_id) }}</span>
                         <span v-if="patch.description"> &mdash; {{ patch.description }}</span>
+                        <FixPatchDetails :updates="patch.field_updates" />
                       </span>
                     </li>
                   </ul>
@@ -247,4 +266,5 @@ function describeTarget(targetType: string, targetId?: string | null): string {
       </div>
     </div>
   </div>
+  </Teleport>
 </template>

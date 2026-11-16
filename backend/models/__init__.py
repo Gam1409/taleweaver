@@ -1,4 +1,5 @@
 """Models module"""
+
 from .adventure_template import AdventureTemplate
 from .ai_fix_cache import AIFixCache
 from .avatar import Avatar
@@ -6,11 +7,41 @@ from .base import Base
 from .character import Character
 from .chat import ChatMessage
 from .game_session import GameSession
+from .hook_run import HookRun
 from .memory_rag import MemoryIndexState as MemoryIndexState
 from .memory_rag import MemorySummary as MemorySummary
+from .npc_notebook import NpcNotebook
 from .session_checkpoint import SessionCheckpoint
 from .session_state import SessionState
+from .turn_replay import TurnReplay
 from .user import User
 from .validation_run import ValidationRun
 from .world_entity import WorldEntity, WorldExit, WorldScene
+from .world_info import WorldInfoEntry, WorldInfoRevision, WorldInfoSource
 from .world_map import WorldMap
+
+__all__ = [
+    "AdventureTemplate",
+    "AIFixCache",
+    "Avatar",
+    "Base",
+    "Character",
+    "ChatMessage",
+    "GameSession",
+    "MemoryIndexState",
+    "MemorySummary",
+    "NpcNotebook",
+    "SessionCheckpoint",
+    "SessionState",
+    "User",
+    "HookRun",
+    "TurnReplay",
+    "ValidationRun",
+    "WorldEntity",
+    "WorldExit",
+    "WorldScene",
+    "WorldMap",
+    "WorldInfoEntry",
+    "WorldInfoRevision",
+    "WorldInfoSource",
+]

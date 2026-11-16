@@ -9,6 +9,12 @@ Welcome to the TaleWeaver workspace! This project uses the **Antigravity Customi
 
 ## Core Engineering Rules
 
+0. **Neutral Commit Messages (Owner Requirement)**:
+   - Keep commit titles and bodies neutral and technical. Do not mention or imply
+     NSFW, sexual, erotic or adult-content contexts in commit messages, including
+     names of sexual organs and suggestive anatomical references.
+   - Describe the affected contract, behavior, validation or user interface instead.
+
 1. **Clean Code & Modularity (No Monster Files)**:
    - Target module size is **< 400 lines** (max warning threshold: 600 lines).
    - **Never dump new features or monolithic code directly into existing oversized files** (`editor.py`, `gameplay_logic.py`, `templates.py`, `turn_guardrails.py`, `llm_router.py`, etc.).
@@ -26,29 +32,69 @@ Welcome to the TaleWeaver workspace! This project uses the **Antigravity Customi
      poetry run ruff format --check <modified_files>
      ```
    - Ensure **zero errors** before concluding.
+   - Before every push containing frontend changes, run the complete frontend suite from `frontend/`: `node --test tests/*.test.mjs`. Targeted scripts such as `test:presets` supplement this check; they do not replace it. Resolve failures before publishing.
    - Never suppress complexity (`C901`, `PLR0912`, `PLR0915`) or security (`S`) warnings with `# noqa`; refactor the code instead.
    - Full check / fix command: `poetry run python scripts/lint.py --fix`.
 
+4. **Regression Prevention (Owner Requirement)**:
+   - Preserve working behavior when extending the project. For each reproducible bug,
+     add a regression test that fails before the fix, then verify the affected feature
+     and its integration boundaries before publishing.
+   - Check combinations of features and exact limits, not only each feature in isolation.
+     Producer, consumer, and persistence limits must agree. Every successfully saved
+     state must load again; reject invalid updates before replacing the previous state.
+   - Do not hide regressions by dropping assertions, silently discarding canonical
+     history, or increasing limits without addressing the cause. Add no extra paid
+     model requests merely to mask a host bug.
+   - Distinguish verified fixes from known remaining issues. Passing mock/schema tests
+     does not establish psychological quality or live-model reliability.
+
+5. **Release History and Schema Discipline (Owner Requirement)**:
+   - Bump persisted schema versions only for incompatible data-shape changes, not
+     additive fields with safe defaults. Verify legacy loading explicitly.
+   - Collect prompt-only edits into one final `prompt tuning` commit per work wave.
+   - Keep each behavior change in a coherent commit. The CHPM pilot has already
+     been integrated; do not rewrite published history to follow obsolete hashes.
+
+6. **Existing Functionality Before Design (Owner Requirement)**:
+   - Before choosing a design or implementing a behavior change, complete a search
+     of the relevant existing code, documentation, tests and runtime call sites.
+     Include optional/disabled features, fallback paths and recently added code,
+     including code written by the current agent.
+   - Trace where the required facts are produced, stored, updated, validated and
+     consumed. Check configuration gates and lifecycle paths such as failure,
+     retry, regeneration, copy/import and replay. Distinguish missing functionality
+     from an existing capability whose integration is incomplete or broken.
+   - Make the implementation decision only after that investigation: reuse an
+     existing capability, repair its integration, extend its current owner, or add
+     a component for a demonstrated gap. State the evidence and why an extension
+     would or would not cover the requirement.
+   - Preserve existing sources of truth, identifiers, schemas, provenance,
+     visibility rules, game clocks and transaction boundaries. Do not introduce
+     parallel state stores, extraction requests or prompt layers for behavior
+     already owned by another mechanism without demonstrating the need.
+   - Prefer the smallest coherent change that satisfies the requirement. A new
+     framework, service or registry is not the default solution.
+
 ---
 
-## 1. Workspace Rules (`.agents/rules/`)
+## 1. Portable project references
 
-Specific project rules are located in `.agents/rules/` and triggered contextually to optimize context usage:
+The checked-in [Copilot Instructions](.github/copilot-instructions.md) contain
+Python, TypeScript, testing, security and migration rules. They are authoritative
+on every machine; an ignored `.agents/` directory is optional local tooling.
 
-* [architecture.md](file:///d:/DEV/repositories/git/taleweaver/.agents/rules/architecture.md) (`type: model_decision`) — Complete architectural breakdown of the Game Turn Loop (Pass 1, Pass 1.5, Pass 2), World Manifest (`adventure.adv`/`.adz`), state mutations, and scripting engine.
-* [typescript.md](file:///d:/DEV/repositories/git/taleweaver/.agents/rules/typescript.md) (`type: glob`, `**/*.{ts,tsx}`) — TypeScript code formatting, naming conventions, and strict typing.
-* [python.md](file:///d:/DEV/repositories/git/taleweaver/.agents/rules/python.md) (`type: glob`, `**/*.py`) — Python conventions, type hinting, error handling, and Alembic migrations.
-* [testing.md](file:///d:/DEV/repositories/git/taleweaver/.agents/rules/testing.md) (`type: glob`, `tests/**/*.py`) — AAA pattern, mocking requirements, and mandatory adventure lifecycle verification.
-* [security.md](file:///d:/DEV/repositories/git/taleweaver/.agents/rules/security.md) (`type: model_decision`) — Path traversal prevention (CWE-22) and secure filesystem handling.
+- [Turn pipeline](docs/diagrams/game_session_loop.mermaid)
+- [Adventure format](docs/specs/adventure_format.md)
+- [Living World architecture](docs/living-world-architecture.md)
+- [NPC Personality pilot](docs/chpm-pilot.md)
+- [Database inspector](scripts/inspect_state.py): list-adventures, show-adventure,
+  list-sessions and show-session; use it before changing state logic.
 
----
+## 2. Local tools
 
-## 2. On-Demand Skills (`.agents/skills/`)
-
-* [taleweaver-inspector](file:///d:/DEV/repositories/git/taleweaver/.agents/skills/taleweaver-inspector/SKILL.md) — Inspect database state, session inventories, entity overrides, and manifests via `python scripts/inspect_state.py`.
-* [taleweaver-adventure-creator](file:///d:/DEV/repositories/git/taleweaver/.agents/skills/taleweaver-adventure-creator/SKILL.md) — Generates structured adventure concepts using sequence, scene, and entity tags.
-* [taleweaver-dev-tools](file:///d:/DEV/repositories/git/taleweaver/.agents/skills/taleweaver-dev-tools/SKILL.md) — Developer toolkit for admin credential resets, security keys, and thumbnail regeneration.
-* [taleweaver-telemetry](file:///d:/DEV/repositories/git/taleweaver/.agents/skills/taleweaver-telemetry/SKILL.md) — LLM telemetry, latency percentiles (p50/p90/p95), and token analysis.
+Optional private skills must not be required to build, test or review this
+repository. Use the checked-in scripts and documentation when they are absent.
 
 ---
 
@@ -58,3 +104,21 @@ To prevent terminal commands from hanging or consuming excessive tokens:
 
 * **Avoid Terminal Pagers:** Always run Git commands with `--no-pager` (e.g. `git --no-pager diff`, `git --no-pager log -n 5`).
 * **Prevent Token Flooding:** Never dump huge files directly to terminal output; use `head -n 50 <file>` or targeted views.
+
+## 4. GitHub Publication Review (Owner Requirement)
+
+- Before every GitHub write, inspect the exact outgoing content: code diffs,
+  commit titles and bodies, PR titles and descriptions, issues, comments,
+  attachments, screenshots, logs and release notes.
+- Publish only the technical information needed for the requested change.
+  Do not include private preview addresses, credentials or tokens, private
+  account/game/session data, user-specific local paths, raw tool transcripts
+  or conversation excerpts without the owner's explicit instruction to publish
+  that information.
+- Keep private preview links in the chat. Do not add them to GitHub PRs,
+  issues, comments or repository documentation by default.
+- Re-read the final payload and verify the target repository and visibility
+  before submitting. Remove unrelated or private context rather than copying
+  tool output or chat text into GitHub.
+- Authorization to implement or push code does not authorize publishing
+  unrelated private information. Keep commit messages neutral and technical.

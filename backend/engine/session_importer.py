@@ -1,26 +1,37 @@
+import asyncio
 import io
 import json
 import logging
 import os
+import shutil
 import zipfile
-from typing import Any, Optional
+from contextlib import ExitStack
+from copy import deepcopy
+from typing import Any, BinaryIO, Optional, cast
 
 import uuid6
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.engine.archive_safety import copy_asset, validate_archive, validate_archive_stream
+from backend.engine.chpm.notebook_archive import NotebookArchive, read_notebooks
+from backend.engine.chpm.notebook_portability import import_notebooks
+from backend.engine.clothing.wear_provenance import remap_profile
 from backend.engine.item_logic import normalize_equipment_keys
-from backend.engine.memory_rag.lifecycle import import_summaries, restore_memory
+from backend.engine.living_world.state import fork as fork_simulation
+from backend.engine.memory_rag.lifecycle import import_summaries
 from backend.engine.npc_journal.lifecycle import remap_journal
 from backend.engine.npc_journal.messages import restore_messages
-from backend.engine.scene_illustrations.snapshots import remap_illustrations
-from backend.engine.visual_novel.lifecycle import remap_social_state
-from backend.models.adventure_template import AdventureTemplate
+from backend.engine.session_archive_access import accessible_template
+from backend.engine.session_restore_sources import restore_sources
+from backend.engine.world_info.archive_parts import read_world_info
+from backend.engine.world_info.portability import import_world_info
+from backend.engine.world_location_fields import exit_fields, scene_fields
 from backend.models.avatar import Avatar
 from backend.models.game_session import GameSession
 from backend.models.session_state import SessionState
 from backend.models.world_entity import WorldEntity, WorldExit, WorldScene
 from backend.models.world_map import WorldMap
+from backend.utils.async_files import run_file_operation
 from backend.utils.path_security import ensure_within_data_dir, safe_data_path
 
 logger = logging.getLogger(__name__)
@@ -52,11 +63,17 @@ def restore_session_paths(data: Any, new_session_id: str) -> Any:
     """
     Recursively replaces relative assets/ paths with the new session's data paths.
     E.g., assets/tts/abc.mp3 -> /data/adventures/sessions/{new_session_id}/tts/abc.mp3
+    Generation details contain historical prompts and queries, not live asset links.
     """
     prefix = f"/data/adventures/sessions/{new_session_id}/"
 
     if isinstance(data, dict):
-        return {k: restore_session_paths(v, new_session_id) for k, v in data.items()}
+        return {
+            k: deepcopy(v)
+            if k == "generation_details"
+            else restore_session_paths(v, new_session_id)
+            for k, v in data.items()
+        }
     elif isinstance(data, list):
         return [restore_session_paths(item, new_session_id) for item in data]
     elif isinstance(data, str):
@@ -66,7 +83,20 @@ def restore_session_paths(data: Any, new_session_id: str) -> Any:
     return data
 
 
+def _restore_manifest_paths(manifest: dict[str, Any], session_id: str) -> dict[str, Any]:
+    """Keep canonical source text outside the asset URL conversion boundary."""
+    ordinary = dict(manifest)
+    world_info = ordinary.pop("world_info", None)
+    notebooks = ordinary.pop("npc_notebooks", None)
+    restored = cast(dict[str, Any], restore_session_paths(ordinary, session_id))
+    restored["world_info"] = world_info
+    if notebooks is not None:
+        restored["npc_notebooks"] = notebooks
+    return restored
+
+
 def _extract_assets(zip_file: zipfile.ZipFile, new_session_id: str) -> None:
+    validate_archive(zip_file)
     new_session_dir = _safe_data_path("adventures", "sessions", new_session_id)
     os.makedirs(new_session_dir, exist_ok=True)
 
@@ -79,13 +109,55 @@ def _extract_assets(zip_file: zipfile.ZipFile, new_session_id: str) -> None:
             safe_dest_path = _ensure_within_data_dir(safe_dest_path)
 
             os.makedirs(os.path.dirname(safe_dest_path), exist_ok=True)
-            with open(safe_dest_path, "wb") as f:
-                f.write(zip_file.read(zip_info.filename))
+            copy_asset(zip_file, zip_info, safe_dest_path)
+
+
+def _read_session_manifest(zip_file: zipfile.ZipFile, cleanup: ExitStack) -> dict[str, Any]:
+    data: object = json.loads(zip_file.read("session.json").decode("utf-8"))
+    if not isinstance(data, dict):
+        raise ValueError("Session manifest must be an object.")
+    data["world_info"] = read_world_info(zip_file, data.get("world_info"))
+    notebooks = read_notebooks(zip_file, data.get("npc_notebooks"))
+    if isinstance(notebooks, NotebookArchive):
+        # Register inside the worker: cancellation may discard its return value.
+        cleanup.callback(notebooks.stream.close)
+        data["npc_notebooks"] = notebooks
+    return data
+
+
+async def _add_session_parent(db: AsyncSession, session: GameSession) -> None:
+    """Flush the new parents before restored conversation rows, without committing."""
+    db.add(session)
+    await db.flush()
+
+
+async def _cleanup_failed_import(db: AsyncSession, session_id: str | None) -> None:
+    await db.rollback()
+    if session_id:
+        await run_file_operation(
+            shutil.rmtree,
+            _safe_data_path("adventures", "sessions", session_id),
+            ignore_errors=True,
+        )
 
 
 class SessionImporter:
     @staticmethod
     async def import_ads(db: AsyncSession, content: bytes, owner_id: str) -> Optional[str]:
+        """Compatibility API for existing callers with in-memory archives."""
+        with io.BytesIO(content) as source:
+            return await SessionImporter.import_ads_from(db, source, owner_id)
+
+    @staticmethod
+    async def import_ads_from(db: AsyncSession, source: BinaryIO, owner_id: str) -> Optional[str]:
+        """Consume detached member spools on every return, failure or cancellation."""
+        with ExitStack() as cleanup:
+            return await SessionImporter._restore_ads(db, source, owner_id, cleanup)
+
+    @staticmethod
+    async def _restore_ads(
+        db: AsyncSession, source: BinaryIO, owner_id: str, cleanup: ExitStack
+    ) -> Optional[str]:
         """
         Unpacks a .ads ZIP file, reconstructs the game session and associated state/entities,
         and extracts assets into the local session directory.
@@ -93,21 +165,24 @@ class SessionImporter:
         Returns:
             The new game session ID if successful, else None.
         """
+        new_session_id = None
         try:
-            with zipfile.ZipFile(io.BytesIO(content), "r") as zip_file:
+            await run_file_operation(validate_archive_stream, source)
+            with zipfile.ZipFile(source, "r") as zip_file:
+                await run_file_operation(validate_archive, zip_file)
                 # 1. Read session manifest
                 if "session.json" not in zip_file.namelist():
                     logger.error("session.json missing in .ads archive")
                     return None
 
-                manifest = json.loads(zip_file.read("session.json").decode("utf-8"))
+                manifest = await run_file_operation(_read_session_manifest, zip_file, cleanup)
 
                 # 2. Setup new IDs
                 new_session_id = str(uuid6.uuid7())
                 new_avatar_id = str(uuid6.uuid7())
 
                 # Restore the relative assets paths to the new session id
-                manifest = restore_session_paths(manifest, new_session_id)
+                manifest = _restore_manifest_paths(manifest, new_session_id)
 
                 game_session_data = manifest.get("game_session")
                 session_state_data = manifest.get("session_state")
@@ -122,17 +197,9 @@ class SessionImporter:
                     logger.error("Core session components missing in manifest")
                     return None
 
-                # Check if template still exists in the system
-                template_id = game_session_data.get("template_id")
-                template_exists = False
-                if template_id:
-                    template_res = await db.execute(
-                        select(AdventureTemplate.id).where(AdventureTemplate.id == template_id)
-                    )
-                    if template_res.scalar_one_or_none():
-                        template_exists = True
-
-                resolved_template_id = template_id if template_exists else None
+                resolved_template_id = await accessible_template(
+                    db, game_session_data.get("template_id"), owner_id
+                )
 
                 # 3. Create Avatar
                 avatar = Avatar(
@@ -144,6 +211,8 @@ class SessionImporter:
                     description=avatar_data.get("description"),
                     goal=avatar_data.get("goal"),
                     character=avatar_data.get("character"),
+                    gender=avatar_data.get("gender"),
+                    age_years=avatar_data.get("age_years"),
                     visual_profile=avatar_data.get("visual_profile"),
                     profile_image=avatar_data.get("profile_image"),
                     hp=avatar_data.get("hp", 200),
@@ -177,16 +246,20 @@ class SessionImporter:
                     status=game_session_data.get("status", "active"),
                     status_note=game_session_data.get("status_note"),
                     content_language=game_session_data.get("content_language"),
+                    playtime_seconds=max(0, int(game_session_data.get("playtime_seconds") or 0)),
                 )
-                db.add(game_session)
+                await _add_session_parent(db, game_session)
 
                 # 5. Create SessionState
                 session_state = SessionState(
                     session_id=new_session_id,
+                    living_world=fork_simulation(session_state_data.get("living_world")),
                     user_id=owner_id,
                     template_id=resolved_template_id,
                     avatar_id=new_avatar_id,
                     current_scene_id=session_state_data.get("current_scene_id", "START"),
+                    active_sequence_id=session_state_data.get("active_sequence_id"),
+                    active_sequence_order=session_state_data.get("active_sequence_order", 1),
                     in_game_time=session_state_data.get("in_game_time", 0),
                     max_memory_turns=session_state_data.get("max_memory_turns", 10),
                     time_system=session_state_data.get("time_system", "calendar"),
@@ -217,21 +290,14 @@ class SessionImporter:
                 db.add(session_state)
 
                 message_ids = restore_messages(db, new_session_id, chat_messages_data)
-                restore_memory(session_state, session_state_data, message_ids)
-                session_state.entity_states = remap_illustrations(
-                    remap_social_state(session_state.entity_states, message_ids), message_ids
-                )
+                restore_sources(avatar, session_state, session_state_data, message_ids)
 
                 # 7. Create WorldScenes
                 for sc in world_scenes_data:
                     world_sc = WorldScene(
-                        id=sc.get("id"),
-                        template_id=resolved_template_id,
+                        template_id=None,
                         session_id=new_session_id,
-                        label=sc.get("label"),
-                        description=sc.get("description"),
-                        image_url=sc.get("image_url"),
-                        decorative_objects=sc.get("decorative_objects"),
+                        **scene_fields(sc),
                     )
                     db.add(world_sc)
 
@@ -239,17 +305,9 @@ class SessionImporter:
                 for ex in world_exits_data:
                     world_ex = WorldExit(
                         id=str(uuid6.uuid7()),
-                        template_id=resolved_template_id,
+                        template_id=None,
                         session_id=new_session_id,
-                        from_scene_id=ex.get("from_scene_id"),
-                        to_scene_id=ex.get("to_scene_id"),
-                        label=ex.get("label"),
-                        exit_type=ex.get("exit_type", "one_way"),
-                        is_locked=ex.get("is_locked", False),
-                        lock_description=ex.get("lock_description"),
-                        code_to_unlock=ex.get("code_to_unlock"),
-                        item_to_unlock=ex.get("item_to_unlock"),
-                        rule_to_unlock=ex.get("rule_to_unlock"),
+                        **exit_fields(ex),
                     )
                     db.add(world_ex)
 
@@ -257,7 +315,7 @@ class SessionImporter:
                 for ent in world_entities_data:
                     world_ent = WorldEntity(
                         id=ent.get("id"),
-                        template_id=resolved_template_id,
+                        template_id=None,
                         session_id=new_session_id,
                         entity_type=ent.get("entity_type"),
                         name=ent.get("name"),
@@ -285,7 +343,9 @@ class SessionImporter:
                         notes=ent.get("notes"),
                         goal=ent.get("goal"),
                         character=ent.get("character"),
-                        visual_profile=ent.get("visual_profile"),
+                        gender=ent.get("gender"),
+                        age_years=ent.get("age_years"),
+                        visual_profile=remap_profile(ent.get("visual_profile"), message_ids),
                         hp=ent.get("hp"),
                         max_hp=ent.get("max_hp"),
                         mana=ent.get("mana"),
@@ -310,7 +370,7 @@ class SessionImporter:
                 if world_map_data:
                     world_map = WorldMap(
                         id=str(uuid6.uuid7()),
-                        template_id=resolved_template_id,
+                        template_id=None,
                         session_id=new_session_id,
                         nodes=world_map_data.get("nodes", {}),
                         edges=world_map_data.get("edges", []),
@@ -318,15 +378,19 @@ class SessionImporter:
                     )
                     db.add(world_map)
 
-                _extract_assets(zip_file, new_session_id)
+                await run_file_operation(_extract_assets, zip_file, new_session_id)
 
             await import_summaries(
                 db, session_state, owner_id, manifest.get("memory_summaries") or [], message_ids
             )
+            await import_world_info(db, manifest.get("world_info"), new_session_id, owner_id)
+            await import_notebooks(db, session_state, owner_id, manifest.get("npc_notebooks"))
             await db.commit()
             return new_session_id
 
-        except Exception:
+        except (Exception, asyncio.CancelledError) as exc:
+            await _cleanup_failed_import(db, new_session_id)
+            if isinstance(exc, asyncio.CancelledError):
+                raise
             logger.exception("Import of ADS session failed")
-            await db.rollback()
             return None

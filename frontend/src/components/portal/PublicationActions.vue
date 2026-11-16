@@ -4,7 +4,7 @@ import { Download } from 'lucide-vue-next'
 import { adventurePublicationService } from '@/services/adventurePublication'
 import type { PublicationReport } from '@/services/adventurePublication'
 
-const props = defineProps<{ templateId: string; title: string }>()
+const props = defineProps<{ templateId: string; title: string; menuItem?: boolean }>()
 const dialog = ref<HTMLDialogElement | null>(null)
 const report = ref<PublicationReport | null>(null)
 const busy = ref(false)
@@ -57,7 +57,12 @@ async function download() {
 <template>
   <button
     type="button"
-    class="w-full text-left px-3 py-2 text-xs text-slate-300 hover:bg-white/10 hover:text-white flex items-center gap-2 rounded-lg"
+    :role="menuItem ? 'menuitem' : undefined"
+    :class="
+      menuItem
+        ? 'action-menu-item'
+        : 'w-full text-left px-3 py-2 text-xs text-slate-300 hover:bg-white/10 hover:text-white flex items-center gap-2 rounded-lg'
+    "
     @click.stop="open"
   >
     <Download class="w-3.5 h-3.5 shrink-0" /> Export for original TaleWeaver

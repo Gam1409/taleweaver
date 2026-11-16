@@ -106,9 +106,9 @@ async function handleSubmit() {
     leave-from-class="opacity-100"
     leave-to-class="opacity-0"
   >
-    <div v-if="isOpen" class="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-[#02060c]/80 backdrop-blur-sm">
+    <div v-if="isOpen" class="workspace-dialog-overlay fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-[#02060c]/80 backdrop-blur-sm">
       <div 
-        class="w-full max-w-md bg-[#0a111c] border border-white/10 rounded-2xl shadow-2xl overflow-hidden relative"
+        class="workspace-dialog w-full max-w-md bg-[#0a111c] border border-white/10 rounded-2xl shadow-2xl overflow-hidden relative"
         @click.stop
       >
         <!-- Decoration top border -->

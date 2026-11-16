@@ -1,7 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import { useAuthoringTheme } from '@/composables/useAuthoringTheme'
 import { useRoute, useRouter } from 'vue-router'
 import { api } from '@/composables/useApi'
+import { createUuid } from '@/utils/uuid'
+import WorldBriefFields from '@/components/create-adventure/WorldBriefFields.vue'
+import { emptyWorldBrief, hasWorldBrief, briefTitle, worldBriefPayload } from '@/services/worldBrief'
 import { configState, refreshConfig } from '@/store/config'
 import { authState } from '@/store/auth'
 import type { CatalogTile } from '@/types'
@@ -10,8 +14,10 @@ import { CREATE_ADVENTURE_HELP_TEXTS } from '@/constants/createAdventureHelpText
 
 // Components
 import AdventureStatusAlerts from '@/components/create-adventure/AdventureStatusAlerts.vue'
+import BlueprintCheck from '@/components/create-adventure/BlueprintCheck.vue'
 import AdventureBasicInfo from '@/components/create-adventure/AdventureBasicInfo.vue'
 import AdventureGameSettings from '@/components/create-adventure/AdventureGameSettings.vue'
+import type { LivingWorldPreferences } from '@/services/livingWorld'
 import AutoValidateFixToggle from '@/components/create-adventure/AutoValidateFixToggle.vue'
 import AdventureAssetSettings from '@/components/create-adventure/AdventureAssetSettings.vue'
 import AdventureCatalogSelector from '@/components/create-adventure/AdventureCatalogSelector.vue'
@@ -19,6 +25,8 @@ import AdventureRuleModeSelector from '@/components/create-adventure/AdventureRu
 import AdventureWorldConstraints from '@/components/create-adventure/AdventureWorldConstraints.vue'
 import AdventureCharacterSettings from '@/components/create-adventure/AdventureCharacterSettings.vue'
 import AdventureClothingSettings from '@/components/create-adventure/AdventureClothingSettings.vue'
+
+useAuthoringTheme()
 
 const router = useRouter()
 const route = useRoute()
@@ -28,6 +36,7 @@ import type { RuleMode } from '@/types'
 const form = ref({
   title: '',
   storyIdea: '',
+  world_brief: emptyWorldBrief(),
   generation_strictness: 'creative' as 'creative' | 'strict',
   generate_npc_images: true,
   generate_item_images: true,
@@ -37,8 +46,11 @@ const form = ref({
   clock_enabled: true,
   pacing_minutes: 5,
   rule_enforcement_mode: 'story' as RuleMode,
+  living_world_settings: null as LivingWorldPreferences | null,
   show_npc_state: false,
   detailed_clothing: false,
+  nsfw_enabled: false,
+  nsfw_level: 'soft' as 'soft' | 'medium' | 'hard',
   selected_style_id: '',
   selected_tone_id: '',
   min_scenes: null as number | null,
@@ -206,12 +218,13 @@ async function handleCreate() {
   if (generatorMode.value === 'simple') {
     form.value.scripts_generation_enabled = true
     form.value.time_auto = true
-    if (!form.value.storyIdea.trim()) {
+    if (!form.value.storyIdea.trim() && !hasWorldBrief(form.value.world_brief)) {
       errorMsg.value = 'Please provide a concept prompt for your adventure.'
       return
     }
   }
 
+  if (!form.value.title.trim() && hasWorldBrief(form.value.world_brief)) form.value.title = briefTitle(form.value.world_brief)
   if (!form.value.title.trim()) {
     if (form.value.storyIdea.trim()) {
       const clean = form.value.storyIdea.trim().replace(/^(\[.*?\]|\W)+/, '')
@@ -243,7 +256,7 @@ async function handleCreate() {
   // Construct structured time_config
   let timeConfigPayload: any = null
   let pacingVal = form.value.pacing_minutes || 5
-  let timeSystemVal = form.value.time_system || 'calendar'
+  const timeSystemVal = form.value.time_system || 'calendar'
 
   if (!form.value.time_auto && form.value.time_config) {
     const tc = form.value.time_config
@@ -270,46 +283,19 @@ async function handleCreate() {
     }
   }
 
-  let promptStr = form.value.storyIdea.trim()
-  let parsedSequences = undefined
-
-  // Parse [Sequence] tags
-  const seqRegex = /\[Sequence[\s:]*\d*\]/i
-  if (seqRegex.test(promptStr)) {
-    const blocks = promptStr.split(new RegExp('\\[Sequence[\\s:]*\\d*\\]', 'ig'))
-    const sequences = []
-    promptStr = blocks[0].trim()
-
-    for (let i = 1; i < blocks.length; i++) {
-      if (sequences.length >= 15) break
-      const block = blocks[i].trim()
-      const lines = block.split('\n')
-      const title = lines[0].trim() || `Sequence ${i}`
-      const description = lines.slice(1).join('\n').trim() || 'Follow the sequence blueprint.'
-
-      sequences.push({
-        id: crypto.randomUUID(),
-        order: i,
-        title: title,
-        description: description.slice(0, 500),
-        walkthrough: description,
-        end_condition: 'Complete the sequence objectives.',
-        exp_reward: 100,
-      })
-    }
-    if (sequences.length > 0) {
-      parsedSequences = sequences
-    }
-  }
+  const promptStr = form.value.storyIdea.trim()
 
   const payload: any = {
     ...form.value,
+    living_world_settings: form.value.rule_enforcement_mode === 'vn' ? form.value.living_world_settings : undefined,
     show_npc_state: form.value.rule_enforcement_mode === 'vn' && form.value.show_npc_state,
     detailed_clothing: form.value.rule_enforcement_mode === 'vn' && form.value.detailed_clothing,
-    id: crypto.randomUUID(),
+    nsfw_enabled: form.value.rule_enforcement_mode === 'vn' && form.value.nsfw_enabled,
+    nsfw_level: form.value.rule_enforcement_mode === 'vn' && form.value.nsfw_enabled ? form.value.nsfw_level : undefined,
+    id: createUuid(),
     title: (form.value.title.trim() || 'Untitled Odyssey').slice(0, 50),
     original_prompt: promptStr,
-    sequences: parsedSequences,
+    world_brief: worldBriefPayload(form.value.world_brief),
     generation_strictness: form.value.generation_strictness,
     clock_enabled: form.value.clock_enabled,
     time_system: timeSystemVal,
@@ -511,18 +497,19 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="h-full min-h-0 overflow-y-auto bg-slate-950 text-slate-200 font-sans p-3 sm:p-5 md:p-6 lg:p-8">
-    <header class="max-w-7xl mx-auto mb-4 sm:mb-6 md:mb-8 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+  <div class="workspace-view authoring-view adventure-create-view h-full min-h-0 overflow-y-auto bg-slate-950 text-slate-200 font-sans p-3 sm:p-5 md:p-6 lg:p-8">
+    <header class="authoring-heading max-w-7xl mx-auto mb-4 sm:mb-6 md:mb-8 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       <div>
         <h1 class="text-xl sm:text-2xl md:text-3xl font-black text-white uppercase tracking-tight">Generate Adventure</h1>
         <p class="text-slate-500 mt-0.5 sm:mt-1 tracking-wide text-xs sm:text-sm">Weave the parameters of your next odyssey.</p>
       </div>
       <div class="flex items-center gap-2.5 sm:gap-3">
         <!-- Mode Switcher -->
-        <div class="inline-flex p-1 rounded-xl bg-slate-900/90 border border-white/10 shadow-md">
+        <div class="authoring-mode-switch inline-flex p-1 rounded-xl bg-slate-900/90 border border-white/10 shadow-md">
           <button
             type="button"
             @click="setGeneratorMode('simple')"
+            :aria-pressed="generatorMode === 'simple'"
             class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all cursor-pointer"
             :class="generatorMode === 'simple'
               ? 'bg-gradient-to-r from-aether-primary to-cyan-500 text-white shadow'
@@ -534,6 +521,7 @@ onMounted(() => {
           <button
             type="button"
             @click="setGeneratorMode('advanced')"
+            :aria-pressed="generatorMode === 'advanced'"
             class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all cursor-pointer"
             :class="generatorMode === 'advanced'
               ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow'
@@ -610,7 +598,7 @@ onMounted(() => {
         </div>
 
         <!-- 1. Concept Prompt Card -->
-        <div class="bg-slate-900/50 backdrop-blur-xl border border-white/5 rounded-2xl md:rounded-3xl p-4 sm:p-6 space-y-4">
+        <div class="authoring-panel bg-slate-900/50 backdrop-blur-xl border border-white/5 rounded-2xl md:rounded-3xl p-4 sm:p-6 space-y-4">
           <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
             <div>
               <div class="flex items-center gap-2">
@@ -636,9 +624,13 @@ onMounted(() => {
           <textarea
             v-model="form.storyIdea"
             rows="5"
+            maxlength="20000"
             class="w-full bg-slate-950/80 border border-slate-800 focus:border-cyan-500/80 rounded-xl p-3.5 sm:p-4 text-xs sm:text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-cyan-500/50 transition-all resize-y custom-scrollbar"
             placeholder="e.g. A forgotten star observatory buried beneath a glacial mountain peak. An ancient mechanical astrolabe has reawakened and started transmitting coordinates across the stars..."
           ></textarea>
+
+          <BlueprintCheck :text="form.storyIdea" :options="form" />
+          <WorldBriefFields v-model="form.world_brief" />
 
           <div class="flex flex-col sm:flex-row sm:items-center gap-2.5 pt-2 border-t border-white/5">
             <label class="text-xs font-bold text-slate-400 whitespace-nowrap">Adventure Title (Optional):</label>
@@ -653,7 +645,7 @@ onMounted(() => {
         </div>
 
         <!-- 2. Game Mode Selector (RPG, Story, Chat) -->
-        <div class="bg-slate-900/50 backdrop-blur-xl border border-white/5 rounded-2xl md:rounded-3xl p-4 sm:p-6 space-y-3">
+        <div class="authoring-panel bg-slate-900/50 backdrop-blur-xl border border-white/5 rounded-2xl md:rounded-3xl p-4 sm:p-6 space-y-3">
           <div>
             <span class="text-[10px] font-black uppercase tracking-[0.2em] text-cyan-400">Step 2</span>
             <h3 class="text-xs sm:text-sm font-black text-white uppercase tracking-wider mt-0.5">Game Mode</h3>
@@ -669,7 +661,12 @@ onMounted(() => {
           />
           <AdventureClothingSettings
             v-if="form.rule_enforcement_mode === 'vn'"
-            v-model="form.detailed_clothing"
+            :clothing-value="form.detailed_clothing"
+            :nsfw-enabled="form.nsfw_enabled"
+            :nsfw-level="form.nsfw_level"
+            @update:clothing-value="form.detailed_clothing = $event"
+            @update:nsfw-enabled="form.nsfw_enabled = $event"
+            @update:nsfw-level="form.nsfw_level = $event as any"
           />
         </div>
 
@@ -714,7 +711,7 @@ onMounted(() => {
       <div v-else class="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 lg:gap-8 items-start">
         <!-- Configuration Panel (Left / Column 1) -->
         <div class="flex flex-col h-full space-y-4 sm:space-y-6">
-          <div class="bg-slate-900/50 backdrop-blur-xl border border-white/5 rounded-2xl md:rounded-3xl p-3.5 sm:p-5 md:p-6 space-y-4 sm:space-y-6">
+          <div class="authoring-panel bg-slate-900/50 backdrop-blur-xl border border-white/5 rounded-2xl md:rounded-3xl p-3.5 sm:p-5 md:p-6 space-y-4 sm:space-y-6">
             <section v-if="isCoverMode" class="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-3.5 sm:p-4 space-y-3.5">
               <div>
                 <p class="text-[10px] font-black uppercase tracking-[0.2em] text-amber-300">Cover Source</p>
@@ -764,6 +761,8 @@ onMounted(() => {
               :can-suggest-story-idea="hasLlmConfig"
               @suggest-story-idea="handleSuggestStoryIdea"
             />
+            <BlueprintCheck :text="form.storyIdea" :options="form" />
+            <WorldBriefFields v-model="form.world_brief" />
 
             <AdventureGameSettings
               v-model="form"
@@ -774,7 +773,12 @@ onMounted(() => {
             />
             <AdventureClothingSettings
               v-if="form.rule_enforcement_mode === 'vn'"
-              v-model="form.detailed_clothing"
+              :clothing-value="form.detailed_clothing"
+              :nsfw-enabled="form.nsfw_enabled"
+              :nsfw-level="form.nsfw_level"
+              @update:clothing-value="form.detailed_clothing = $event"
+              @update:nsfw-enabled="form.nsfw_enabled = $event"
+              @update:nsfw-level="form.nsfw_level = $event as any"
             />
           </div>
         </div>
@@ -858,7 +862,7 @@ onMounted(() => {
         <button
           @click="handleCreate"
           :disabled="isGenerating || isLoadingCatalogs || !hasLlmConfig"
-          class="group relative w-full sm:w-auto px-6 sm:px-10 md:px-14 py-3 sm:py-3.5 md:py-4 bg-gradient-to-br from-aether-primary to-aether-secondary rounded-2xl font-black text-white shadow-2xl shadow-aether-primary/30 hover:scale-105 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed overflow-hidden cursor-pointer"
+          class="authoring-create-submit group relative w-full sm:w-auto px-6 sm:px-10 md:px-14 py-3 sm:py-3.5 md:py-4 bg-gradient-to-br from-aether-primary to-aether-secondary rounded-2xl font-black text-white shadow-2xl shadow-aether-primary/30 hover:scale-105 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed overflow-hidden cursor-pointer"
         >
           <div class="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-500"></div>
           <div class="relative flex items-center justify-center gap-3 md:gap-4">

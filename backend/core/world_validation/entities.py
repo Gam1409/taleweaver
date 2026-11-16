@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from backend.core.world_validation.context import (
     ValidationContext,
@@ -38,7 +38,7 @@ def _int_or_none(value: Any) -> int | None:
 
 
 def _missing_ref(
-    code: str, eid: str, message: str, missing: str, severity: str = "error"
+    code: str, eid: str, message: str, missing: str, severity: Literal["error", "warn"] = "error"
 ) -> ValidationFinding:
     return finding(
         severity, code, message, location=f"entity:{eid}", entity_id=eid, missing_ref=missing

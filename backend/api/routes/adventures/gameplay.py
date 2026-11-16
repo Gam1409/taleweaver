@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
 from collections.abc import AsyncGenerator
-from typing import Any, cast
+from typing import Any
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -22,11 +23,6 @@ from backend.api.routes.adventures.chat_snapshot import (
     load_full_world_debug,
     resolve_prompt_suggestions,
 )
-from backend.api.routes.adventures.gameplay_logic import (
-    WALKTHROUGH_REVEAL_COST,
-    GameTurnManager,
-)
-from backend.api.routes.adventures.logic import AdventureLogic
 from backend.api.routes.adventures.schemas import (
     ChatRequest,
     ChatResponse,
@@ -36,24 +32,7 @@ from backend.api.routes.adventures.schemas import (
     TranslateTextResponse,
 )
 from backend.api.routes.adventures.session_debug_payload import build_session_debug_payload
-from backend.api.routes.adventures.session_language import initialize_content_language
-from backend.api.routes.adventures.unlock_service import (
-    SwitchFlipRunner,
-    add_system_message,
-    avatar_has_item,
-    award_session_unlock_xp,
-    enforce_container_guard,
-    enforce_exit_guard,
-    fire_container_unlock_success,
-    inventory_item_name,
-    load_avatar,
-    load_session_object,
-    mark_container_unlocked,
-    open_exit,
-    require_avatar,
-    require_value,
-    resolve_switch_flip,
-)
+from backend.api.routes.adventures.stream_transport import heartbeat_stream
 from backend.core.auth import get_current_user
 from backend.core.config import settings
 from backend.core.database import get_db
@@ -62,9 +41,33 @@ from backend.core.prompts import (
     BABLE_FISH_TRANSLATION_SYSTEM_PROMPT,
     BABLE_FISH_TRANSLATION_USER_PROMPT_TEMPLATE,
 )
+from backend.core.system_diagnostics import service as diagnostic_service
 from backend.engine.adventure_updates import is_legacy_session
+from backend.engine.chpm.runtime import public_status as npc_behavior_status
+from backend.engine.gameplay import unlock_actions
+from backend.engine.gameplay.language import (
+    initialize_content_language,
+    resolve_content_language,
+)
+from backend.engine.gameplay.manager import (
+    WALKTHROUGH_REVEAL_COST,
+    GameTurnManager,
+)
+from backend.engine.gameplay.session_access import _require_session_state
+from backend.engine.gameplay.unlock_service import (
+    SwitchFlipRunner,
+    avatar_has_item,
+    inventory_item_name,
+    require_avatar,
+    require_value,
+    resolve_switch_flip,
+)
+from backend.engine.gameplay.unlock_targets import _require_session_exit, _resolve_session_exit
+from backend.engine.gameplay.world import AdventureLogic
 from backend.engine.npc_journal.worker import schedule as schedule_npc_journal
 from backend.engine.trigger_service import TriggerService
+from backend.engine.turn_replay.drafts import pending as pending_turn
+from backend.engine.turn_replay.drafts import receipt as committed_receipt
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.avatar import Avatar
 from backend.models.chat import ChatMessage
@@ -72,6 +75,12 @@ from backend.models.game_session import GameSession
 from backend.models.session_state import SessionState
 from backend.models.user import User
 from backend.models.world_entity import WorldEntity, WorldExit, WorldScene
+from backend.schemas.unlock_actions import (
+    ContainerUnlockCodeRequest,
+    ContainerUnlockItemRequest,
+    ExitUnlockCodeRequest,
+    ExitUnlockItemRequest,
+)
 
 router = APIRouter(tags=["Gameplay"])
 logger = logging.getLogger(__name__)
@@ -84,19 +93,6 @@ CLIENT_TURN_ERROR_DETAIL = "Unable to process this turn."
 INVALID_CONTAINER_CODE_MESSAGE = (
     "The lock gives a mocking click. That code won't open this container."
 )
-
-
-class ContainerUnlockCodeRequest(BaseModel):
-    code: str
-
-
-async def _require_session_state(
-    db: AsyncSession, game_id: str, current_user: User
-) -> SessionState:
-    state = await AdventureLogic.resolve_session_state(db, game_id, user_id=current_user.id)
-    if not state:
-        raise HTTPException(status_code=404, detail="Session not found.")
-    return state
 
 
 def _terminal_flags_from_state(state: SessionState) -> tuple[bool, bool]:
@@ -121,7 +117,7 @@ async def get_session_debug(
     game_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """Unified debug inspector endpoint for active game sessions. Requires debug mode to be enabled."""
     state = await AdventureLogic.resolve_session_state(db, game_id, user_id=current_user.id)
     if not state:
@@ -149,9 +145,10 @@ async def get_session_debug(
 async def get_chat_history(
     game_id: str,
     include_full_world: bool = Query(False),
+    include_messages: bool = Query(True),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> ChatResponse:
     """Retrieves full chat history and current UI state for a game session."""
     state = await AdventureLogic.resolve_session_state(db, game_id, user_id=current_user.id)
     if not state or (state.session and state.session.user_id != current_user.id):
@@ -164,17 +161,25 @@ async def get_chat_history(
 
     cv_res = await db.execute(select(Avatar).where(Avatar.id == state.avatar_id))
     avatar = cv_res.scalars().first()
+    if avatar is None:
+        raise HTTPException(status_code=404, detail="Avatar not found.")
 
-    map_dict = await build_session_map(db, state)
+    read_only = bool(db.info.get("snapshot_read_only"))
+    map_dict = await build_session_map(db, state, read_only=read_only)
     entities = await AdventureLogic.build_session_entities(db, state)
     scene_image = await AdventureLogic.resolve_scene_image(db, state, state.current_scene_id)
     pending_terminal_epilogue, input_locked = _terminal_flags_from_state(state)
     full_world_debug = await load_full_world_debug(db, state, include_full_world)
-    language = initialize_content_language(state, current_user, adventure)
-    await db.commit()
-    prompt_suggestions = await resolve_prompt_suggestions(db, state, current_user)
-    await apply_pending_sequence_progress(db, state, adventure, avatar)
-    history = await load_chat_history(db, state.session_id)
+    language = resolve_content_language(state, current_user, adventure)
+    if not read_only:
+        language = initialize_content_language(state, current_user, adventure)
+        await db.commit()
+    prompt_suggestions = await resolve_prompt_suggestions(
+        db, state, current_user, read_only=read_only
+    )
+    if not read_only:
+        await apply_pending_sequence_progress(db, state, adventure, avatar)
+    history = await load_chat_history(db, state.session_id) if include_messages else []
     schedule_npc_journal(state.session_id, current_user.id)
     from backend.engine.memory_rag.worker import schedule as schedule_memory
 
@@ -182,8 +187,12 @@ async def get_chat_history(
     session_status = state.session.status if state.session else None
 
     return ChatResponse(
+        pending_turn=await pending_turn(db, state, busy=read_only),
+        npc_behavior=npc_behavior_status(state),
+        system_debug_enabled=diagnostic_service.enabled,
         language=language,
         messages=history,
+        history_included=include_messages,
         sheet=await AdventureLogic.build_sheet_snapshot(avatar, state, db),
         combat=AdventureLogic.get_combat_snapshot(state),
         map_data=map_dict,
@@ -203,7 +212,7 @@ async def get_chat_history(
         sequence_id=state.active_sequence_id,
         quests=state.quests,
         awards=build_awards_for_snapshot(state, adventure, current_user),
-        is_completed=state.is_completed,
+        is_completed=bool(state.is_completed),
         game_over=session_status == "game_over",
         game_completed=session_status == "completed",
         status_note=state.session.status_note if state.session else None,
@@ -223,21 +232,33 @@ async def post_chat_message(
     payload: ChatRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> StreamingResponse:
     """Processes a user message and returns a streaming response."""
     try:
         manager = GameTurnManager(db, game_id, current_user)
+        manager.narration_correction = payload.narration_correction
         turn_id = uuid4().hex
+        manager.turn_id = turn_id
 
         async def _stream_with_turn_id(
             source: AsyncGenerator[str, None],
         ) -> AsyncGenerator[str, None]:
+            final_sent = False
             try:
                 async for chunk in source:
+                    final_sent = final_sent or chunk.startswith("event: final\n")
                     if isinstance(chunk, str) and chunk.startswith("event:"):
                         yield f"id: {turn_id}\n{chunk}"
                     else:
                         yield chunk
+            except (asyncio.CancelledError, GeneratorExit):
+                logger.info(
+                    "Chat transport disconnected: session=%s turn_id=%s final_sent=%s",
+                    game_id,
+                    turn_id,
+                    final_sent,
+                )
+                raise
             except Exception:
                 # Never forward the exception text to the client — log
                 # server-side, yield only the static error message.
@@ -245,21 +266,29 @@ async def post_chat_message(
                 yield (
                     f"id: {turn_id}\n"
                     "event: error\n"
-                    f"data: {json.dumps({'detail': CLIENT_TURN_ERROR_DETAIL, 'retryable': True})}\n\n"
+                    f"data: {json.dumps({'detail': CLIENT_TURN_ERROR_DETAIL, 'retryable': not bool(committed_receipt(manager)), **committed_receipt(manager)})}\n\n"
                 )
+
+            finally:
+                await source.aclose()
 
         try:
             turn_stream = manager.process_turn(
                 payload.content,
                 auto_visualize=payload.auto_visualize,
                 language=payload.language,
+                **(
+                    {"replay_message_id": payload.replay_message_id}
+                    if payload.replay_message_id
+                    else {}
+                ),
             )
         except Exception:
             logger.exception("Failed to initialize chat stream for session %s", game_id)
             raise HTTPException(status_code=500, detail=CLIENT_TURN_ERROR_DETAIL) from None
 
         return StreamingResponse(
-            _stream_with_turn_id(turn_stream),
+            heartbeat_stream(_stream_with_turn_id(turn_stream)),
             media_type="text/event-stream",
             headers={"X-Taleweaver-Turn-Id": turn_id},
         )
@@ -276,10 +305,10 @@ async def create_terminal_epilogue(
     payload: TerminalEpilogueRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """Creates the one-time terminal epilogue for completed or game-over sessions."""
     manager = GameTurnManager(db, game_id, current_user)
-    return await cast(Any, manager).create_terminal_epilogue(language=payload.language)
+    return await manager.create_terminal_epilogue(language=payload.language)
 
 
 @router.post("/{game_id}/translate-text", response_model=TranslateTextResponse)
@@ -288,7 +317,7 @@ async def translate_text(
     payload: TranslateTextRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> TranslateTextResponse:
     """Translates arbitrary session text into the requested language (Bable Fish target)."""
     state = await AdventureLogic.resolve_session_state(db, game_id, user_id=current_user.id)
     if not state:
@@ -394,7 +423,7 @@ async def get_walkthrough(
     game_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """Returns the walkthrough status and payload for the current session."""
     state = await AdventureLogic.resolve_session_state(db, game_id, user_id=current_user.id)
     if not state:
@@ -451,7 +480,7 @@ async def mark_text_log_read(
     entity_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """Marks a READABLE object as read in session-scoped state overrides."""
     state = await AdventureLogic.resolve_session_state(db, game_id, user_id=current_user.id)
     if not state:
@@ -512,36 +541,10 @@ async def unlock_container_with_code(
     payload: ContainerUnlockCodeRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
-    """Deterministically unlocks a container when the provided code matches code_to_unlock."""
-    state = await _require_session_state(db, game_id, current_user)
-    entity = await load_session_object(db, state, entity_id, "CONTAINER", "Container not found.")
-    metadata_json = dict(entity.metadata_json or {})
-    expected_code = require_value(
-        metadata_json.get("code_to_unlock"), "This container does not require a code."
+) -> dict[str, Any]:
+    return await unlock_actions.unlock_container_with_code(
+        game_id, entity_id, payload, db=db, current_user=current_user
     )
-    submitted_code = require_value(payload.code, "Code is required.")
-    if submitted_code.lower() != expected_code.lower():
-        raise HTTPException(status_code=403, detail=INVALID_CONTAINER_CODE_MESSAGE)
-
-    await enforce_container_guard(db, state, entity, metadata_json)
-
-    # Only the first unlock grants XP.
-    if mark_container_unlocked(state, entity.id):
-        avatar = await load_avatar(db, state)
-        if avatar:
-            xp_reward = await award_session_unlock_xp(db, state, avatar, metadata_json)
-            add_system_message(db, state, f"Unlocked {entity.name} with the correct code!")
-            if xp_reward:
-                add_system_message(db, state, f"you gained {xp_reward} XP")
-        await fire_container_unlock_success(db, state, entity, metadata_json)
-
-    await db.commit()
-    return {"status": "ok", "entity_id": entity.id, "locked": False}
-
-
-class ContainerUnlockItemRequest(BaseModel):
-    item_id: str
 
 
 @router.post("/{game_id}/containers/{entity_id}/unlock-item")
@@ -551,35 +554,10 @@ async def unlock_container_with_item(
     payload: ContainerUnlockItemRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
-    """Deterministically unlocks a container when the player possesses the required item."""
-    state = await _require_session_state(db, game_id, current_user)
-    entity = await load_session_object(db, state, entity_id, "CONTAINER", "Container not found.")
-    metadata_json = dict(entity.metadata_json or {})
-    expected_item_id = require_value(
-        metadata_json.get("item_to_unlock"), "This container does not require an item to unlock."
-    ).upper()
-    submitted_item_id = require_value(payload.item_id, "Item ID is required.").upper()
-    if submitted_item_id != expected_item_id:
-        raise HTTPException(status_code=403, detail="This item cannot unlock this container.")
-
-    avatar = await require_avatar(db, state)
-    if not avatar_has_item(avatar, submitted_item_id):
-        raise HTTPException(status_code=403, detail="You do not possess the required key item.")
-
-    await enforce_container_guard(db, state, entity, metadata_json)
-
-    # Only the first unlock grants XP.
-    if mark_container_unlocked(state, entity.id):
-        xp_reward = await award_session_unlock_xp(db, state, avatar, metadata_json)
-        item_name = inventory_item_name(avatar, submitted_item_id)
-        add_system_message(db, state, f"Unlocked {entity.name} using {item_name}!")
-        if xp_reward:
-            add_system_message(db, state, f"you gained {xp_reward} XP")
-        await fire_container_unlock_success(db, state, entity, metadata_json)
-
-    await db.commit()
-    return {"status": "ok", "entity_id": entity.id, "locked": False}
+) -> dict[str, Any]:
+    return await unlock_actions.unlock_container_with_item(
+        game_id, entity_id, payload, db=db, current_user=current_user
+    )
 
 
 @router.post("/{game_id}/containers/{entity_id}/unlock")
@@ -588,28 +566,10 @@ async def unlock_container(
     entity_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
-    """Deterministically unlocks a container directly (evaluating unlock_expression if present)."""
-    state = await _require_session_state(db, game_id, current_user)
-    entity = await load_session_object(db, state, entity_id, "CONTAINER", "Container not found.")
-    metadata_json = dict(entity.metadata_json or {})
-    if metadata_json.get("code_to_unlock"):
-        raise HTTPException(status_code=400, detail="This container requires a passcode.")
-    if metadata_json.get("item_to_unlock"):
-        raise HTTPException(status_code=400, detail="This container requires a key item.")
-
-    await enforce_container_guard(db, state, entity, metadata_json)
-
-    # Only the first unlock grants XP.
-    if mark_container_unlocked(state, entity.id):
-        avatar = await load_avatar(db, state)
-        if avatar:
-            await award_session_unlock_xp(db, state, avatar, metadata_json)
-            add_system_message(db, state, f"Unlocked {entity.name}!")
-        await fire_container_unlock_success(db, state, entity, metadata_json)
-
-    await db.commit()
-    return {"status": "ok", "entity_id": entity.id, "locked": False}
+) -> dict[str, Any]:
+    return await unlock_actions.unlock_container(
+        game_id, entity_id, db=db, current_user=current_user
+    )
 
 
 class SwitchFlipCodeRequest(BaseModel):
@@ -629,7 +589,7 @@ async def flip_switch_with_code(
     payload: SwitchFlipCodeRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """Deterministically flips a switch when the provided code matches the transition gate code."""
     state = await _require_session_state(db, game_id, current_user)
     flip = await resolve_switch_flip(db, state, entity_id, payload.target_state)
@@ -654,7 +614,7 @@ async def flip_switch_with_item(
     payload: SwitchFlipItemRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """Deterministically flips a switch when the player possesses the required item."""
     state = await _require_session_state(db, game_id, current_user)
     flip = await resolve_switch_flip(db, state, entity_id, payload.target_state)
@@ -685,61 +645,6 @@ async def flip_switch_with_item(
 INVALID_EXIT_CODE_MESSAGE = "That code does not open this way."
 
 
-async def _resolve_session_exit(
-    db: AsyncSession, state: SessionState, exit_id: str
-) -> WorldExit | None:
-    """Returns the exit used for the current session, preferring the session-scoped row."""
-    clean_id = (exit_id or "").strip()
-    res = await db.execute(
-        select(WorldExit).where(
-            or_(
-                WorldExit.session_id == state.session_id,
-                and_(
-                    WorldExit.template_id == state.template_id,
-                    WorldExit.session_id.is_(None),
-                ),
-            ),
-            or_(
-                WorldExit.id == clean_id,
-                func.lower(WorldExit.id) == clean_id.lower(),
-            ),
-        )
-    )
-    resolved = res.scalars().first()
-    if not resolved:
-        return None
-
-    # If it is template-scoped, try to find the corresponding session-scoped exit
-    if resolved.session_id is None:
-        session_res = await db.execute(
-            select(WorldExit).where(
-                WorldExit.session_id == state.session_id,
-                WorldExit.from_scene_id == resolved.from_scene_id,
-                WorldExit.to_scene_id == resolved.to_scene_id,
-            )
-        )
-        session_exit = session_res.scalars().first()
-        if session_exit:
-            return session_exit
-
-    return resolved
-
-
-async def _require_session_exit(db: AsyncSession, state: SessionState, exit_id: str) -> WorldExit:
-    world_exit = await _resolve_session_exit(db, state, exit_id)
-    if not world_exit:
-        raise HTTPException(status_code=404, detail="Exit not found.")
-    return world_exit
-
-
-class ExitUnlockCodeRequest(BaseModel):
-    code: str
-
-
-class ExitUnlockItemRequest(BaseModel):
-    item_id: str
-
-
 @router.post("/{game_id}/exits/{exit_id}/unlock-code")
 async def unlock_exit_with_code(
     game_id: str,
@@ -747,21 +652,9 @@ async def unlock_exit_with_code(
     payload: ExitUnlockCodeRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
-    """Unlocks an exit by validating a submitted access code."""
-    state = await _require_session_state(db, game_id, current_user)
-    world_exit = await _require_session_exit(db, state, exit_id)
-    expected = require_value(world_exit.code_to_unlock, "This exit does not require a code.")
-    submitted = require_value(payload.code, "Code is required.")
-    if submitted.lower() != expected.lower():
-        raise HTTPException(status_code=403, detail=INVALID_EXIT_CODE_MESSAGE)
-
-    await enforce_exit_guard(db, state, world_exit)
-    return await open_exit(
-        db,
-        state,
-        world_exit,
-        f"{world_exit.label or 'The exit'} accepts the code and the way is open.",
+) -> dict[str, Any]:
+    return await unlock_actions.unlock_exit_with_code(
+        game_id, exit_id, payload, db=db, current_user=current_user
     )
 
 
@@ -772,28 +665,9 @@ async def unlock_exit_with_item(
     payload: ExitUnlockItemRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
-    """Unlocks an exit when the player possesses the required key item."""
-    state = await _require_session_state(db, game_id, current_user)
-    world_exit = await _require_session_exit(db, state, exit_id)
-    expected_item = require_value(
-        world_exit.item_to_unlock, "This exit does not require an item to unlock."
-    ).upper()
-    submitted_item = require_value(payload.item_id, "Item ID is required.").upper()
-    if submitted_item != expected_item:
-        raise HTTPException(status_code=403, detail="This item cannot unlock this exit.")
-
-    avatar = await require_avatar(db, state)
-    if not avatar_has_item(avatar, submitted_item):
-        raise HTTPException(status_code=403, detail="You do not possess the required key item.")
-    item_name = inventory_item_name(avatar, submitted_item)
-
-    await enforce_exit_guard(db, state, world_exit)
-    return await open_exit(
-        db,
-        state,
-        world_exit,
-        f"{world_exit.label or 'The exit'} yields to {item_name} and the way is open.",
+) -> dict[str, Any]:
+    return await unlock_actions.unlock_exit_with_item(
+        game_id, exit_id, payload, db=db, current_user=current_user
     )
 
 
@@ -803,19 +677,8 @@ async def unlock_exit(
     exit_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
-    """Deterministically unlocks an exit directly (evaluating unlock_expression if present)."""
-    state = await _require_session_state(db, game_id, current_user)
-    world_exit = await _require_session_exit(db, state, exit_id)
-    if world_exit.code_to_unlock:
-        raise HTTPException(status_code=400, detail="This exit requires a passcode.")
-    if world_exit.item_to_unlock:
-        raise HTTPException(status_code=400, detail="This exit requires a key item.")
-
-    await enforce_exit_guard(db, state, world_exit)
-    return await open_exit(
-        db, state, world_exit, f"{world_exit.label or 'The exit'} unlocks and the way is open."
-    )
+) -> dict[str, Any]:
+    return await unlock_actions.unlock_exit(game_id, exit_id, db=db, current_user=current_user)
 
 
 async def _fire_gameplay_exit_triggers(
@@ -874,7 +737,7 @@ async def traverse_exit(
     exit_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """Moves the player through an unlocked exit to the target scene."""
     state = await AdventureLogic.resolve_session_state(db, game_id, user_id=current_user.id)
     if not state:
@@ -942,3 +805,32 @@ async def traverse_exit(
 
     await db.commit()
     return {"status": "ok", "exit_id": world_exit.id, "scene_id": target_scene_id}
+
+
+__all__ = [
+    "ContainerUnlockCodeRequest",
+    "ContainerUnlockItemRequest",
+    "ExitUnlockCodeRequest",
+    "ExitUnlockItemRequest",
+    "SwitchFlipCodeRequest",
+    "SwitchFlipItemRequest",
+    "_require_session_exit",
+    "_require_session_state",
+    "_resolve_session_exit",
+    "create_terminal_epilogue",
+    "flip_switch_with_code",
+    "flip_switch_with_item",
+    "get_chat_history",
+    "get_session_debug",
+    "get_walkthrough",
+    "mark_text_log_read",
+    "post_chat_message",
+    "translate_text",
+    "traverse_exit",
+    "unlock_container",
+    "unlock_container_with_code",
+    "unlock_container_with_item",
+    "unlock_exit",
+    "unlock_exit_with_code",
+    "unlock_exit_with_item",
+]

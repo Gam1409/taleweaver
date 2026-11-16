@@ -1,5 +1,6 @@
 import { ref } from 'vue'
 import { api } from '@/composables/useApi'
+import { confirmAction } from './confirmAction'
 
 /**
  * UserService manages user administration operations:
@@ -86,7 +87,7 @@ class UserService {
    * Requires user confirmation before deletion.
    */
   async deleteUser(userId: string, username: string) {
-    if (!confirm(`Are you sure you want to delete user "${username}"?`)) {
+    if (!await confirmAction({ title: 'Delete user', message: `Are you sure you want to delete user "${username}"?`, confirmLabel: 'Delete user' })) {
       return
     }
 

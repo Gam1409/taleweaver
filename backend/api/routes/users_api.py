@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import logging
 import os
-import shutil
-from typing import Optional
+from collections.abc import Sequence
+from typing import Any, Optional
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.routes.account_api import router as account_router
 from backend.api.routes.auth_api import UserResponse
+from backend.api.routes.upload_files import save_profile_image
 from backend.core.account_recovery import (
     RESET_TOKEN_TTL,
     issue_password_reset_token,
@@ -27,6 +28,8 @@ from backend.core.auth import (
 )
 from backend.core.config import settings
 from backend.core.database import get_db
+from backend.core.error_diagnostics import diagnose_provider_error
+from backend.core.image_purposes import image_provider
 from backend.core.llm_router import GameMasterLLM
 from backend.core.prompts import (
     USER_BIO_GENERATION_SYSTEM_PROMPT,
@@ -35,9 +38,9 @@ from backend.core.prompts import (
 from backend.core.security import encryption_util
 from backend.engine.media_engine import MediaEngine
 from backend.models.user import User
+from backend.utils.async_files import run_file_operation
 from backend.utils.path_security import (
     ensure_within_data_dir,
-    local_path_to_data_url,
     safe_data_path,
     sanitize_path_component,
 )
@@ -166,7 +169,7 @@ def _resolve_provider_api_key(
 
 
 @router.get("/users", response_model=list[UserResponse])
-async def list_users(_admin: User = ADMIN_DEP, db: AsyncSession = DB_DEP):
+async def list_users(_admin: User = ADMIN_DEP, db: AsyncSession = DB_DEP) -> Sequence[User]:
     result = await db.execute(select(User))
     return result.scalars().all()
 
@@ -176,7 +179,7 @@ async def create_user(
     request: UserCreateRequest,
     _admin: User = ADMIN_DEP,
     db: AsyncSession = DB_DEP,
-):
+) -> User:
     username = _validated_username(request.username)
     await _ensure_username_available(db, username)
 
@@ -197,7 +200,7 @@ async def update_user(
     request: UserUpdateRequest,
     admin: User = ADMIN_DEP,
     db: AsyncSession = DB_DEP,
-):
+) -> User:
     result = await db.execute(select(User).filter(User.id == user_id))
     user = result.scalars().first()
     if not user:
@@ -215,7 +218,7 @@ async def update_user(
         user.role = new_role
     if request.password:
         # Also revokes the user's existing sessions.
-        await set_new_password(user, _validated_password(request.password))
+        await set_new_password(db, user, _validated_password(request.password))
     if request.bio is not None:
         user.bio = request.bio
     if request.default_language is not None:
@@ -226,8 +229,10 @@ async def update_user(
     return user
 
 
-@router.delete("/users/{user_id}")
-async def delete_user(user_id: str, admin: User = ADMIN_DEP, db: AsyncSession = DB_DEP):
+@router.delete("/users/{user_id}", response_model=None)
+async def delete_user(
+    user_id: str, admin: User = ADMIN_DEP, db: AsyncSession = DB_DEP
+) -> dict[str, Any]:
     result = await db.execute(select(User).filter(User.id == user_id))
     user = result.scalars().first()
     if not user:
@@ -237,7 +242,9 @@ async def delete_user(user_id: str, admin: User = ADMIN_DEP, db: AsyncSession = 
     if user.id == admin.id:
         raise HTTPException(status_code=400, detail="Cannot delete your own account")
 
-    await db.delete(user)
+    from backend.core.relational_delete import delete_owned_rows
+
+    await delete_owned_rows(db, User.__table__, User.__table__.c.id == user.id)
     await db.commit()
     return {"message": "User deleted"}
 
@@ -245,7 +252,7 @@ async def delete_user(user_id: str, admin: User = ADMIN_DEP, db: AsyncSession = 
 @router.post("/users/{user_id}/password-reset-link", response_model=PasswordResetLinkResponse)
 async def create_password_reset_link(
     user_id: str, _admin: User = ADMIN_DEP, db: AsyncSession = DB_DEP
-):
+) -> PasswordResetLinkResponse:
     """Issue a one-time password reset token for a user (replaces any previous one)."""
     result = await db.execute(select(User).filter(User.id == user_id))
     user = result.scalars().first()
@@ -262,7 +269,7 @@ async def create_password_reset_link(
 @router.put("/users/me/bio", response_model=UserResponse)
 async def update_my_bio(
     request: BioUpdateRequest, current_user: User = USER_DEP, db: AsyncSession = DB_DEP
-):
+) -> User:
     current_user.bio = request.bio
     await db.commit()
     await db.refresh(current_user)
@@ -274,29 +281,23 @@ async def upload_my_profile_image(
     file: UploadFile = UPLOAD_FILE_DEP,
     current_user: User = USER_DEP,
     db: AsyncSession = DB_DEP,
-):
+) -> User:
     safe_user_id = _sanitize_path_component(current_user.id)
     if not safe_user_id:
         raise HTTPException(status_code=400, detail="Invalid user identifier")
 
-    upload_dir = safe_data_path("users")
-    os.makedirs(upload_dir, exist_ok=True)
-
-    file_ext = _sanitize_image_extension(file.filename)
-    filename = f"{safe_user_id}_{uuid4().hex[:8]}{file_ext}"
-    file_path = _ensure_within_data_dir(os.path.join(upload_dir, filename))
-
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-
-    current_user.profile_image_url = local_path_to_data_url(file_path)
+    current_user.profile_image_url = await run_file_operation(
+        save_profile_image, safe_user_id, file.filename, file.file
+    )
     await db.commit()
     await db.refresh(current_user)
     return current_user
 
 
-@router.post("/users/me/bio/generate")
-async def generate_my_bio(current_user: User = USER_DEP, db: AsyncSession = DB_DEP):
+@router.post("/users/me/bio/generate", response_model=None)
+async def generate_my_bio(
+    current_user: User = USER_DEP, db: AsyncSession = DB_DEP
+) -> dict[str, Any]:
 
     gm = GameMasterLLM.for_role(current_user, "small")
     model = gm.model
@@ -310,7 +311,11 @@ async def generate_my_bio(current_user: User = USER_DEP, db: AsyncSession = DB_D
         await db.refresh(current_user)
         return {"bio": bio}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Bio generation failed: {str(e)}") from e
+        raise HTTPException(
+            status_code=500,
+            detail="Bio generation failed. "
+            + diagnose_provider_error(e, provider=getattr(gm, "provider", "")),
+        ) from e
 
 
 @router.post("/users/me/profile-image/generate", response_model=UserResponse)
@@ -318,7 +323,7 @@ async def generate_my_profile_image(
     payload: Optional[ProfileImageGenerateRequest] = None,
     current_user: User = USER_DEP,
     db: AsyncSession = DB_DEP,
-):
+) -> User:
     admin_res = await db.execute(select(User).where(User.role == "admin").limit(1))
     settings_owner = admin_res.scalars().first() or current_user
 
@@ -328,7 +333,7 @@ async def generate_my_profile_image(
             status_code=400, detail="Visual preferences are not configured by admin."
         )
 
-    provider = (t2i.get("simple_model_provider") or "openai").lower()
+    provider = image_provider(t2i, "simple", "avatar")
     model = t2i.get("simple_model")
 
     if not model and provider != "comfyui":
@@ -362,6 +367,7 @@ async def generate_my_profile_image(
             provider_options={
                 **t2i,
                 "visual_target_type": "protagonist",
+                "image_purpose": "avatar",
                 "_prompt_user": settings_owner,
             },
         )
@@ -379,4 +385,8 @@ async def generate_my_profile_image(
         return current_user
     except Exception as e:
         logger.exception("Profile image generation failed for user %s", current_user.id)
-        raise HTTPException(status_code=500, detail=f"Image generation failed: {str(e)}") from e
+        raise HTTPException(
+            status_code=500,
+            detail="Image generation failed. "
+            + diagnose_provider_error(e, provider=provider, context="image"),
+        ) from e

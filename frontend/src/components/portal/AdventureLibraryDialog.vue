@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, onMounted, onUnmounted } from 'vue'
 import type { UseAdventureLibraryResult } from '@/composables/useAdventureLibrary'
+import { useAdventureCatalogFilters } from '@/composables/useAdventureCatalogFilters'
 import { formatBytes } from '@/utils/editor_utils'
 import AdventureLibraryCard from './AdventureLibraryCard.vue'
 
@@ -22,7 +23,7 @@ function handleKey(event: KeyboardEvent) {
   if (event.key !== 'Tab') return
   const targets = Array.from(
     panel.value?.querySelectorAll<HTMLElement>(
-      'button:not(:disabled), input:not(:disabled), [tabindex="0"]'
+      'button:not(:disabled), input:not(:disabled), select:not(:disabled), [tabindex="0"]'
     ) || []
   )
   const first = targets[0],
@@ -67,6 +68,8 @@ const {
   installStatus,
   isSubmitting
 } = lib
+const { query, language, languages, filteredItems, clearFilters } =
+  useAdventureCatalogFilters(items)
 
 const hasSelectable = computed(() => items.value.some(lib.isSelectable))
 const showInitialLoading = computed(() => loading.value && items.value.length === 0)
@@ -199,6 +202,32 @@ function toggleAll() {
         </div>
 
         <template v-else>
+          <div class="mb-4 flex flex-col sm:flex-row gap-3">
+            <label class="flex-1 text-xs text-slate-300">
+              Search adventures
+              <input
+                v-model="query"
+                type="search"
+                placeholder="Title, description or author"
+                class="mt-1 w-full rounded-lg border border-white/15 bg-slate-950 px-3 py-2 text-sm text-white"
+                :disabled="isSubmitting"
+              />
+            </label>
+            <label class="text-xs text-slate-300">
+              Language
+              <select
+                v-model="language"
+                class="mt-1 w-full rounded-lg border border-white/15 bg-slate-950 px-3 py-2 text-sm text-white"
+                :disabled="isSubmitting"
+              >
+                <option value="">All languages</option>
+                <option v-for="value in languages" :key="value" :value="value">{{ value }}</option>
+              </select>
+            </label>
+          </div>
+          <p class="mb-3 text-xs text-slate-400" role="status">
+            Showing {{ filteredItems.length }} of {{ items.length }} adventures
+          </p>
           <label
             class="mb-4 inline-flex items-center gap-2 text-xs font-bold uppercase tracking-widest"
             :class="
@@ -212,12 +241,12 @@ function toggleAll() {
               :disabled="!hasSelectable"
               @change="toggleAll"
             />
-            Select all
+            Select all adventures in catalog
           </label>
 
           <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <AdventureLibraryCard
-              v-for="item in items"
+              v-for="item in filteredItems"
               :key="item.entry.id"
               :item="item"
               :selected="lib.isSelected(item.entry.id)"
@@ -225,6 +254,12 @@ function toggleAll() {
               :installing="installingId === item.entry.id"
               @toggle="lib.toggle"
             />
+          </div>
+          <div v-if="filteredItems.length === 0" class="py-8 text-center text-sm text-slate-300">
+            <p>No adventures match these filters.</p>
+            <button type="button" class="mt-3 text-cyan-300 underline" @click="clearFilters">
+              Clear filters
+            </button>
           </div>
         </template>
       </div>

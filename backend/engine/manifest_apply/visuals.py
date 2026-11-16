@@ -104,4 +104,4 @@ def t2i_config(ctx: ApplyContext) -> tuple[dict, dict]:
 
 def uses_advanced_model(ctx: ApplyContext, setting: str, default: str) -> bool:
     t2i = (ctx.user.t2i_settings if ctx.user else None) or {}
-    return t2i.get(setting, default) == "advanced"
+    return bool(t2i.get(setting, default) == "advanced")

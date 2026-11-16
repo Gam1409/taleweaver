@@ -6,6 +6,8 @@ export interface MemoryRagSettings {
   base_url: string
   model: string
   timeout_seconds: number
+  query_prefix?: string
+  document_prefix?: string
   key_configured?: boolean
 }
 
@@ -29,6 +31,10 @@ export function memoryRagPayload(settings: MemoryRagSettings, apiKey: string): M
     base_url: settings.base_url.trim(),
     model: settings.model.trim(),
     timeout_seconds: settings.timeout_seconds,
+    ...(settings.query_prefix !== undefined ? { query_prefix: settings.query_prefix } : {}),
+    ...(settings.document_prefix !== undefined
+      ? { document_prefix: settings.document_prefix }
+      : {}),
     ...(apiKey.trim() ? { api_key: apiKey.trim() } : {})
   }
 }

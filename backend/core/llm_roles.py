@@ -45,8 +45,8 @@ def resolve_llm_role(llm_settings: dict[str, Any], role: str) -> LLMRoleConfig:
         provider = llm_settings.get("preferred_provider") if role != "compression" else None
     provider = str(provider or "openai").strip().lower()
     model = str(llm_settings.get(f"{source}_model") or "").strip()
-    if provider == "ollama" and not model:
-        raise ValueError(f"No model configured for role '{role}' (provider 'ollama').")
+    if provider != "openai" and not model:
+        raise ValueError(f"No model configured for role '{role}' (provider '{provider}').")
     default_model = "gpt-4o" if role in {"complex", "generator"} else "gpt-4o-mini"
     url = str(llm_settings.get(f"{role}_ollama_url") or "").strip()
     global_url = str(llm_settings.get("ollama_url") or "").strip()

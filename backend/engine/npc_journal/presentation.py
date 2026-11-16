@@ -1,6 +1,6 @@
 """Project NPCs for players without exposing private possessions or authored motives."""
 
-from typing import Any
+from typing import Any, cast
 
 _PRIVATE_FIELDS = {
     "visual_profile",
@@ -30,7 +30,7 @@ def player_entity_view(entity: dict[str, Any]) -> dict[str, Any]:
     """Keep authored/debug/save data intact; only ordinary player payloads use this view."""
     if str(entity.get("entity_type", "")).upper() != "NPC":
         return entity
-    return _without_private_fields(entity)
+    return cast(dict[str, Any], _without_private_fields(entity))
 
 
 def npc_possession_ids(entities: list[dict[str, Any]]) -> set[str]:

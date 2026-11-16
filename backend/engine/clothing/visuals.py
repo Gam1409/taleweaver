@@ -3,9 +3,13 @@
 from typing import Any
 
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.engine.character_identity import identity_facts, identity_profile
 from backend.engine.clothing.projection import visible_character
 from backend.engine.clothing.settings import clothing_settings
+from backend.engine.physical_conditions.visuals import project as visible_conditions
+from backend.models.session_state import SessionState
 from backend.models.world_entity import WorldEntity
 
 
@@ -44,9 +48,12 @@ def character_visuals(
     if raw is None:
         return None
     projected = visible_character(
-        raw, inventory, detailed=detailed, equipment=value(actor, "equipment")
+        identity_profile(actor, raw),
+        inventory,
+        detailed=detailed,
+        equipment=value(actor, "equipment"),
     ) or {"appearance": {}, "clothing": [], "clothing_detail_limited": True}
-    appearance = projected["appearance"]
+    appearance = {**projected["appearance"], **identity_facts(actor)}
     appearance_text = "; ".join(
         f"{key}: {field}" for key, field in appearance.items() if field not in (None, "", [])
     )
@@ -60,6 +67,7 @@ def character_visuals(
         "appearance": appearance_text,
         "clothing": clothing,
         "managed_clothing": True,
+        "clothing_tokens": [item["name"] for item in projected["clothing"] if item.get("name")],
         "clothing_detail_limited": limited,
     }
 
@@ -72,7 +80,14 @@ def _garment_description(item: dict) -> str:
 
 
 def portrait_description(facts: dict) -> str:
-    return "; ".join(str(facts[key]) for key in ("appearance", "clothing") if facts.get(key))
+    parts = [str(facts[key]) for key in ("appearance", "clothing") if facts.get(key)]
+    conditions = "; ".join(
+        f"{row.get('target_name') or facts['name']}: {row['detail']}"
+        for row in facts.get("physical_conditions", [])
+    )
+    if conditions:
+        parts.append("Current visible state (supersedes original descriptions): " + conditions)
+    return "; ".join(parts)
 
 
 def detailed_for_state(state: Any) -> bool:
@@ -80,20 +95,39 @@ def detailed_for_state(state: Any) -> bool:
     return clothing_settings(snapshot.get("original_manifest"))["detailed"]
 
 
-async def session_objects(db, session_id: str) -> list[WorldEntity]:
+async def session_objects(db: AsyncSession, session_id: str) -> list[WorldEntity]:
     return list(
         (await db.scalars(select(WorldEntity).where(WorldEntity.session_id == session_id))).all()
     )
 
 
-async def npc_visuals(db, state, npc) -> dict | None:
+async def npc_visuals(db: AsyncSession, state: SessionState, npc: WorldEntity) -> dict | None:
+    from backend.engine.clothing.context import resolved_inventory
+
     override = (state.entity_states or {}).get(npc.id) or {}
     profile = override.get("visual_profile", value(npc, "visual_profile"))
     if profile is None:
         return None
-    inventory = override.get("inventory", npc.inventory) or []
-    owned = canonical_inventory(inventory, await session_objects(db, state.session_id))
-    facts = character_visuals(npc, owned, profile=profile, detailed=detailed_for_state(state))
+    inventory = (
+        override.get("inventory", npc.inventory or (npc.metadata_json or {}).get("inventory", []))
+        or []
+    )
+    owned = resolved_inventory(
+        inventory, await session_objects(db, state.session_id), state.entity_states or {}
+    )
+    detailed = detailed_for_state(state)
+    facts = character_visuals(npc, owned, profile=profile, detailed=detailed)
     if facts is not None:
         facts["name"] = override.get("name", npc.name)
+        facts["physical_conditions"] = visible_conditions(
+            state,
+            {
+                npc.id: {
+                    "visual_profile": identity_profile(npc, profile),
+                    "resolved_inventory": owned,
+                    "equipment": value(npc, "equipment"),
+                }
+            },
+            detailed=detailed,
+        )
     return facts

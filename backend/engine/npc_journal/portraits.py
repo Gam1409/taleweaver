@@ -2,10 +2,14 @@
 
 import asyncio
 import logging
+from typing import Any, cast
 
-from sqlalchemy import select
+from sqlalchemy import select, update
+from sqlalchemy.engine import CursorResult
 
 from backend.core import database
+from backend.core.diagnostic_operations import diagnostic_job
+from backend.engine.memory_rag.persistence import retry_transaction
 from backend.engine.npc_journal.records import JOURNAL_KEY, journal_of
 from backend.engine.session_portraits import SessionPortraitRequest, regenerate_session_portrait
 from backend.models.user import User
@@ -37,7 +41,8 @@ async def resume_pending(session_id: str, user_id: str) -> None:
             schedule_portrait(session_id, npc.id, user_id)
 
 
-async def _mark(session_id: str, npc_id: str, status: str) -> bool:
+@retry_transaction
+async def _try_mark(session_id: str, npc_id: str, status: str) -> tuple[bool, bool]:
     async with database.AsyncSessionLocal() as db:
         npc = await db.scalar(
             select(WorldEntity).where(
@@ -46,14 +51,37 @@ async def _mark(session_id: str, npc_id: str, status: str) -> bool:
             )
         )
         if npc is None:
-            return False
+            return True, False
+        before = npc.metadata_json
+        previous_image = npc.image_url
         journal = journal_of(npc)
         journal["portrait_status"] = "ready" if npc.image_url else status
-        npc.metadata_json = {**npc.metadata_json, JOURNAL_KEY: journal}
+        updated = await db.execute(
+            update(WorldEntity)
+            .where(
+                WorldEntity.session_id == session_id,
+                WorldEntity.id == npc_id,
+                WorldEntity.metadata_json == before,
+                WorldEntity.image_url == previous_image,
+            )
+            .values(metadata_json={**(before or {}), JOURNAL_KEY: journal})
+            .execution_options(synchronize_session=False)
+        )
+        if cast(CursorResult[Any], updated).rowcount != 1:
+            return False, False
         await db.commit()
-        return not bool(npc.image_url)
+        return True, not bool(previous_image)
 
 
+async def _mark(session_id: str, npc_id: str, status: str) -> bool:
+    for _attempt in range(3):
+        saved, needs_image = await _try_mark(session_id, npc_id, status)
+        if saved:
+            return needs_image
+    raise RuntimeError("The NPC changed repeatedly while saving portrait status.")
+
+
+@diagnostic_job("npc_portrait")
 async def _run(session_id: str, npc_id: str, user_id: str) -> None:
     try:
         async with _capacity:
@@ -69,7 +97,12 @@ async def _run(session_id: str, npc_id: str, user_id: str) -> None:
         await _mark(session_id, npc_id, "ready")
     except asyncio.CancelledError:
         # A provider may still be running; do not automatically pay for a second image.
-        await _mark(session_id, npc_id, "interrupted")
+        try:
+            await _mark(session_id, npc_id, "interrupted")
+        except Exception:
+            logger.exception(
+                "Could not save interrupted portrait status for %s/%s", session_id, npc_id
+            )
         raise
     except Exception:
         logger.exception("Automatic NPC portrait failed for session %s NPC %s", session_id, npc_id)

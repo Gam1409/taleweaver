@@ -5,6 +5,8 @@ import os
 from typing import Any, Optional
 
 from backend.core.config import settings
+from backend.core.llm_diagnostics import bridge_event
+from backend.core.llm_usage_capture import record_usage
 
 # Logs may be sensitive (system prompts, full LLM I/O). Prefer a dedicated
 # directory outside DATA_DIR (set LLM_LOG_DIR). When unset we fall back to
@@ -24,7 +26,7 @@ MAX_LOG_TEXT_LENGTH = 12000
 _TELEMETRY_ENABLED = bool(getattr(settings, "LLM_TELEMETRY_ENABLED", False))
 logger.info(
     "LLM telemetry log: %s (LLM_TELEMETRY_ENABLED=%s)",
-    "ENABLED — writing to %s" % LOG_FILE if _TELEMETRY_ENABLED else "DISABLED",
+    f"ENABLED — writing to {LOG_FILE}" if _TELEMETRY_ENABLED else "DISABLED",
     _TELEMETRY_ENABLED,
 )
 
@@ -49,21 +51,17 @@ def _write_entry(entry: dict[str, Any]) -> None:
     if not _TELEMETRY_ENABLED:
         return
 
-    if not os.path.exists(LOG_DIR):
-        os.makedirs(LOG_DIR, exist_ok=True)
+    from backend.core.telemetry_writer import enqueue
 
-    try:
-        with open(LOG_FILE, "a", encoding="utf-8") as handle:
-            handle.write(json.dumps(_prepare_value(entry), ensure_ascii=False, default=str) + "\n")
-    except OSError as exc:
-        logger.error("Failed to write to LLM debug log: %s", exc)
+    enqueue(LOG_FILE, json.dumps(_prepare_value(entry), ensure_ascii=False, default=str))
 
 
 def log_structured_event(event_type: str, **fields: Any) -> None:
     """Appends a structured lifecycle event to the JSONL debug log.
 
-    No-op when LLM_TELEMETRY_ENABLED is False (the default).
+    Raw logging is disabled by default. Content-free system diagnostics are independent.
     """
+    bridge_event(event_type, fields)
     if not _TELEMETRY_ENABLED:
         return
     _write_entry(
@@ -73,6 +71,7 @@ def log_structured_event(event_type: str, **fields: Any) -> None:
             **fields,
         }
     )
+
 
 def log_llm_interaction(
     model: str,
@@ -88,7 +87,7 @@ def log_llm_interaction(
     operation: Optional[str] = None,
     phase: Optional[str] = None,
     metadata: Optional[dict[str, Any]] = None,
-):
+) -> None:
     """
     Logs an LLM interaction to a local JSONL file for debugging.
 
@@ -96,6 +95,57 @@ def log_llm_interaction(
     False. The standard Python logging system (LOG_LEVEL) is independent and
     continues to emit its own messages to stdout/stderr.
     """
+    from backend.core.visual_queries import capture_query
+    from backend.core.visual_trace import record
+
+    raw_choices = raw_response.get("choices") if isinstance(raw_response, dict) else None
+    raw_message = (
+        raw_choices[0].get("message", {})
+        if raw_choices and isinstance(raw_choices[0], dict)
+        else {}
+    )
+    raw_content = raw_message.get("content") if isinstance(raw_message, dict) else None
+    capture_query(
+        system_prompt,
+        user_prompt,
+        raw_content if isinstance(raw_content, str) else response_content,
+        model,
+        operation,
+    )
+
+    record("llm.response", system=system_prompt, user=user_prompt, response=response_content)
+    usage = raw_response.get("usage") if isinstance(raw_response, dict) else None
+    record_usage(usage)
+    from backend.core.llm_completion_capture import record_completion
+
+    record_completion(raw_response)
+    from backend.core.llm_timing import record_response
+
+    record_response(raw_response)
+    counts = (
+        {
+            key: usage.get(key)
+            for key in (
+                "prompt_tokens",
+                "completion_tokens",
+                "total_tokens",
+                "cached_prompt_tokens",
+            )
+        }
+        if isinstance(usage, dict)
+        else {}
+    )
+    bridge_event(
+        event_type,
+        {
+            "provider": provider,
+            "adventure_id": adventure_id,
+            "game_id": game_id,
+            "operation": operation,
+            "phase": phase,
+            **counts,
+        },
+    )
     if not _TELEMETRY_ENABLED:
         return
 
@@ -117,37 +167,6 @@ def log_llm_interaction(
 
     _write_entry(entry)
 
-    # Print token usage to console
-    usage = (raw_response or {}).get("usage") if isinstance(raw_response, dict) else None
-    if usage:
-        prompt_t = usage.get("prompt_tokens") or 0
-        completion_t = usage.get("completion_tokens") or 0
-        total_t = usage.get("total_tokens") or 0
-        print(
-            f"\n>>> [TOKEN USAGE] Phase: {phase or 'unknown'} | Model: {model} | "
-            f"Prompt: {prompt_t} | Completion: {completion_t} | Total: {total_t}\n",
-            flush=True
-        )
-    else:
-        try:
-            import litellm
-            prompt_t = litellm.token_counter(model=model, messages=[
-                {"role": "system", "content": system_prompt or ""},
-                {"role": "user", "content": user_prompt or ""}
-            ])
-            completion_t = litellm.token_counter(model=model, text=response_content or "")
-            total_t = prompt_t + completion_t
-            print(
-                f"\n>>> [TOKEN USAGE (ESTIMATED)] Phase: {phase or 'unknown'} | Model: {model} | "
-                f"Prompt: {prompt_t} | Completion: {completion_t} | Total: {total_t}\n",
-                flush=True
-            )
-        except Exception:
-            prompt_t = int(len((system_prompt or "") + (user_prompt or "")) / 4)
-            completion_t = int(len(response_content or "") / 4)
-            total_t = prompt_t + completion_t
-            print(
-                f"\n>>> [TOKEN USAGE (ESTIMATED FALLBACK)] Phase: {phase or 'unknown'} | Model: {model} | "
-                f"Prompt: {prompt_t} | Completion: {completion_t} | Total: {total_t}\n",
-                flush=True
-            )
+    from backend.core.llm_usage_reporting import print_token_usage
+
+    print_token_usage(usage, model, system_prompt or "", user_prompt or "", response_content or "")

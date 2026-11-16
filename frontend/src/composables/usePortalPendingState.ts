@@ -1,5 +1,6 @@
-import { computed, ref, type ComputedRef, type Ref } from 'vue'
+import { computed, onScopeDispose, ref, type ComputedRef, type Ref } from 'vue'
 import { api } from '@/composables/useApi'
+import { createStatusPoller, isMissingStatus } from '@/services/statusPoller'
 import type { AdventureTemplateSummary, GameSession } from '@/types'
 
 interface PendingAdventureState {
@@ -7,6 +8,7 @@ interface PendingAdventureState {
   title: string
   status: string
   hasError: boolean
+  connectionPaused?: boolean
 }
 
 type PendingCard = PendingAdventureState & { kind: 'creation' | 'import' }
@@ -29,6 +31,7 @@ export interface UsePortalPendingStateResult {
   syncPendingFromTemplates: (refreshPortalData: () => Promise<void>) => Promise<void>
   removeFailedPendingCard: (adventureId: string, kind: 'creation' | 'import') => Promise<void>
   cancelAdventure: (adventureId: string) => Promise<void>
+  retryPendingAdventure: (adventureId: string, refreshPortalData: () => Promise<void>) => void
   trackNewAdventure: (adventureId: string, title: string, refreshPortalData: () => Promise<void>) => void
   startLoadingWords: () => void
   stopLoadingWords: () => void
@@ -73,6 +76,12 @@ export function usePortalPendingState(
     'Weaving characters',
   ]
 
+  const pollers = new Map<string, ReturnType<typeof createStatusPoller>>()
+  onScopeDispose(() => {
+    for (const poller of pollers.values()) poller.stop()
+    pollers.clear()
+    stopLoadingWords()
+  })
   let loadingWordTimer: number | null = null
 
   const pendingCards = computed(() => [
@@ -110,6 +119,7 @@ export function usePortalPendingState(
     adventureId: string,
     status: string,
     hasError = false,
+    connectionPaused = false,
   ) {
     collection.value = collection.value.map((entry) =>
       entry.adventureId === adventureId
@@ -117,6 +127,7 @@ export function usePortalPendingState(
             ...entry,
             status: prettifyStatus(status),
             hasError,
+            connectionPaused,
           }
         : entry,
     )
@@ -147,43 +158,41 @@ export function usePortalPendingState(
   }
 
   function removePendingCreationCard(adventureId: string) {
+    pollers.get(adventureId)?.stop()
+    pollers.delete(adventureId)
     removePendingCard(pendingCreations, adventureId)
   }
 
-  async function pollAdventureStatus(adventureId: string, options?: PollAdventureOptions) {
-    return new Promise<void>((resolve) => {
-      const pollInterval = setInterval(async () => {
-        try {
-          const data = await api.getAdventureStatus(adventureId)
-          const statusText = data.status || 'Constructing world...'
-          options?.onStatus?.(statusText)
-
-          if (isFailureStatus(statusText) || (data.error && !data.error.startsWith('Notice:'))) {
-            clearInterval(pollInterval)
-            const detail = data.error || statusText || 'Generation failed.'
-            options?.onFailure?.(detail)
-            resolve()
-            return
-          }
-
-          if (data.is_ready) {
-            clearInterval(pollInterval)
-            await options?.onReady?.()
-            resolve()
-          }
-        } catch (err: unknown) {
-          // Stop polling only when the adventure was explicitly deleted (404).
-          // For transient network errors, keep retrying on the next tick.
-          const isNotFound =
-            err instanceof Error && err.message.startsWith('API 404')
-          if (isNotFound) {
-            clearInterval(pollInterval)
-            options?.onFailure?.('Adventure not found')
-            resolve()
-          }
+  function pollAdventureStatus(adventureId: string, options: PollAdventureOptions) {
+    const previous = pollers.get(adventureId)
+    if (previous) {
+      void previous.restart()
+      return
+    }
+    const poller = createStatusPoller(signal => api.getAdventureStatus(adventureId, signal), {
+      onData(data) {
+        const status = data.status || 'Constructing world...'
+        options.onStatus?.(status)
+        if (isFailureStatus(status) || (data.error && !data.error.startsWith('Notice:'))) {
+          options.onFailure?.(data.error || status)
+          return false
         }
-      }, 1500)
+        if (!data.is_ready) return true
+        void Promise.resolve(options.onReady?.()).catch(error => console.warn('Could not refresh the library:', error))
+        return false
+      },
+      onMissing: () => options.onFailure?.('Adventure not found'),
+      onPaused: () => updatePendingCardStatus(pendingCreations, adventureId,
+        'Status checks are paused. Generation may still be running. Retry the connection.', false, true),
     })
+    pollers.set(adventureId, poller)
+    void poller.start()
+  }
+
+  function retryPendingAdventure(adventureId: string, refreshPortalData: () => Promise<void>) {
+    const card = pendingCreations.value.find(entry => entry.adventureId === adventureId)
+    if (!card || !card.connectionPaused) return
+    trackNewAdventure(adventureId, card.title, refreshPortalData)
   }
 
   /** Creates background polling for all non-ready templates currently loaded. */
@@ -227,8 +236,10 @@ export function usePortalPendingState(
         sessions.value = sessions.value.filter((entry) => (entry.template_id || entry.adventure_id) !== adventureId)
       }
     } catch (error) {
-      console.error('Error deleting failed pending adventure:', error)
-      return
+      if (!isMissingStatus(error)) {
+        console.error('Error deleting failed pending adventure:', error)
+        return
+      }
     }
 
     if (kind === 'import') {
@@ -242,6 +253,8 @@ export function usePortalPendingState(
   async function cancelAdventure(adventureId: string) {
     try {
       await api.cancelAdventure(adventureId)
+      pollers.get(adventureId)?.stop()
+      pollers.delete(adventureId)
       updatePendingCreationStatus(adventureId, 'Cancelled', true)
     } catch (error) {
       console.error('Error cancelling adventure:', error)
@@ -265,6 +278,7 @@ export function usePortalPendingState(
 
   /** Starts the rotating loading word timer used by the portal UI. */
   function startLoadingWords() {
+    stopLoadingWords()
     loadingWordTimer = window.setInterval(() => {
       loadingWordIndex.value = (loadingWordIndex.value + 1) % loadingWords.length
     }, 1200)
@@ -288,6 +302,7 @@ export function usePortalPendingState(
     syncPendingFromTemplates,
     removeFailedPendingCard,
     cancelAdventure,
+    retryPendingAdventure,
     trackNewAdventure,
     startLoadingWords,
     stopLoadingWords,

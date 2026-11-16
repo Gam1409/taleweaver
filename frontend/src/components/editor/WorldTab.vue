@@ -32,6 +32,9 @@ const emit = defineEmits<{
   (e: 'update:tempValue', val: string): void
   (e: 'update:mode', val: 'rpg' | 'story' | 'chat' | 'vn'): void
   (e: 'save-changes'): void
+  (e: 'update:detailed-clothing', val: boolean): void
+  (e: 'update:nsfw-enabled', val: boolean): void
+  (e: 'update:nsfw-level', val: 'soft' | 'medium' | 'hard'): void
   (e: 'update:pacing', val: number): void
   (e: 'update:max-time-per-turn', val: number | null): void
   (e: 'update:clock-enabled', val: boolean): void
@@ -220,7 +223,9 @@ const time12Parts = computed(() => {
     const [hRaw, mRaw] = String(raw).split(':').map(Number)
     if (!isNaN(hRaw)) h = hRaw
     if (!isNaN(mRaw)) m = mRaw
-  } catch (e) {}
+  } catch {
+    // Keep the existing/default time display when legacy time data is malformed.
+  }
 
   const isPM = h >= 12
   const h12 = h % 12 || 12
@@ -447,7 +452,9 @@ const previewGameTime = computed(() => {
         const ampm = h >= 12 ? 'PM' : 'AM'
         timeDisplay = `${h12.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')} ${ampm}`
       }
-    } catch (e) {}
+    } catch {
+    // Keep the existing/default time display when legacy time data is malformed.
+  }
   }
   return {
     dateShort: `${dayLabel} ${initialDay}`,
@@ -545,6 +552,8 @@ const licenseUrlInvalid = computed(() => {
         </div>
       </div>
     </div>
+
+
 
     <!-- Narrator Memory & Context Window Panel -->
     <div class="bg-slate-900/40 p-6 rounded-[2rem] border border-white/5 backdrop-blur-md shadow-xl space-y-4">
@@ -1185,6 +1194,9 @@ const licenseUrlInvalid = computed(() => {
       :fix-newlines="fixNewlines"
       @update:temp-value="emit('update:tempValue', $event)"
       @update:mode="emit('update:mode', $event)"
+      @update:detailed-clothing="emit('update:detailed-clothing', $event)"
+      @update:nsfw-enabled="emit('update:nsfw-enabled', $event)"
+      @update:nsfw-level="emit('update:nsfw-level', $event)"
       @start-edit="(field, value) => emit('start-edit', field, value)"
       @save-field="emit('save-field')"
       @cancel-edit="emit('cancel-edit')"

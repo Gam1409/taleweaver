@@ -64,13 +64,14 @@ export function knownSpeakerNames(
   )
 }
 
-function isDialogueSpeaker(name: string, quoted: boolean, known: ReadonlySet<string>): boolean {
+function isDialogueSpeaker(name: string, quoted: boolean, known: ReadonlySet<string>, resolved = false): boolean {
   if (known.has(name.toLowerCase())) return true
+  if (NON_SPEAKER_LABELS.has(name.toLowerCase())) return false
+  if (resolved) return true
   // New characters may speak before their metadata arrives. Require quoted speech
   // and a name-like label; punctuation in a known character's exact name is allowed.
   return (
     quoted &&
-    !NON_SPEAKER_LABELS.has(name.toLowerCase()) &&
     /^[\p{L}\p{M}\p{N}_ .’'()-]{1,60}$/u.test(name)
   )
 }
@@ -81,10 +82,20 @@ function appendNarration(dialogues: DialogueSegment[], line: string): void {
   const tagMatch = narrationText.match(/^\[([^\]\n]+)\]\s*(.*)$/)
   if (tagMatch) {
     voiceTag = normalizeVoiceTag(tagMatch[1])
-    narrationText = tagMatch[2].trim()
   }
 
+  if (!narrationText || /^(?:[*_]{1,3}|[•·])$/u.test(narrationText)) return
   const last = dialogues[dialogues.length - 1]
+  if (last && !last.isNarration) {
+    // Quoted dialogue is split before its trailing punctuation. Keep that
+    // punctuation with its speech rather than making an empty narrator card.
+    const trailing = narrationText.match(/^([.,;:])(?:\s+|$)(.*)$/u)
+    if (trailing) {
+      if (!last.text.endsWith(trailing[1]!)) last.text += trailing[1]
+      narrationText = trailing[2]!.trim()
+      if (!narrationText) return
+    }
+  }
   if (last && last.isNarration) {
     last.text += '\n\n' + narrationText
     // Use the voice tag from the first paragraph if the new one doesn't have one
@@ -119,8 +130,11 @@ export function parseComicDialogue(
     .join('|')
   const unknownPattern = String.raw`(?:\p{Lu}[\p{L}]{0,2}\.\s+)*[\p{L}\p{N}_][\p{L}\p{M}\p{N}_ \t'’\-()]{0,59}?`
   const namePattern = knownPattern ? `(?:${knownPattern}|${unknownPattern})` : unknownPattern
+  // Close the same quote style that opened the speech. Inner guillemets in
+  // straight/curly quoted dialogue are content, not a return to narration.
+  const quotedSpeech = String.raw`(?:"[^"\n]*"|“[^”\n]*”|„[^“”\n]*[“”]|«(?:[^«»\n]|«[^«»\n]*»)*»|»[^«\n]*«)`
   const inlineSpeechSplitter = new RegExp(
-    String.raw`(?:^|\n|(?<=[.!?»”"“]\s+)|(?<=\]\s*))(?:\[[^\]\n]+\]\s*)?(?:\*\*([^*\n:]{1,60}?):\*\*|\*\*([^*\n:]{1,60}?)\*\*:|(${namePattern}):)\s*(?:(?:\[[^\]\n]+\]|"\[[^"\n]+\]")\s*)?(["“„«»][\s\S]*?["”«»])`,
+    String.raw`(?:^|\n|(?<=[.!?»”"“]\s+)|(?<=\]\s*))(?:\[[^\]\n]+\]\s*)?(?:\*\*([^*\n:]{1,60}?):\*\*|\*\*([^*\n:]{1,60}?)\*\*:|(${namePattern}):)\s*(?:(?:\[[^\]\n]+\]|"\[[^"\n]+\]")\s*)?(${quotedSpeech})`,
     'giu'
   )
   cleanContent = cleanContent.replace(inlineSpeechSplitter, (match, bold, boldAfter, plain) => {
@@ -156,22 +170,26 @@ function parseDialogueLine(line: string, options: DialogueOptions): DialogueSegm
   const { playerName, playerAvatar, knownNames, resolveSpeaker } = options
   let speakerName = (match[3] || match[5] || match[6] || '').trim()
   let voiceTag = match[1] ? normalizeVoiceTag(match[1]) : undefined
+  let inlineVoiceTag: string | undefined
   let speechText = (match[7] || '').trim()
   const tagInSpeech = speechText.match(/^"?\[([^\]\n]+)\]"?\s*"?\s*([\s\S]*)$/)
   if (tagInSpeech) {
+    if (voiceTag) inlineVoiceTag = tagInSpeech[1]
     voiceTag = voiceTag || normalizeVoiceTag(tagInSpeech[1])
     speechText = tagInSpeech[2].trim()
   }
   const hasQuotes = /^["“„«»]/.test(speechText) || /["”«»]$/.test(speechText)
-  speechText = speechText.replace(/^["“„«»\s]+|["”«»\s]+$/g, '').trim()
+  // Remove only the outer delimiters; preserve quotes within the spoken text.
+  speechText = speechText.replace(/^["“„«»]/, '').replace(/["”«»]$/, '').trim()
+  if (inlineVoiceTag) speechText = `[${inlineVoiceTag}] ${speechText}`
   let targetName: string | undefined
   const toMatch = speakerName.match(/^(.+?)\s+(?:to|\(to)\s+(.+?)\)?$/i)
   if (toMatch) {
     speakerName = toMatch[1].trim()
     targetName = toMatch[2].trim()
   }
-  if (!isDialogueSpeaker(speakerName, hasQuotes, knownNames)) return null
   const resolvedNpc = resolveSpeaker(speakerName)
+  if (!isDialogueSpeaker(speakerName, hasQuotes, knownNames, Boolean(resolvedNpc))) return null
   const isPlayer =
     speakerName.toLowerCase() === 'you' ||
     speakerName.toLowerCase() === (playerName || '').toLowerCase()
@@ -184,5 +202,19 @@ function parseDialogueLine(line: string, options: DialogueOptions): DialogueSegm
     isPlayer,
     text: speechText,
     voiceTag
+  }
+}
+
+
+/** Reuse settled replies while the current message streams; weak keys release old history. */
+export function cachedComicDialogue(options: DialogueOptions) {
+  type Parsed = ReturnType<typeof parseComicDialogue>
+  const replies = new WeakMap<object, { content: string; parsed: Parsed }>()
+  return (content: string, message?: object): Parsed => {
+    const cached = message && replies.get(message)
+    if (cached && cached.content === content) return cached.parsed
+    const parsed = parseComicDialogue(content, options)
+    if (message) replies.set(message, { content, parsed })
+    return parsed
   }
 }

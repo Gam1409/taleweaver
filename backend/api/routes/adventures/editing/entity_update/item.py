@@ -17,6 +17,7 @@ from backend.api.routes.adventures.editing.entity_update.fields import (
     validated_scene_ref,
 )
 from backend.api.routes.adventures.editing.schemas import EntityUpdateRequest
+from backend.engine.clothing.authoring import store_editor_clothing
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.world_entity import WorldEntity
 
@@ -118,6 +119,7 @@ def _apply_type_change(item: WorldEntity, payload: EntityUpdateRequest) -> Optio
 
 def _update_metadata(item: WorldEntity, payload: EntityUpdateRequest, item_type: str) -> None:
     metadata_json = dict(item.metadata_json or {})
+    store_editor_clothing(metadata_json, payload)
     item_metadata.update_container(item, metadata_json, payload, item_type == "CONTAINER")
     if given(payload, "inventory"):
         item.inventory = payload.inventory

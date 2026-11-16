@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.routes.adventures.editing.common import _ensure_template_scene_exists
-from backend.api.routes.adventures.editing.schemas import EntityUpdateRequest
+from backend.api.routes.adventures.editing.schemas import EntityBehaviorFields, EntityUpdateRequest
 
 _ID_RE = re.compile(r"^[A-Z0-9_]+$")
 _MAX_SCENE_REF_LENGTH = 50
@@ -47,7 +47,7 @@ def copy_scripts(target: Any, payload: EntityUpdateRequest, fields: tuple[str, .
 
 def put_metadata(
     metadata_json: dict[str, Any],
-    payload: EntityUpdateRequest,
+    payload: EntityBehaviorFields,
     fields: tuple[str, ...],
     *,
     empty_as_none: bool,

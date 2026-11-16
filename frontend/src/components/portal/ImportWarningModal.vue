@@ -16,7 +16,7 @@ const conflictList = computed(() => props.conflicts.filter(c => c.already_exists
 </script>
 
 <template>
-  <div class="fixed inset-0 z-[100] flex items-center justify-center p-6">
+  <div class="workspace-dialog-overlay fixed inset-0 z-[100] flex items-center justify-center p-6">
     <!-- Backdrop -->
     <div 
       class="absolute inset-0 bg-slate-950/80 backdrop-blur-md animate-fade-in"
@@ -24,7 +24,7 @@ const conflictList = computed(() => props.conflicts.filter(c => c.already_exists
     ></div>
 
     <!-- Modal Content -->
-    <div class="relative w-full max-w-lg bg-[#0a1120] border border-white/10 rounded-2xl shadow-2xl overflow-hidden animate-scale-in">
+    <div class="workspace-dialog relative w-full max-w-lg bg-[#0a1120] border border-white/10 rounded-2xl shadow-2xl overflow-hidden animate-scale-in">
       <div class="p-8">
         <!-- Icon & Header -->
         <div class="mb-8">

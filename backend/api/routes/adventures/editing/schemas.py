@@ -5,10 +5,34 @@ from typing import Any, Literal, Optional
 
 from pydantic import BaseModel
 
+from backend.api.routes.adventures.editing.exit_fields import ExitBehaviorFields
+from backend.engine.clothing.schema import Garment
+from backend.engine.personality.profile import PersonalityProfile
+from backend.schemas.character_identity import CharacterIdentityFields
+from backend.schemas.character_outfits import CharacterOutfitDraft
+
 logger = logging.getLogger(__name__)
 
 
-class EntityUpdateRequest(BaseModel):
+class EntityBehaviorFields(CharacterIdentityFields):
+    """Shared authored position and lifecycle callbacks for creation and editing."""
+
+    spatial_position: Optional[str] = None
+    on_pickup_script: Optional[str] = None
+    on_pickup_text: Optional[str] = None
+    on_drop_script: Optional[str] = None
+    on_drop_text: Optional[str] = None
+    on_equip_script: Optional[str] = None
+    on_equip_text: Optional[str] = None
+    on_unequip_script: Optional[str] = None
+    on_unequip_text: Optional[str] = None
+    on_defeat_script: Optional[str] = None
+    on_defeat_text: Optional[str] = None
+    on_protagonist_enters_scene_script: Optional[str] = None
+    on_protagonist_enters_scene_text: Optional[str] = None
+
+
+class EntityUpdateRequest(EntityBehaviorFields):
     target_type: Literal["cover", "scene", "npc", "object", "protagonist", "exit"]
     target_id: str
     new_id: Optional[str] = None
@@ -20,6 +44,8 @@ class EntityUpdateRequest(BaseModel):
     stamina: Optional[int] = None
     goal: Optional[str] = None
     character: Optional[str] = None
+    personality_profile: Optional[PersonalityProfile] = None
+    outfit_completion: Optional[CharacterOutfitDraft] = None
     is_killable: Optional[bool] = None
     item_type: Optional[str] = None
     is_portable: Optional[bool] = None
@@ -33,10 +59,10 @@ class EntityUpdateRequest(BaseModel):
     text_log_format: Optional[str] = None
     exit_type: Optional[str] = None
     wearable_slots: Optional[list[str]] = None
+    clothing: Optional[Garment] = None
     combination_ingredients: Optional[list[str]] = None
     reveal_rule: Optional[str] = None
     is_hidden: Optional[bool] = None
-    spatial_position: Optional[str] = None
     reveals_item_id: Optional[str] = None
     pickup_trigger_mode: Optional[str] = None
     pickup_trigger_cue: Optional[str] = None
@@ -57,18 +83,6 @@ class EntityUpdateRequest(BaseModel):
     exp: Optional[int] = None
     equipment: Optional[dict[str, Any]] = None
     decorative_objects: Optional[list[str]] = None
-    on_pickup_script: Optional[str] = None
-    on_pickup_text: Optional[str] = None
-    on_drop_script: Optional[str] = None
-    on_drop_text: Optional[str] = None
-    on_equip_script: Optional[str] = None
-    on_equip_text: Optional[str] = None
-    on_unequip_script: Optional[str] = None
-    on_unequip_text: Optional[str] = None
-    on_defeat_script: Optional[str] = None
-    on_defeat_text: Optional[str] = None
-    on_protagonist_enters_scene_script: Optional[str] = None
-    on_protagonist_enters_scene_text: Optional[str] = None
     on_enter_scene_script: Optional[str] = None
     on_enter_scene_text: Optional[str] = None
     on_leave_scene_script: Optional[str] = None
@@ -93,8 +107,6 @@ class EntityUpdateRequest(BaseModel):
     on_hp_change_text: Optional[str] = None
     on_status_change_script: Optional[str] = None
     on_status_change_text: Optional[str] = None
-    is_hidden: Optional[bool] = None
-    reveal_rule: Optional[str] = None
     moveable: Optional[bool] = None
     allowed_scenes: Optional[list[str]] = None
     notes: Optional[str] = None
@@ -112,7 +124,7 @@ class SceneCreateRequest(BaseModel):
     decorative_objects: Optional[list[str]] = None
 
 
-class ExitCreateRequest(BaseModel):
+class ExitCreateRequest(ExitBehaviorFields):
     from_scene_id: str
     to_scene_id: str
     label: str
@@ -124,7 +136,7 @@ class ExitCreateRequest(BaseModel):
     rule_to_unlock: Optional[str] = None
 
 
-class EntityCreateRequest(BaseModel):
+class EntityCreateRequest(EntityBehaviorFields):
     entity_id: str
     entity_type: Literal["NPC", "OBJECT"]
     scene_id: str
@@ -135,12 +147,14 @@ class EntityCreateRequest(BaseModel):
     is_portable: Optional[bool] = None
     goal: Optional[str] = None
     character: Optional[str] = None
+    personality_profile: Optional[PersonalityProfile] = None
     hp: Optional[int] = None
     stamina: Optional[int] = None
     mana: Optional[int] = None
     is_killable: Optional[bool] = None
     metadata_json: Optional[dict[str, Any]] = None
     wearable_slots: Optional[list[str]] = None
+    clothing: Optional[Garment] = None
     combination_ingredients: Optional[list[str]] = None
     stat_modifier_strength: Optional[int] = None
     inventory: Optional[list] = None

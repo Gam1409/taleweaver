@@ -1,6 +1,7 @@
 """Owner-scoped index controls; canonical game history is never deleted here."""
 
-from sqlalchemy import select
+from sqlalchemy import case, select, update
+from sqlalchemy.dialects.sqlite import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.game_session import GameSession
@@ -26,37 +27,50 @@ async def ensure_index_states(
             )
         )
     }
-    result = []
     for session in sessions:
-        row = existing.get(session.id)
-        if row is None:
-            row = MemoryIndexState(
-                session_id=session.id,
-                user_id=session.user_id,
-                template_id=session.template_id,
-                epoch=0,
-                desired_revision=1,
-                indexed_revision=0,
-                paused=False,
-                status="pending",
-            )
-            db.add(row)
-        result.append(row)
-    await db.flush()
-    return result
+        if session.id in existing:
+            continue
+        # A foreground dirty marker may insert the same row after our SELECT.
+        await db.execute(
+            insert(MemoryIndexState)
+            .values(session_id=session.id, user_id=session.user_id, template_id=session.template_id)
+            .on_conflict_do_nothing(index_elements=[MemoryIndexState.session_id])
+        )
+    return list(
+        await db.scalars(
+            select(MemoryIndexState)
+            .where(MemoryIndexState.session_id.in_([s.id for s in sessions]))
+            .execution_options(populate_existing=True)
+        )
+    )
 
 
-def invalidate(row: MemoryIndexState, *, paused: bool | None = None) -> None:
-    row.epoch += 1
-    row.desired_revision += 1
-    row.indexed_revision = 0
-    row.signature = None
-    row.lease_token = None
-    row.lease_until = None
-    row.last_error = None
+async def invalidate(
+    db: AsyncSession, row: MemoryIndexState, *, paused: bool | None = None
+) -> None:
+    # Increment in SQL: concurrent controls must never reuse an epoch or erase a
+    # newly queued revision by writing values from an older ORM snapshot.
+    values = {
+        "epoch": MemoryIndexState.epoch + 1,
+        "desired_revision": MemoryIndexState.desired_revision + 1,
+        "indexed_revision": 0,
+        "signature": None,
+        "lease_token": None,
+        "lease_until": None,
+        "last_error": None,
+        "status": case((MemoryIndexState.paused.is_(True), "paused"), else_="pending"),
+    }
     if paused is not None:
-        row.paused = paused
-    row.status = "paused" if row.paused else "pending"
+        values.update(paused=paused, status="paused" if paused else "pending")
+    await db.execute(
+        update(MemoryIndexState)
+        .where(
+            MemoryIndexState.session_id == row.session_id, MemoryIndexState.user_id == row.user_id
+        )
+        .values(**values)
+        .execution_options(synchronize_session=False)
+    )
+    await db.refresh(row)
 
 
 def schedule_rows(rows: list[MemoryIndexState], *, enabled: bool) -> None:

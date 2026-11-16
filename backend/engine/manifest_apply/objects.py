@@ -378,5 +378,5 @@ async def persist_objects(
         processed.append(obj)
         held = in_avatar or obj["id"] in placement.npc_item_ids
         ctx.db.add(_object_entity(ctx, obj, image_url, numbers, held, default_scene_id))
-        await ctx.commit_and_refresh()
+        await ctx.guard_write()
     return resolved

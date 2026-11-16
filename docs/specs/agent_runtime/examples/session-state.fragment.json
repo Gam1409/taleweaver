@@ -1,0 +1,158 @@
+{
+  "session_state": {
+    "in_game_time": 15,
+    "entity_states": {
+      "__chpm__": {
+        "schema_version": 6,
+        "revision": 0,
+        "settings": {
+          "workflow": "staged",
+          "npc_concurrency": 1,
+          "mode": "off",
+          "actor_ids": [],
+          "max_active_npcs": 3,
+          "model_role": "complex",
+          "max_output_tokens": 1200,
+          "max_input_chars": 24000,
+          "max_calls_per_turn": 8,
+          "memory_limit": 12,
+          "agent_steps": 0,
+          "notebook_enabled": false,
+          "tool_protocol": "auto",
+          "semantic_memory": false,
+          "failure_policy": "continue"
+        },
+        "actors": {},
+        "memories": {},
+        "last_active": {},
+        "agenda": [],
+        "causal_memory": {
+          "actors": {}
+        },
+        "minds": {
+          "GUIDE": {
+            "genesis": {
+              "scope": {
+                "world_id": "example-session",
+                "branch_id": "example-branch",
+                "observer_id": "GUIDE"
+              },
+              "identity": {
+                "source_revision": "authored-revision-1",
+                "description": "Patient harbor guide",
+                "authored_goals": [
+                  "Repair the harbor beacon."
+                ],
+                "values": [],
+                "roles": [],
+                "traits": [],
+                "trait_model": "authored-categorical-v1"
+              },
+              "sim_minute": 0
+            },
+            "snapshot": {
+              "schema_version": 4,
+              "transition_version": "evidence-ledger-v3",
+              "genesis": {
+                "scope": {
+                  "world_id": "example-session",
+                  "branch_id": "example-branch",
+                  "observer_id": "GUIDE"
+                },
+                "identity": {
+                  "source_revision": "authored-revision-1",
+                  "description": "Patient harbor guide",
+                  "authored_goals": [
+                    "Repair the harbor beacon."
+                  ],
+                  "values": [],
+                  "roles": [],
+                  "traits": [],
+                  "trait_model": "authored-categorical-v1"
+                },
+                "sim_minute": 0
+              },
+              "revision": 0,
+              "cursor": 0,
+              "sim_minute": 0,
+              "evidence": [],
+              "beliefs": [],
+              "experiences": [],
+              "archive": [],
+              "journal": []
+            },
+            "sources": {}
+          }
+        },
+        "usage": {
+          "workflow": null,
+          "preparation_ms": null,
+          "timings": [],
+          "calls": 0,
+          "input_chars": 0,
+          "output_chars": 0,
+          "repairs": 0,
+          "proposal_repairs": 0,
+          "format_repairs": 0,
+          "proposal_feedback": [],
+          "actor_failures": {},
+          "status": "idle",
+          "detail": "",
+          "memory_evictions": 0,
+          "simplified": false,
+          "fallback_reason": "",
+          "fallback_requests": 0,
+          "causal_notes": [],
+          "causal_notes_omitted": 0,
+          "semantic_recall": {}
+        },
+        "recovery": {
+          "consecutive_failures": 0,
+          "cooldown_remaining": 0,
+          "pending_gap_turns": 0,
+          "total_simplified_turns": 0,
+          "last_gap_revision": 0,
+          "gap_cursors": {},
+          "recent": []
+        }
+      }
+    },
+    "living_world": {
+      "version": 1,
+      "timeline": "example-branch",
+      "revision": 0,
+      "settings": {
+        "living_world_enabled": false,
+        "mode": "PAUSE",
+        "offline_time_scale": 1.0,
+        "max_catchup_game_hours": 6.0,
+        "max_events": 16,
+        "max_wall_seconds": 2.0,
+        "auto_catchup_on_resume": false,
+        "dialogue_choices_enabled": false,
+        "live_enabled": false,
+        "live_interval_seconds": 60,
+        "allow_concurrent_requests": false,
+        "deliberation_enabled": false,
+        "decision_engine": "native",
+        "auto_schedule": false,
+        "schedule_interval_minutes": 60,
+        "max_npcs": 4,
+        "max_decisions_per_run": 1,
+        "max_deliberations": 8,
+        "decision_max_tokens": 256
+      },
+      "cursor": 15,
+      "target": 15,
+      "offline_total_seen": 0.0,
+      "fractional_minutes": 0.0,
+      "status": "PAUSED",
+      "events": [],
+      "last_run_events": 0,
+      "deliberation_attempts": 0,
+      "schedule_next_due": 0,
+      "dialogue_intentions": {},
+      "private_notes": {}
+    }
+  }
+}

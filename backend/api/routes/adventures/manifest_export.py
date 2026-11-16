@@ -21,7 +21,15 @@ _LEGACY_EQUIPMENT_SLOTS = (
 
 
 def backfill_manifest_metadata(manifest: dict[str, Any], adventure: AdventureTemplate) -> None:
-    """Fill top-level metadata that older manifests may lack (existing keys win)."""
+    """Refresh simulation defaults and fill missing legacy metadata."""
+    manifest["living_world_settings"] = adventure.living_world_settings
+    manifest["npc_personality_settings"] = adventure.npc_personality_settings
+    if isinstance(manifest.get("adventure"), dict):
+        manifest["adventure"] = {
+            **manifest["adventure"],
+            "living_world_settings": adventure.living_world_settings,
+            "npc_personality_settings": adventure.npc_personality_settings,
+        }
     defaults = {
         "version": adventure.version or "1.0",
         "id": adventure.id,
@@ -133,7 +141,7 @@ def _with_start_scenes(
     normalized: list[dict[str, Any]] = []
     for item in items:
         item_copy = dict(item)
-        scene_id = entity_scene_map.get(item_copy.get("id"))
+        scene_id = entity_scene_map.get(str(item_copy.get("id") or ""))
         if not item_copy.get("start_scene_id") and scene_id in valid_scene_ids:
             item_copy["start_scene_id"] = scene_id
         normalized.append(item_copy)

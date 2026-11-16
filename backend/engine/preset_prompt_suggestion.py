@@ -4,14 +4,25 @@ from fastapi import HTTPException
 
 from backend.core import prompts
 from backend.core.comfyui_config import prompt_rules, select_profile
+from backend.core.image_purposes import image_provider, purpose_for
 from backend.core.llm_router import GameMasterLLM
 from backend.core.style_catalog import resolve_style_instruction, resolve_tone_instruction
 from backend.engine.image_profiles import advanced_for
 from backend.engine.image_prompt_adapter import adapt_body
+from backend.engine.nsfw.settings import nsfw_settings
 from backend.engine.story_visual_presets import story_t2i
+from backend.models.adventure_template import AdventureTemplate
+from backend.models.user import User
+from backend.schemas.adventure_visuals import SuggestPromptRequest
 
 
-async def suggest_image_prompt(user, adventure, payload, name: str, description: str) -> str:
+async def suggest_image_prompt(
+    user: User,
+    adventure: AdventureTemplate,
+    payload: SuggestPromptRequest,
+    name: str,
+    description: str,
+) -> str:
     suggested = await suggest_preset_prompt(user, adventure, payload, name, description)
     if suggested is not None:
         return suggested
@@ -28,7 +39,11 @@ async def suggest_image_prompt(user, adventure, payload, name: str, description:
 
 
 async def suggest_preset_prompt(
-    user, adventure, payload, name: str, description: str
+    user: User,
+    adventure: AdventureTemplate,
+    payload: SuggestPromptRequest,
+    name: str,
+    description: str,
 ) -> str | None:
     try:
         t2i = story_t2i(user.t2i_settings, adventure)
@@ -37,9 +52,10 @@ async def suggest_preset_prompt(
             if advanced_for(t2i, payload.target_type, payload.use_advanced_model)
             else "simple"
         )
-        if t2i.get(f"{profile}_model_provider") != "comfyui":
+        purpose = purpose_for(payload.target_type)
+        if image_provider(t2i, profile, purpose) != "comfyui":
             return None
-        options = {**t2i, "comfyui_profile": profile}
+        options = {**t2i, "comfyui_profile": profile, "image_purpose": purpose}
         rules = prompt_rules(options)
         if not rules:
             return None
@@ -49,11 +65,15 @@ async def suggest_preset_prompt(
         tone = resolve_tone_instruction(adventure.selected_tone, user.tone_catalog)
         source = f"Asset: {payload.target_type}. Name: {name}. Description: {description}. Style: {style}. Mood: {tone}."
         # Return the editable body. Mandatory prefix/suffix are added only at generation.
+        nsfw = nsfw_settings(getattr(adventure, "original_manifest", None))
         return await adapt_body(
             source,
             rules,
             user,
             mature_themes=getattr(select_profile(options), "mature_themes", False),
+            nsfw_enabled=nsfw["enabled"],
+            nsfw_level=nsfw["level"],
+            purpose=payload.target_type,
         )
     except Exception as exc:
         raise HTTPException(

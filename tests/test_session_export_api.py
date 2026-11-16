@@ -31,6 +31,9 @@ async def test_localized_session_download(auth_client, portrait_world, title, le
     folder.mkdir(parents=True)
     (folder / "портрет.png").write_bytes(b"portrait-fixture")
     async with TestSessionLocal() as db:
+        session = await db.get(GameSession, session_id)
+        session.playtime_seconds = 125
+        session.playtime_last_seen = 100
         npc = (
             await db.execute(select(WorldEntity).where(WorldEntity.session_id == session_id))
         ).scalar_one()
@@ -69,6 +72,8 @@ async def test_localized_session_download(auth_client, portrait_world, title, le
             await db.execute(select(SessionState).where(SessionState.session_id == imported_id))
         ).scalar_one()
         assert original.adventure_title == restored.adventure_title == title
+        assert original.playtime_seconds == restored.playtime_seconds == 125
+        assert restored.playtime_last_seen is None
         assert state.in_game_time == 520
         assert state.quests == [{"id": "escape", "status": "active"}]
     assert (

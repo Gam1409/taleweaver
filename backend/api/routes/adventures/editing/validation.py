@@ -21,6 +21,8 @@ from backend.core.validators_prompts import (
     AI_VALIDATION_USER_PROMPT_TEMPLATE,
 )
 from backend.core.world_validator import validate_adventure
+from backend.engine.clothing.settings import clothing_settings
+from backend.engine.nsfw.settings import nsfw_settings
 from backend.engine.vn_world_generation import vn_editor_guidance
 from backend.models.user import User
 from backend.models.validation_run import ValidationRun
@@ -59,14 +61,17 @@ def _summarize_for_ai(payload: dict, *, max_field_len: int = 1500) -> dict:
     if hasattr(payload, "model_dump"):
         payload = payload.model_dump()
 
-    def _walk(value):
+    def _walk(value: Any) -> Any:
         if isinstance(value, dict):
             return {k: _walk(v) for k, v in value.items()}
         if isinstance(value, (list, tuple)):
             return [_walk(v) for v in value]
         return _coerce_for_json(value, max_field_len)
 
-    return _walk(payload)
+    result = _walk(payload)
+    if not isinstance(result, dict):
+        raise ValueError("Validation payload must be an object.")
+    return result
 
 
 def _build_ai_validation_prompt(debug_payload: Any) -> str:
@@ -79,6 +84,13 @@ def _build_ai_validation_prompt(debug_payload: Any) -> str:
         return json.dumps(value, ensure_ascii=False)
 
     return vn_editor_guidance(adventure) + AI_VALIDATION_USER_PROMPT_TEMPLATE.format(
+        protagonist_json=_dump(summary.get("protagonist") or {}),
+        authoring_preferences_json=_dump(
+            {
+                "clothing": clothing_settings(adventure.get("original_manifest")),
+                "mature": nsfw_settings(adventure.get("original_manifest")),
+            }
+        ),
         title=adventure.get("title", ""),
         language=adventure.get("language", ""),
         rule_enforcement_mode=adventure.get("rule_enforcement_mode", "rpg"),
@@ -121,6 +133,9 @@ async def _run_ai_validation(
     from backend.api.routes.adventures.schemas import AIValidationResponse
 
     try:
+        prompt = _build_ai_validation_prompt(debug_payload)
+        if len(prompt) > 48000:
+            return [], "context_budget_exceeded"
         gm = GameMasterLLM.for_role(user, "complex")
         model = gm.model
         response = await gm.aexecute_complex_task(
@@ -128,7 +143,7 @@ async def _run_ai_validation(
                 AI_VALIDATION_SYSTEM_PROMPT
                 + vn_editor_guidance(_summarize_for_ai(debug_payload).get("adventure") or {})
             ),
-            user_prompt=_build_ai_validation_prompt(debug_payload),
+            user_prompt=prompt,
             response_model=AIValidationResponse,
             model=model,
         )
@@ -206,7 +221,7 @@ async def run_editor_validation(
     payload: ValidationRunRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> ValidationRunResponse:
     """Run structural validation, and optionally an AI logic-validation pass.
 
     On save, the editor calls this with ``include_ai=False`` for fast,
@@ -226,7 +241,7 @@ async def get_latest_validation_run(
     template_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any] | None:
     """Return the latest persisted ValidationRun for the (template, user) pair.
 
     Returns ``null`` when no validation has been run yet for this user on
@@ -278,13 +293,14 @@ def _recount_validation_findings(run: ValidationRun) -> None:
 
 @router.post(
     "/{template_id}/editor/validation/latest/findings/delete",
+    response_model=None,
 )
 async def delete_validation_findings(
     template_id: str,
     payload: DeleteValidationFindingsRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """Permanently remove findings from the latest persisted ValidationRun.
 
     Unlike dismissals (which are UI-only state), this mutation persists so the

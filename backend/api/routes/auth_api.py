@@ -3,18 +3,17 @@ import logging
 import os
 import time
 from collections import defaultdict
-from typing import Optional
+from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.account_recovery import (
+    consume_password_reset_token,
     consume_recovery_code,
-    find_user_by_reset_token,
-    set_new_password,
 )
 from backend.core.auth import (
     MIN_PASSWORD_LENGTH,
@@ -27,14 +26,14 @@ from backend.core.auth import (
 from backend.core.config import settings
 from backend.core.database import get_db
 from backend.core.login_throttle import login_throttle, recovery_throttle
-from backend.crud.crud_profile import build_user_profile_data
+from backend.engine.profile import build_user_profile_data
 from backend.models.user import User
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
 # Simple in-memory rate limiting for setup-root bootstrap
-_setup_root_attempts = defaultdict(list)
+_setup_root_attempts: defaultdict[str, list[float]] = defaultdict(list)
 SETUP_ROOT_RATE_LIMIT = 3  # attempts
 SETUP_ROOT_WINDOW = 3600  # seconds (1 hour)
 
@@ -132,7 +131,7 @@ async def login_for_access_token(
     request: Request,
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: AsyncSession = Depends(get_db),
-):
+) -> dict[str, Any]:
     client_ip = _client_ip(request)
     if login_throttle.is_blocked(client_ip, form_data.username):
         logger.warning("Login throttled for username %r from %s", form_data.username, client_ip)
@@ -163,7 +162,7 @@ async def reset_password_with_recovery_code(
     payload: RecoveryCodeResetRequest,
     request: Request,
     db: AsyncSession = Depends(get_db),
-):
+) -> dict[str, Any]:
     """Set a new password using one of the user's one-time recovery codes."""
     client_ip = _client_ip(request)
     if recovery_throttle.is_blocked(client_ip, payload.username):
@@ -175,11 +174,13 @@ async def reset_password_with_recovery_code(
 
     result = await db.execute(select(User).filter(User.username == payload.username.strip()))
     user = result.scalars().first()
-    if user is None or not consume_recovery_code(user, payload.recovery_code):
+    if user is None or not await consume_recovery_code(
+        db, user, payload.recovery_code, payload.new_password
+    ):
+        await db.rollback()
         recovery_throttle.record_failure(client_ip, payload.username)
         raise HTTPException(status_code=400, detail="Invalid username or recovery code.")
 
-    await set_new_password(user, payload.new_password)
     await db.commit()
     recovery_throttle.reset(client_ip, payload.username)
     logger.info("Password reset via recovery code for user %s", user.id)
@@ -191,7 +192,7 @@ async def reset_password_with_token(
     payload: ResetTokenRequest,
     request: Request,
     db: AsyncSession = Depends(get_db),
-):
+) -> dict[str, Any]:
     """Set a new password using an admin-issued one-time reset link."""
     client_ip = _client_ip(request)
     if recovery_throttle.is_blocked(client_ip, "reset-token"):
@@ -201,12 +202,12 @@ async def reset_password_with_token(
         )
     _validate_new_password(payload.new_password)
 
-    user = await find_user_by_reset_token(db, payload.token)
+    user = await consume_password_reset_token(db, payload.token, payload.new_password)
     if user is None:
+        await db.rollback()
         recovery_throttle.record_failure(client_ip, "reset-token")
         raise HTTPException(status_code=400, detail="This reset link is invalid or has expired.")
 
-    await set_new_password(user, payload.new_password)
     await db.commit()
     logger.info("Password reset via admin reset link for user %s", user.id)
     return {"access_token": create_user_access_token(user), "token_type": "bearer"}
@@ -214,10 +215,15 @@ async def reset_password_with_token(
 
 @router.get("/auth/me", response_model=UserResponse)
 async def read_users_me(
+    request: Request,
+    response: Response,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     from backend.engine.adventure_importer import AdventureTemplateImporter
+    from backend.utils.media_access import issue_media_cookie
+
+    issue_media_cookie(response, request, current_user)
 
     # Import default adventures on first login.
     if not current_user.has_imported_defaults:
@@ -242,12 +248,12 @@ async def read_users_me(
     return profile
 
 
-@router.post("/auth/setup-root")
+@router.post("/auth/setup-root", response_model=None)
 async def setup_root_admin(
     http_request: Request,
     request: SetupRootRequest,
     db: AsyncSession = Depends(get_db),
-):
+) -> dict[str, Any]:
     """Bootstrap the first root admin.
 
     This endpoint is **only** reachable from loopback addresses unless the
@@ -290,7 +296,7 @@ async def setup_root_admin(
 
 
 @router.get("/auth/bootstrap-status", response_model=BootstrapStatusResponse)
-async def get_bootstrap_status(db: AsyncSession = Depends(get_db)):
+async def get_bootstrap_status(db: AsyncSession = Depends(get_db)) -> BootstrapStatusResponse:
     """Public bootstrap status used by frontend to choose setup vs login."""
     admin_result = await db.execute(select(User).filter(User.role == "admin").limit(1))
     user_result = await db.execute(select(User.id).limit(1))
@@ -300,3 +306,11 @@ async def get_bootstrap_status(db: AsyncSession = Depends(get_db)):
         app_version=settings.APP_VERSION,
         password_policy=_password_policy(),
     )
+
+
+@router.delete("/auth/media-session", status_code=204)
+async def clear_media_session(response: Response) -> None:
+    """Remove the read-only browser media credential on logout."""
+    from backend.utils.media_access import COOKIE
+
+    response.delete_cookie(COOKIE, path="/data", httponly=True, samesite="strict")

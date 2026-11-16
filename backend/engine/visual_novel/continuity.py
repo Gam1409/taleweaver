@@ -7,7 +7,10 @@ from typing import Any
 from pydantic import ConfigDict
 
 from backend.engine.llm_intents import ChatProgressionIntent
+from backend.engine.npc_presence import physically_present
 from backend.engine.rule_engine import InventoryItem, WorldEntityUpdate
+from backend.engine.visual_novel.item_rejections import clear, remember
+from backend.engine.visual_novel.pending_items import defer_unregistered_items, pending_item_context
 
 PLAYER = "__player__"
 SCENE = "__scene__"
@@ -49,7 +52,8 @@ def _present(manager: Any, entity: Any) -> bool:
     override = _override(state, entity.id)
     session_id = getattr(entity, "session_id", None)
     return (
-        (not session_id or session_id == getattr(state, "session_id", None))
+        physically_present(entity, state)
+        and (not session_id or session_id == getattr(state, "session_id", None))
         and override.get("current_scene_id", entity.current_scene_id) == state.current_scene_id
         and not override.get("is_hidden", getattr(entity, "is_hidden", False))
     )
@@ -98,6 +102,16 @@ def possession_snapshot(manager: Any, entities: list[Any]) -> Possessions:
             if entity.entity_type == "OBJECT"
         }
     )
+    # Keep unavailable inline possessions in the identity catalog, never in the
+    # transferable items. Missing access must not become a new-item registration.
+    inline_items = (
+        entry
+        for entity in entities
+        for entry in _inventory(entity, _override(manager.state, entity.id))
+        if isinstance(entry, dict) and entry.get("id") and entry.get("name")
+    )
+    for entry in inline_items:
+        result.catalog.setdefault(str(entry["id"]), deepcopy(entry))
     result.add(getattr(manager.avatar, "inventory", None), PLAYER)
     equipment = getattr(manager.avatar, "equipment", None) or {}
     result.add(
@@ -126,7 +140,7 @@ def possession_snapshot(manager: Any, entities: list[Any]) -> Possessions:
         }
     contained = {
         str(item.get("id") if isinstance(item, dict) else item)
-        for entity in present
+        for entity in entities
         for item in _inventory(entity, _override(manager.state, entity.id))
     }
     for entity in present:
@@ -143,18 +157,22 @@ def possession_snapshot(manager: Any, entities: list[Any]) -> Possessions:
             result.add(inventory, entity.id)
         if override.get("is_in_inventory", getattr(entity, "is_in_inventory", False)):
             continue
-        if not getattr(entity, "is_portable", True):
+        if not override.get("is_portable", getattr(entity, "is_portable", True)):
             continue
         result.add([_entity_item(entity, override)], SCENE)
     return result
 
 
-def _canonical(snapshot: Possessions, item_id: str) -> CanonicalInventoryItem:
+def _canonical(snapshot: Possessions, item_id: str | None) -> CanonicalInventoryItem:
+    if item_id is None:
+        raise ValueError("Item identity is required.")
     return CanonicalInventoryItem.model_validate(deepcopy(snapshot.items[item_id]))
 
 
-def _assign(destinations: dict[str, str], snapshot: Possessions, item_id: str, owner: str) -> None:
-    if item_id not in snapshot.items:
+def _assign(
+    destinations: dict[str, str], snapshot: Possessions, item_id: str | None, owner: str
+) -> None:
+    if item_id is None or item_id not in snapshot.items:
         raise ValueError("Unknown or unavailable item.")
     if item_id in destinations and destinations[item_id] != owner:
         raise ValueError("Conflicting item destinations.")
@@ -172,7 +190,7 @@ def _destinations(intent: ChatProgressionIntent, snapshot: Possessions) -> dict[
         if update.entity_id not in snapshot.npcs and update.entity_id not in snapshot.containers:
             raise ValueError("Inventory owner is not present or accessible.")
         for item in update.inventory:
-            if snapshot.owners.get(item.id) != update.entity_id:
+            if item.id is None or snapshot.owners.get(item.id) != update.entity_id:
                 _assign(result, snapshot, item.id, update.entity_id)
             elif item.id not in snapshot.items:
                 raise ValueError("Unknown inventory item.")
@@ -186,7 +204,7 @@ def _validate_player_changes(
         *(intent.removed_inventory_item_ids or []),
         *[i.id for i in intent.updated_inventory_items or []],
     ]
-    if any(snapshot.owners.get(item_id) != PLAYER for item_id in ids):
+    if any(item_id is None or snapshot.owners.get(item_id) != PLAYER for item_id in ids):
         raise ValueError("The player does not carry this item.")
     if any(item_id not in snapshot.items for item_id in intent.deleted_entities or []):
         raise ValueError("Only existing available items can be consumed or removed.")
@@ -244,7 +262,7 @@ def _hydrate(intent: ChatProgressionIntent, snapshot: Possessions) -> None:
     if any(destinations.get(item_id) == PLAYER for item_id in player_removed):
         raise ValueError("A player item cannot be removed and retained in the same proposal.")
     intent.removed_inventory_item_ids = sorted(player_removed)
-    hydrated_updates = []
+    hydrated_updates: list[InventoryItem] = []
     for item in intent.updated_inventory_items or []:
         known = _canonical(snapshot, item.id)
         # Identity is immutable here; condition annotations are applied separately.
@@ -261,11 +279,16 @@ def prepare_intent(manager: Any, intent: Any, entities: list[Any]) -> ChatProgre
     """Return an engine-ready intent; reject an invalid possession batch without losing items."""
     from backend.engine.visual_novel.intent import VNProgressionIntent, to_chat_progression_intent
 
+    clear(manager)
     raw = intent.model_dump(exclude_none=True) if hasattr(intent, "model_dump") else intent
     proposal = VNProgressionIntent.model_validate(raw)
     result = to_chat_progression_intent(proposal)
+    snapshot = None
     try:
-        _hydrate(result, possession_snapshot(manager, entities))
+        snapshot = possession_snapshot(manager, entities)
+        pending = defer_unregistered_items(result, snapshot)
+        _hydrate(result, snapshot)
+        result.narrative_description += pending_item_context(pending)
         conditions = {
             item.id: item.condition_note
             for item in proposal.updated_inventory_items or []
@@ -273,7 +296,8 @@ def prepare_intent(manager: Any, intent: Any, entities: list[Any]) -> ChatProgre
         }
         for item in result.updated_inventory_items or []:
             if item.id in conditions:
-                item.condition_note = conditions[item.id]
+                field_name = "condition_note"
+                setattr(item, field_name, conditions[item.id])
         if any(
             proposed.name != item.name
             or (proposed.description is not None and proposed.description != item.description)
@@ -284,7 +308,10 @@ def prepare_intent(manager: Any, intent: Any, entities: list[Any]) -> ChatProgre
             )
         ):
             result.narrative_description += " Existing item identity, type and base description remain unchanged; only explicit condition notes may change."
-    except (ValueError, TypeError):
+    except (ValueError, TypeError) as error:
+        reason = remember(
+            manager, error, intent=proposal, owners=snapshot.owners if snapshot else None
+        )
         result.new_inventory_items = []
         result.updated_inventory_items = []
         result.removed_inventory_item_ids = []
@@ -293,6 +320,6 @@ def prepare_intent(manager: Any, intent: Any, entities: list[Any]) -> ChatProgre
         for update in result.updated_entities or []:
             update.inventory = None
         result.narrative_description = (
-            "The attempted item change did not occur; possessions remain unchanged."
+            "The attempted item change did not occur; possessions remain unchanged. " + reason
         )
     return result

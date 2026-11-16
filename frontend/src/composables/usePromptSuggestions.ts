@@ -1,3 +1,4 @@
+import { apiFetch } from '@/services/http'
 import { ref, type Ref } from 'vue'
 import { authState } from '@/store/auth'
 
@@ -43,7 +44,7 @@ export function usePromptSuggestions(
       controller.abort()
     }, 95_000)
     try {
-      const response = await fetch(`/api/adventures/${encodeURIComponent(gameId)}/suggestions`, {
+      const response = await apiFetch(`/adventures/${encodeURIComponent(gameId)}/suggestions`, { timeoutMs: null,
         method: 'POST',
         headers: { Authorization: `Bearer ${authState.token}` },
         signal: controller.signal,

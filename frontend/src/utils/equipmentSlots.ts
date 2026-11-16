@@ -1,0 +1,71 @@
+export interface ItemStateValue {
+  dimension: string
+  detail: string
+  last_changed_minute?: number | null
+}
+
+export interface EquipmentDisplayItem {
+  id: string
+  name: string
+  image_url?: string | null
+  description?: string
+  current_state?: ItemStateValue[]
+  layer?: number
+  uncovered_regions?: string[]
+  [key: string]: unknown
+}
+
+export type EquipmentDisplay = Record<string, EquipmentDisplayItem[]>
+export interface EquipmentCondition {
+  id: string
+  detail: string
+  part?: string
+  status?: string
+  visibility?: 'public' | 'private'
+  kind?: string
+  current_detail?: string
+  updated_revision?: number
+  observed_message_id?: string | null
+  last_changed_minute?: number | null
+}
+
+export const EQUIPMENT_SLOTS = [
+  { key: 'Head', label: 'Head', icon: 'ra-helmet', top: '10%', left: '50%' },
+  { key: 'Neck', label: 'Neck', icon: 'ra-gem-pendant', top: '18%', left: '76%' },
+  { key: 'Chest', label: 'Chest', icon: 'ra-vest', top: '30%', left: '50%' },
+  { key: 'Arms', label: 'Arms', icon: 'ra-hand', top: '26%', left: '20%' },
+  { key: 'Hands', label: 'Hands', icon: 'ra-hand', top: '46%', left: '16%' },
+  { key: 'MainHand', label: 'Main hand', icon: 'ra-sword', top: '68%', left: '16%' },
+  { key: 'Ring_1', label: 'Ring 1', icon: 'ra-fire-ring', top: '38%', left: '82%' },
+  { key: 'Ring_2', label: 'Ring 2', icon: 'ra-fire-ring', top: '54%', left: '82%' },
+  { key: 'OffHand', label: 'Off hand', icon: 'ra-shield', top: '72%', left: '82%' },
+  { key: 'Legs', label: 'Legs', icon: 'ra-boot-stomp', top: '64%', left: '50%' },
+  { key: 'Feet', label: 'Feet', icon: 'ra-shoe-prints', top: '86%', left: '50%' }
+] as const
+
+export const BODY_ITEM_SLOTS = [
+  { key: 'BodyVaginal', region: 'vaginal', label: 'Vaginal area', shortLabel: 'V', icon: 'ra-emerald', top: '54%', left: '44%' },
+  { key: 'BodyAnal', region: 'anal', label: 'Anal area', shortLabel: 'A', icon: 'ra-emerald', top: '64%', left: '50%' },
+  { key: 'BodyUterine', region: 'uterine', label: 'Uterus', shortLabel: 'U', icon: 'ra-emerald', top: '44%', left: '50%' },
+  { key: 'BodyPenile', region: 'penile', label: 'Penile area', shortLabel: 'P', icon: 'ra-emerald', top: '54%', left: '68%' }
+] as const
+export type BodyPlacementSlot = (typeof BODY_ITEM_SLOTS)[number]['region']
+
+export function unassessedLayoutSlots(variant: 'male' | 'female' | 'neutral') {
+  return BODY_ITEM_SLOTS.filter(slot => variant === 'female'
+    ? slot.region !== 'penile'
+    : variant === 'male' ? slot.region === 'penile' || slot.region === 'anal' : true)
+}
+
+export function legacyEquipment(equipment: Record<string, unknown>): EquipmentDisplay {
+  const result: EquipmentDisplay = {}
+  for (const slot of EQUIPMENT_SLOTS) {
+    const item = equipment[slot.key]
+    if (item && typeof item === 'object' && 'name' in item) {
+      result[slot.key] = [
+        { ...item, id: String('id' in item ? item.id : slot.key), name: String(item.name) }
+      ]
+    }
+  }
+  return result
+}

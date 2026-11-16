@@ -35,9 +35,7 @@ class QuestManager:
         completed_ids = []
         terminal_statuses = {"completed", "failed", "cancelled", "abandoned"}
         open_quests = [
-            q
-            for q in state.quests
-            if str(q.get("status") or "").lower() not in terminal_statuses
+            q for q in state.quests if str(q.get("status") or "").lower() not in terminal_statuses
         ]
 
         for quest in open_quests:
@@ -60,31 +58,28 @@ class QuestManager:
                     completed_ids.append(qid)
                 continue
 
-            # 2. Heuristic Soft Goal Evaluation Fallback
-            goal = quest.get("goal", "").lower()
-            description = quest.get("description", "").lower()
-
-            # Equipment Checks
-            if "equip" in goal or "equip" in description:
-                if cls._check_equipment_goal(avatar, goal) or cls._check_equipment_goal(
-                    avatar, description
-                ):
-                    completed_ids.append(qid)
-                    continue
-
-            # Inventory Checks (Collect X)
-            if "collect" in goal or "find" in goal or "get" in goal:
-                if cls._check_inventory_goal(avatar, goal):
-                    completed_ids.append(qid)
-                    continue
-
-            # Location Checks (Reach X)
-            if "reach" in goal or "go to" in goal or "travel to" in goal:
-                if cls._check_location_goal(state, goal):
-                    completed_ids.append(qid)
-                    continue
+            if cls._check_soft_goal(avatar, state, quest):
+                completed_ids.append(qid)
 
         return completed_ids
+
+    @classmethod
+    def _check_soft_goal(cls, avatar: Avatar, state: SessionState, quest: dict) -> bool:
+        """Check equipment, collection, then travel heuristics for unstructured quests."""
+        goal = quest.get("goal", "").lower()
+        description = quest.get("description", "").lower()
+        if ("equip" in goal or "equip" in description) and (
+            cls._check_equipment_goal(avatar, goal)
+            or cls._check_equipment_goal(avatar, description)
+        ):
+            return True
+        if any(word in goal for word in ("collect", "find", "get")) and cls._check_inventory_goal(
+            avatar, goal
+        ):
+            return True
+        return any(
+            word in goal for word in ("reach", "go to", "travel to")
+        ) and cls._check_location_goal(state, goal)
 
     @staticmethod
     def _check_equipment_goal(avatar: Avatar, text: str) -> bool:
@@ -92,26 +87,26 @@ class QuestManager:
         Checks if specific equipment slots are filled based on keywords in text.
         Example: "Equip items in the Head, Chest, and Hands slots"
         """
-        slots_to_check = []
-        if "head" in text: slots_to_check.append("head")
-        if "chest" in text: slots_to_check.append("chest")
-        if "hands" in text: slots_to_check.append("hands")
-        if "feet" in text: slots_to_check.append("feet")
-        if "legs" in text: slots_to_check.append("legs")
-        if "mainhand" in text or "main hand" in text or "weapon" in text: slots_to_check.append("mainhand")
-        if "offhand" in text or "off hand" in text or "shield" in text: slots_to_check.append("offhand")
-        if "neck" in text or "amulet" in text or "necklace" in text: slots_to_check.append("neck")
-        
+        slot_keywords = {
+            "head": ("head",),
+            "chest": ("chest",),
+            "hands": ("hands",),
+            "feet": ("feet",),
+            "legs": ("legs",),
+            "mainhand": ("mainhand", "main hand", "weapon"),
+            "offhand": ("offhand", "off hand", "shield"),
+            "neck": ("neck", "amulet", "necklace"),
+        }
+        slots_to_check = [
+            slot
+            for slot, keywords in slot_keywords.items()
+            if any(word in text for word in keywords)
+        ]
         if not slots_to_check:
             return False
-            
         equipment = avatar.equipment or {}
         equipment_lower = {str(key).lower(): value for key, value in equipment.items()}
-        for slot in slots_to_check:
-            if not equipment_lower.get(slot):
-                return False
-        
-        return True
+        return all(equipment_lower.get(slot) for slot in slots_to_check)
 
     @staticmethod
     def _check_inventory_goal(avatar: Avatar, text: str) -> bool:
@@ -133,8 +128,7 @@ class QuestManager:
         Checks if the current scene matches a target mentioned in the text.
         """
         # This requires knowing the scene label/name
-        # current_scene_id is what we have. 
+        # current_scene_id is what we have.
         # We'd need to fetch the scene label to compare.
         # For now, return False until we have a better way to map ID to Name here.
         return False
-

@@ -19,6 +19,9 @@ const emotion = computed(() => props.insights?.emotion?.replace(/_/g, ' ') || ''
     <h3 class="font-semibold text-sm">Last evaluated state</h3>
     <p class="mt-1 text-xs text-slate-400">Estimates from the last reviewed interaction; they may lag behind the story.</p>
     <template v-if="insights?.available">
+      <p v-if="insights.newer_responses !== undefined" class="mt-2 text-xs" :class="insights.newer_responses > 0 ? 'text-amber-300' : 'text-slate-400'">
+        {{ insights.newer_responses > 0 ? `Earlier observation · ${insights.newer_responses} newer replies. Not a live status.` : 'Based on the latest saved reply.' }}
+      </p>
       <p v-if="emotion" class="mt-3 text-sm"><span class="text-slate-400">Last observed emotion:</span> <span class="capitalize">{{ emotion }}</span></p>
       <dl v-if="estimates.length" class="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-2">
         <div v-for="estimate in estimates" :key="estimate.key" class="rounded-lg bg-slate-950/50 px-3 py-2">

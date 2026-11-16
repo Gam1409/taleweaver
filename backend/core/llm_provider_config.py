@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from typing import Any
 
 from pydantic import BaseModel
@@ -75,7 +76,7 @@ def _normalize_default(model: str) -> str:
     return model.split("/", 1)[1].strip() if "/" in model else model
 
 
-_MODEL_NORMALIZERS = {
+_MODEL_NORMALIZERS: dict[str, Callable[[str], str]] = {
     "ollama": lambda model: model,
     # LiteLLM removes one adapter prefix; always add it so raw vendor/openai slashes survive.
     "custom_openai": lambda model: f"openai/{model}",
@@ -95,6 +96,36 @@ def normalize_model(provider: str, model: str) -> str:
     if not normalized:
         raise ValueError(f"No model configured for provider '{provider}'.")
     return _MODEL_NORMALIZERS.get(provider, _normalize_default)(normalized)
+
+
+def _provider_endpoint(
+    provider: str, kimi_api_base: str | None, minimax_api_base: str | None
+) -> tuple[str | None, str | None]:
+    endpoints = {
+        **_FIXED_ENDPOINTS,
+        "kimi": ("openai", kimi_api_base),
+        "minimax": ("openai", minimax_api_base),
+    }
+    return endpoints.get(provider, (None, None))
+
+
+def effective_api_base(
+    *,
+    provider: str,
+    api_key: str | None,
+    api_base: str | None,
+    kimi_api_base: str | None = None,
+    minimax_api_base: str | None = None,
+) -> str | None:
+    """Resolve the same provider override for dispatch and reservation observers."""
+    if provider in {"ollama", "custom_openai"}:
+        return api_base
+    _, fixed_base = _provider_endpoint(provider, kimi_api_base, minimax_api_base)
+    if provider not in OPENAI_COMPATIBLE_PROVIDERS and (
+        str(api_key or "").startswith("sk-or-v1") or provider == "openrouter"
+    ):
+        return OPENROUTER_API_BASE
+    return fixed_base
 
 
 def apply_provider_endpoint(
@@ -121,23 +152,18 @@ def apply_provider_endpoint(
         return
 
     kwargs["api_key"] = api_key
-    endpoints = {
-        **_FIXED_ENDPOINTS,
-        "kimi": ("openai", kimi_api_base),
-        "minimax": ("openai", minimax_api_base),
-    }
-    custom_provider, fixed_base = endpoints.get(provider, (None, None))
+    custom_provider, _ = _provider_endpoint(provider, kimi_api_base, minimax_api_base)
+    fixed_base = effective_api_base(
+        provider=provider,
+        api_key=api_key,
+        api_base=api_base,
+        kimi_api_base=kimi_api_base,
+        minimax_api_base=minimax_api_base,
+    )
     if custom_provider:
         kwargs["custom_llm_provider"] = custom_provider
     if fixed_base:
         kwargs["api_base"] = fixed_base
-
-    # Auto-detect OpenRouter keys (only when no other OpenAI-compatible provider is set).
-    is_openrouter_key = str(api_key or "").startswith("sk-or-v1")
-    if provider not in OPENAI_COMPATIBLE_PROVIDERS and (
-        is_openrouter_key or provider == "openrouter"
-    ):
-        kwargs["api_base"] = OPENROUTER_API_BASE
 
 
 def is_minimax_model(provider: str, normalized_model: str) -> bool:
@@ -165,9 +191,10 @@ def uses_json_mode_fallback(provider: str, normalized_model: str) -> bool:
     )
 
 
-def json_schema_instruction(response_model: type[BaseModel]) -> str:
+def json_schema_instruction(response_model: type[BaseModel], *, schema: dict | None = None) -> str:
     """Schema instruction appended to the system prompt in JSON-mode fallback."""
     schema_json = json.dumps(
-        compact_json_schema(response_model.model_json_schema()), separators=(",", ":")
+        compact_json_schema(schema if schema is not None else response_model.model_json_schema()),
+        separators=(",", ":"),
     )
     return JSON_SCHEMA_INSTRUCTION.format(schema_json=schema_json)

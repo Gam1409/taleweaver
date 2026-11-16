@@ -136,6 +136,7 @@ defineExpose({
         <ReferenceTextarea
           v-if="useReferences"
           :model-value="String(tempValue)"
+          :options="referenceOptions"
           @update:model-value="tempValue = $event"
           :rows="rows"
           :maxlength="maxlength"
@@ -171,7 +172,7 @@ defineExpose({
       <div :class="type === 'textarea' ? 'flex flex-col gap-1.5 justify-center shrink-0' : 'flex gap-1.5 items-center shrink-0'">
         <button
           @click="handleSave"
-          :disabled="isSaving || (required && !String(tempValue).trim()) || (maxlength && String(tempValue).length > maxlength)"
+          :disabled="isSaving || (required && !String(tempValue).trim()) || (!!maxlength && String(tempValue).length > maxlength)"
           class="p-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl transition-all shadow-lg disabled:opacity-50 shrink-0 flex items-center justify-center"
           title="Save"
         >

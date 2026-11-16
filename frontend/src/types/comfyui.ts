@@ -1,8 +1,9 @@
+import type { ImagePurpose, PresetAssignment } from '@/services/imagePurposes'
 export type BindingName = 'prompt' | 'negative_prompt' | 'seed' | 'width' | 'height' | 'image'
 export interface ComfyNode {
   class_type: string
   inputs: Record<string, unknown>
-  _meta?: { title?: string }
+  _meta?: { title?: string; pos?: [number, number]; collapsed?: boolean }
 }
 export interface ComfyWorkflow {
   name: string
@@ -10,6 +11,10 @@ export interface ComfyWorkflow {
   bindings: Partial<Record<BindingName, { node_id: string; input_name: string }>>
   output_node: string
   dimension_multiple?: 8 | 16 | 32 | 64
+}
+export interface ComfyWorkflowVersion {
+  revision: number
+  workflow: ComfyWorkflow
 }
 export interface ComfyProfile {
   generate: ComfyWorkflow | null
@@ -36,14 +41,25 @@ export interface PromptTemplate {
 export interface ComfyPreset extends ComfyProfile {
   name: string
   prompt_rules: ImagePromptRules | null
+  reference_prompt_rules?: ImagePromptRules | null
   auto_prompt_template: boolean
   mature_themes?: boolean
+  purpose_tags?: ImagePurpose[]
+  style_tags?: string[]
 }
 export interface ComfyOptions {
   comfyui_url: string
   comfyui_timeout: number
   comfyui_profiles: Partial<Record<'simple' | 'advanced', ComfyProfile>>
+  image_purpose?: ImagePurpose
   comfyui_profile?: 'simple' | 'advanced'
+  comfyui_workflows?: Record<string, ComfyWorkflowVersion>
+  comfyui_test_preset?: string | null
   comfyui_presets?: Record<string, ComfyPreset>
-  comfyui_assignments?: Partial<Record<'simple' | 'advanced', string>>
+  comfyui_assignments?: Partial<Record<PresetAssignment, string>>
+}
+
+export interface ComfyTestOptions extends ComfyOptions {
+  test_prompt?: string
+  prepared_body?: string
 }

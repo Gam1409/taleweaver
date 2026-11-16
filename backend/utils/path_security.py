@@ -141,7 +141,7 @@ def assert_within_base_dir(path: str, base_dir: str) -> str:
     return ensure_within_base_dir(resolved, base_root)
 
 
-def _resolve_host_ips(host: str) -> list[ipaddress._BaseAddress]:
+def _resolve_host_ips(host: str) -> list[ipaddress.IPv4Address | ipaddress.IPv6Address]:
     """Resolve a hostname to its IP addresses (best-effort DNS lookup).
 
     Returns an empty list on failure. Used for SSRF checks before connecting.
@@ -150,7 +150,7 @@ def _resolve_host_ips(host: str) -> list[ipaddress._BaseAddress]:
         infos = socket.getaddrinfo(host, None)
     except (socket.gaierror, UnicodeError, ValueError):
         return []
-    ips: list[ipaddress._BaseAddress] = []
+    ips: list[ipaddress.IPv4Address | ipaddress.IPv6Address] = []
     for info in infos:
         try:
             sockaddr = info[4]
@@ -160,7 +160,7 @@ def _resolve_host_ips(host: str) -> list[ipaddress._BaseAddress]:
     return ips
 
 
-def _ip_is_disallowed(ip: ipaddress._BaseAddress) -> bool:
+def _ip_is_disallowed(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
     """Return True if the IP must not be contacted via user-supplied URLs."""
     return (
         ip.is_loopback

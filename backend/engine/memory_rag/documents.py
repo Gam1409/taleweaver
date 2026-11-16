@@ -2,12 +2,17 @@
 
 import hashlib
 import json
+from collections.abc import Iterator
 from dataclasses import asdict, dataclass, replace
 from typing import Any
 
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
-from backend.engine.npc_journal.records import journal_of, supported_quote
+from backend.engine.debug_transcript import is_debug_message
+from backend.engine.npc_journal.clock import clock_fields
+from backend.engine.npc_journal.reading import entries as journal_entries
+from backend.engine.npc_journal.records import supported_quote
 from backend.models.chat import ChatMessage
 from backend.models.game_session import GameSession
 from backend.models.memory_rag import MemorySummary
@@ -16,7 +21,8 @@ from backend.models.world_entity import WorldEntity
 
 DIALOGUE_CHUNK_CHARS = 2500
 DIALOGUE_CHUNK_OVERLAP = 200
-MAX_UNCHUNKED_CHARS = 12000
+# Leave headroom for source IDs, timestamps and other metadata in a 12k summary request.
+MAX_UNCHUNKED_CHARS = 10000
 
 
 @dataclass(frozen=True)
@@ -34,9 +40,23 @@ class MemoryDocument:
     provenance: str
     source_message_ids: list[str]
     created_at: str
+    topic: str | None = None
+    significance: str | None = None
+    category: str | None = None
+    game_minute: int | None = None
+    reference_kind: str | None = None
+    audience: str | None = None
+    known_by: tuple[str, ...] = ()
+    unresolved_known_by: tuple[str, ...] = ()
+    source_attribution: dict[str, Any] | None = None
+    reference_edited: bool = False
+    reference_relations: tuple[tuple[str, str], ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        result = asdict(self)
+        if self.game_minute is None:
+            result.pop("game_minute")
+        return result
 
 
 def content_hash(value: Any) -> str:
@@ -45,22 +65,38 @@ def content_hash(value: Any) -> str:
     ).hexdigest()
 
 
+def _fragments(text: str) -> Iterator[tuple[int, str]]:
+    offset = 0
+    while offset < len(text):
+        if offset and offset + DIALOGUE_CHUNK_OVERLAP >= len(text):
+            return
+        size = min(DIALOGUE_CHUNK_CHARS, len(text) - offset)
+        while (
+            len(json.dumps(text[offset : offset + size], ensure_ascii=False))
+            > MAX_UNCHUNKED_CHARS // 2
+        ):
+            size //= 2
+        yield offset, text[offset : offset + size]
+        offset += max(1, size - DIALOGUE_CHUNK_OVERLAP)
+
+
 def _bounded_document(document: MemoryDocument) -> list[MemoryDocument]:
     """Imported notes and cumulative chronicles also need bounded embedding inputs."""
-    if len(document.text) <= MAX_UNCHUNKED_CHARS:
+    if (
+        len(document.text) <= MAX_UNCHUNKED_CHARS
+        and len(json.dumps(document.text, ensure_ascii=False)) <= MAX_UNCHUNKED_CHARS
+    ):
         return [document]
     chunks = []
-    for offset in range(0, len(document.text), DIALOGUE_CHUNK_CHARS - DIALOGUE_CHUNK_OVERLAP):
-        if offset and offset + DIALOGUE_CHUNK_OVERLAP >= len(document.text):
-            break
+    for offset, text in _fragments(document.text):
         source_id = f"{document.source_id}:chunk:{offset}"
         chunks.append(
             replace(
                 document,
                 id=content_hash([document.session_id, document.layer, source_id]),
                 source_id=source_id,
-                source_hash=content_hash([document.source_hash, offset]),
-                text=document.text[offset : offset + DIALOGUE_CHUNK_CHARS],
+                source_hash=content_hash([document.source_hash, offset, text]),
+                text=text,
             )
         )
     return chunks
@@ -76,8 +112,17 @@ def summary_sources(
     return [doc for doc in documents if doc.layer == "dialogue"]
 
 
-def sources_hash(documents: list[MemoryDocument], message_ids: list[str]) -> str:
+def sources_hash(
+    documents: list[MemoryDocument], message_ids: list[str], source_keys: list[str] | None = None
+) -> str:
     selected = set(message_ids)
+    if source_keys is not None:
+        if not source_keys:
+            return ""
+        keys = set(source_keys)
+        documents = [doc for doc in documents if doc.source_id in keys]
+        if {doc.source_id for doc in documents} != keys:
+            return ""
     return content_hash(
         sorted(
             (doc.id, doc.text, doc.provenance, tuple(doc.source_message_ids))
@@ -97,6 +142,8 @@ def _document(state: Any, user_id: str, **fields: Any) -> MemoryDocument:
 
 
 def _dialogue(state: Any, user_id: str, message: ChatMessage) -> list[MemoryDocument]:
+    if is_debug_message(message) or (message.npc_journal or {}).get("status") == "incomplete":
+        return []
     claimed = message.role == "user"
     fingerprint = content_hash(message.content)
     prefix = "Player statement/action (not verified): " if claimed else "Narration: "
@@ -117,6 +164,7 @@ def _dialogue(state: Any, user_id: str, message: ChatMessage) -> list[MemoryDocu
                 provenance="claimed" if claimed else "observed",
                 source_message_ids=[message.id],
                 created_at=message.created_at.isoformat(),
+                **clock_fields(message.npc_journal),
             )
         )
     return documents
@@ -126,8 +174,8 @@ def _journal_documents(
     state: Any, user_id: str, npc: WorldEntity, messages: dict[str, ChatMessage]
 ) -> list[MemoryDocument]:
     documents = []
-    for entry in journal_of(npc).get("entries") or []:
-        message = messages.get(entry.get("message_id"))
+    for entry in journal_entries(npc, message_ids=set(messages)):
+        message = messages.get(str(entry.get("message_id") or ""))
         if not message or message.role != "assistant":
             continue
         if not supported_quote(entry.get("evidence"), message.content) or not entry.get("text"):
@@ -145,6 +193,10 @@ def _journal_documents(
                 provenance=source,
                 source_message_ids=[message.id],
                 created_at=message.created_at.isoformat(),
+                topic=entry.get("topic"),
+                significance=entry.get("significance"),
+                category=entry.get("category"),
+                **clock_fields(entry),
             )
         )
     return documents
@@ -222,19 +274,16 @@ async def collect_documents(db: Any, state: Any, user_id: str) -> list[MemoryDoc
     current = await db.scalar(
         select(SessionState)
         .where(SessionState.session_id == state.session_id)
+        # Refreshing this identity can expire the caller's loaded relationships.
+        # Terminal flags are synchronous, so reload session in this await.
+        .options(selectinload(SessionState.session))
         .execution_options(populate_existing=True)
     )
     if current is None:
         return []
-    rows = await db.scalars(
-        select(ChatMessage)
-        .where(
-            ChatMessage.session_id == state.session_id, ChatMessage.role.in_(["user", "assistant"])
-        )
-        .order_by(ChatMessage.created_at, ChatMessage.id)
-        .execution_options(populate_existing=True)
-    )
-    messages = {message.id: message for message in rows if message.content}
+    from backend.engine.memory_rag.transcript_pages import transcript_messages
+
+    messages = await transcript_messages(db, state.session_id)
     documents = [
         document
         for message in messages.values()
@@ -249,18 +298,28 @@ async def collect_documents(db: Any, state: Any, user_id: str) -> list[MemoryDoc
         documents.extend(_journal_documents(current, user_id, npc, messages))
     documents.extend(_world_documents(current, user_id))
     documents.extend(_session_documents(current, user_id))
+    from backend.engine.world_info.projection import collect_documents as world_info_documents
+
+    documents.extend(await world_info_documents(db, current, user_id))
     documents = [chunk for document in documents for chunk in _bounded_document(document)]
     summaries = await db.scalars(
         select(MemorySummary).where(
-            MemorySummary.session_id == state.session_id, MemorySummary.user_id == user_id
+            MemorySummary.session_id == state.session_id,
+            MemorySummary.user_id == user_id,
+            MemorySummary.archived.is_(False),
         )
     )
     raw_documents = list(documents)
     for summary in summaries:
         if not summary.source_message_ids or not set(summary.source_message_ids) <= messages.keys():
+            db.info.setdefault("stale_memory_summaries", set()).add(summary.id)
             continue
         sources = summary_sources(raw_documents, summary.layer, summary.npc_id, summary.scene_id)
-        if sources_hash(sources, summary.source_message_ids) != summary.source_hash:
+        if (
+            sources_hash(sources, summary.source_message_ids, summary.source_keys)
+            != summary.source_hash
+        ):
+            db.info.setdefault("stale_memory_summaries", set()).add(summary.id)
             continue
         documents.append(
             _document(
@@ -288,7 +347,7 @@ async def validate_candidates(
     seen = set()
     for candidate in candidates:
         row = candidate.to_dict() if isinstance(candidate, MemoryDocument) else candidate
-        document = canonical.get(row.get("id"))
+        document = canonical.get(str(row.get("id") or ""))
         if not document or document.id in seen or document.source_hash != row.get("source_hash"):
             continue
         if row.get("user_id") != user_id or row.get("session_id") != state.session_id:

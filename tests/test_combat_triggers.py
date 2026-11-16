@@ -10,6 +10,7 @@ from backend.api.routes.adventures.post_turn_hooks import PostTurnHooks
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.avatar import Avatar
 from backend.models.chat import ChatMessage
+from backend.models.game_session import GameSession
 from backend.models.session_state import SessionState
 from backend.models.user import User
 from backend.models.world_entity import WorldEntity
@@ -43,6 +44,9 @@ async def _seed(db, npc_meta=None, specials=None, unlocked=None):
                         description="Stern.", current_scene_id="VAULT", hp=30, max_hp=30,
                         is_hidden=False, is_in_inventory=False, metadata_json=npc_meta or {})  # fmt: skip
     db.add_all([avatar, state, guard])
+    db.add(
+        GameSession(id=state.session_id, user_id=user.id, avatar_id=avatar.id, template_id=adv.id)
+    )
     await db.commit()
     return user, avatar, state
 

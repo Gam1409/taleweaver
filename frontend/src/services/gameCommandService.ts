@@ -145,7 +145,7 @@ export const gameCommandService = {
     return entity?.entity_type === 'OBJECT' && entity?.is_portable !== false && !isContainerEntity(entity) && !isSwitchEntity(entity)
   },
 
-  buildContextMenu(entity: any, _ruleMode?: string): ContextMenuModel | null {
+  buildContextMenu(entity: any): ContextMenuModel | null {
     const items: ContextMenuItem[] = []
     let title = entity?.name || 'Action'
 
@@ -198,7 +198,7 @@ export const gameCommandService = {
     return { title, items }
   },
 
-  buildInventoryContextMenu(item: any, _ruleMode?: string): ContextMenuModel | null {
+  buildInventoryContextMenu(item: any): ContextMenuModel | null {
     const items: ContextMenuItem[] = []
     const title = item?.name || 'Item'
 

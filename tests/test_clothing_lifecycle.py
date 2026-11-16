@@ -2,6 +2,7 @@
 
 from copy import deepcopy
 
+import pytest
 import pytest_asyncio
 from sqlalchemy import select
 
@@ -30,7 +31,7 @@ async def clothing_world(auth_client, monkeypatch, tmp_path):
 
     async def avatar_portrait(ctx, avatar, prot):
         assert avatar.visual_profile["worn"][0]["item_id"] == "COAT"
-        assert ctx.manifest["objects"][0]["clothing"] == garment()
+        assert ctx.manifest["objects"][0]["clothing"] == {**garment(), "category": "clothing"}
         seen.append("avatar")
 
     async def npc_portrait(ctx, npc, *args):
@@ -143,9 +144,12 @@ async def test_initial_profiles_and_canonical_items_exist_before_portraits(
         assert avatar.inventory == ["COAT"]
         assert avatar.visual_profile["worn"][0]["item_id"] == "COAT"
         assert npc.inventory[0]["id"] == "DRESS"
-        assert npc.inventory[0]["clothing"] == garment()
+        assert npc.inventory[0]["clothing"] == {**garment(), "category": "clothing"}
         assert npc.visual_profile["appearance"]["age_years"] == 31
-        assert all(obj.metadata_json["clothing"] == garment() for obj in objects)
+        assert all(
+            obj.metadata_json["clothing"] == {**garment(), "category": "clothing"}
+            for obj in objects
+        )
 
 
 async def test_session_start_copy_ads_and_rewind_preserve_clothing(auth_client, clothing_world):
@@ -156,8 +160,11 @@ async def test_session_start_copy_ads_and_rewind_preserve_clothing(auth_client, 
             deepcopy(avatar.visual_profile),
             deepcopy(npc.visual_profile),
         )
-        assert avatar.inventory[0]["metadata_json"]["clothing"] == garment()
-        assert npc.inventory[0]["clothing"] == garment()
+        assert avatar.inventory[0]["metadata_json"]["clothing"] == {
+            **garment(),
+            "category": "clothing",
+        }
+        assert npc.inventory[0]["clothing"] == {**garment(), "category": "clothing"}
         assert state.entity_states["__manifest_snapshot__"]["original_manifest"][
             "clothing_settings"
         ] == {"detailed": True}
@@ -190,8 +197,11 @@ async def test_session_start_copy_ads_and_rewind_preserve_clothing(auth_client, 
             avatar, npc, state = await actors(db, restored_id)
             assert avatar.visual_profile == expected_avatar
             assert npc.visual_profile == expected_npc
-            assert avatar.inventory[0]["metadata_json"]["clothing"] == garment()
-            assert npc.inventory[0]["clothing"] == garment()
+            assert avatar.inventory[0]["metadata_json"]["clothing"] == {
+                **garment(),
+                "category": "clothing",
+            }
+            assert npc.inventory[0]["clothing"] == {**garment(), "category": "clothing"}
 
 
 async def test_adv_export_import_and_template_copy_preserve_profiles(auth_client, clothing_world):
@@ -200,7 +210,10 @@ async def test_adv_export_import_and_template_copy_preserve_profiles(auth_client
         assert manifest["clothing_settings"] == {"detailed": True}
         assert manifest["protagonist"]["visual_profile"]["worn"][0]["item_id"] == "COAT"
         assert manifest["npcs"][0]["visual_profile"]["worn"][0]["item_id"] == "DRESS"
-        assert manifest["objects"][0]["metadata_json"]["clothing"] == garment()
+        assert manifest["objects"][0]["metadata_json"]["clothing"] == {
+            **garment(),
+            "category": "clothing",
+        }
         owner = (await db.get(AdventureTemplate, "clothing-world")).owner_id
         manifest["adventure"]["title"] = "Imported clothing"
         assert await AdventureTemplateImporter.import_adv_manifest(db, manifest, owner_id=owner)
@@ -233,15 +246,16 @@ async def test_old_checkpoint_without_profile_clears_later_tracking(auth_client,
         assert avatar.visual_profile is None
 
 
+@pytest.mark.parametrize("origin_key", ["clothing_origin", "item_origin"])
 async def test_checkpoint_keeps_prior_owned_garments_and_unmarked_imported_rows(
-    auth_client, clothing_world
+    auth_client, clothing_world, origin_key
 ):
     sid = await start(auth_client)
     async with TestSessionLocal() as db:
         avatar, _, _ = await actors(db, sid)
         origin = {"kind": "runtime", "session_id": sid, "source_message_id": "prior"}
         # This creation exists in inventory before the checkpoint, without a world row.
-        avatar.inventory = [*avatar.inventory, {"id": "prior_garment", "clothing_origin": origin}]
+        avatar.inventory = [*avatar.inventory, {"id": "prior_garment", origin_key: origin}]
         checkpoint = await SessionCheckpointService.create_checkpoint(db, sid, "manual")
         await db.commit()
         db.add_all(
@@ -253,7 +267,7 @@ async def test_checkpoint_keeps_prior_owned_garments_and_unmarked_imported_rows(
                     description="",
                     current_scene_id="ROOM",
                     name="Prior",
-                    metadata_json={"clothing_origin": origin},
+                    metadata_json={origin_key: origin},
                 ),
                 WorldEntity(
                     id="garment_legitimate",
@@ -271,7 +285,7 @@ async def test_checkpoint_keeps_prior_owned_garments_and_unmarked_imported_rows(
                     description="",
                     current_scene_id="ROOM",
                     name="Imported",
-                    metadata_json={"clothing_origin": {**origin, "session_id": "source-save"}},
+                    metadata_json={origin_key: {**origin, "session_id": "source-save"}},
                 ),
                 WorldEntity(
                     id="later_created",
@@ -280,7 +294,7 @@ async def test_checkpoint_keeps_prior_owned_garments_and_unmarked_imported_rows(
                     description="",
                     current_scene_id="ROOM",
                     name="Future",
-                    metadata_json={"clothing_origin": {**origin, "source_message_id": "later"}},
+                    metadata_json={origin_key: {**origin, "source_message_id": "later"}},
                 ),
             ]
         )

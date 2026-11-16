@@ -1,0 +1,6 @@
+# Repository owner reviews changes to security and release boundaries.
+/.github/ @Gam1409
+/backend/core/auth.py @Gam1409
+/backend/utils/path_security.py @Gam1409
+/Dockerfile @Gam1409
+/entrypoint.sh @Gam1409

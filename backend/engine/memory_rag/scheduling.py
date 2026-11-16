@@ -1,16 +1,18 @@
 """Give streamed turns priority over bounded, cooperative maintenance work.
 
 Priority is process-local, matching the application's single-worker launcher.
-An already submitted HTTP request may still occupy the remote model; beginning a
-turn never waits for a background queue or attempts to cancel remote inference.
+When experimental inference admission is enabled, transport calls also share an
+endpoint reservation. Already submitted background inference is not preempted.
 """
 
 import asyncio
 import time
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncGenerator, AsyncIterator, Callable
 from contextlib import aclosing, asynccontextmanager
 from functools import wraps
 from typing import Any
+
+from backend.core.inference.registry import background_call
 
 IDLE_GRACE_SECONDS = 15.0
 
@@ -38,11 +40,13 @@ class IdleScheduler:
 
     @asynccontextmanager
     async def foreground(self) -> AsyncIterator[None]:
+        priority = background_call.set(False)
         self.active_turns += 1
         self._touch()
         try:
             yield
         finally:
+            background_call.reset(priority)
             self.active_turns -= 1
             self._touch()
 
@@ -62,9 +66,11 @@ class IdleScheduler:
     async def background(self) -> AsyncIterator[None]:
         async with self.capacity:
             await self.wait_idle()
+            priority = background_call.set(True)
             try:
                 yield
             finally:
+                background_call.reset(priority)
                 self._touch()
 
 
@@ -72,30 +78,37 @@ scheduler = IdleScheduler()
 
 
 async def _queue_initialized_turn(manager: Any) -> None:
-    from backend.engine.memory_rag.worker import request_update
+    from backend.engine.memory_rag.dirty_queue import queue_refresh
 
     session_id = getattr(getattr(manager, "state", None), "session_id", None)
     user_id = getattr(getattr(manager, "user", None), "id", None)
     if session_id and user_id:
-        await request_update(session_id, user_id)
+        queue_refresh(session_id, user_id)
 
 
 @asynccontextmanager
 async def _turn_scope(manager: Any) -> AsyncIterator[None]:
     async with scheduler.foreground():
+        interrupted = False
         try:
             yield
+        except (asyncio.CancelledError, GeneratorExit):
+            interrupted = True
+            raise
         finally:
-            await _queue_initialized_turn(manager)
+            # A disconnected stream may still own uncommitted writes. Do not open
+            # a second transaction from its cancelled cleanup path.
+            if not interrupted:
+                await _queue_initialized_turn(manager)
 
 
 def foreground_turn(
-    method: Callable[..., AsyncIterator[str]],
-) -> Callable[..., AsyncIterator[str]]:
+    method: Callable[..., AsyncGenerator[str, None]],
+) -> Callable[..., AsyncGenerator[str, None]]:
     """Register before turn initialization and release on errors/disconnects."""
 
     @wraps(method)
-    async def guarded(manager: Any, *args: Any, **kwargs: Any) -> AsyncIterator[str]:
+    async def guarded(manager: Any, *args: Any, **kwargs: Any) -> AsyncGenerator[str, None]:
         async with _turn_scope(manager), aclosing(method(manager, *args, **kwargs)) as stream:
             async for chunk in stream:
                 yield chunk

@@ -1,19 +1,25 @@
 from __future__ import annotations
 
-from typing import Any, Literal, Optional, Union
+from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from backend.core.adventure_format import CURRENT_VERSION, FORMAT_NAME
+from backend.core.manifest_extensions import normalize_extensions
+from backend.schemas.character_identity import CharacterIdentityFields
 
 
 class Pacing(BaseModel):
-    scene_length: Optional[Literal["short", "normal", "long"]] = Field(None, description="short|normal|long")
-    event_frequency: Optional[Literal["low", "normal", "high"]] = Field(None, description="low|normal|high")
+    scene_length: Optional[Literal["short", "normal", "long"]] = Field(
+        None, description="short|normal|long"
+    )
+    event_frequency: Optional[Literal["low", "normal", "high"]] = Field(
+        None, description="low|normal|high"
+    )
     notes: Optional[str] = None
 
 
-class Protagonist(BaseModel):
+class Protagonist(CharacterIdentityFields):
     name: Optional[str] = None
     role: Optional[str] = None
     description: Optional[str] = None
@@ -23,7 +29,8 @@ class Protagonist(BaseModel):
     stamina: Optional[int] = None
 
 
-class CharacterSpec(BaseModel):
+class CharacterSpec(CharacterIdentityFields):
+    metadata_json: Optional[dict[str, Any]] = None
     id: Optional[str] = None
     name: Optional[str] = None
     role: Optional[str] = None
@@ -46,6 +53,7 @@ class SceneSpec(BaseModel):
 
 
 class ItemSpec(BaseModel):
+    metadata_json: Optional[dict[str, Any]] = None
     id: Optional[str] = None
     name: Optional[str] = None
     type: Optional[str] = None
@@ -55,6 +63,13 @@ class ItemSpec(BaseModel):
 
 
 class AdventureTemplateImportPayload(BaseModel):
+    extensions: dict[str, dict[str, Any]] = Field(default_factory=dict)
+
+    @field_validator("extensions", mode="before")
+    @classmethod
+    def valid_extensions(cls, value: Any) -> dict[str, dict[str, Any]]:
+        return normalize_extensions(value)
+
     format: str = Field(default=FORMAT_NAME, description="Canonical TaleWeaver import format")
     version: str = Field(default=CURRENT_VERSION, description="Import format version, e.g. '1.0'")
     id: Optional[str] = None

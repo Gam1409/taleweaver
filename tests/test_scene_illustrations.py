@@ -1,5 +1,6 @@
 """VN moment images freeze visible facts and never mutate portraits or current scenes."""
 
+import asyncio
 from copy import deepcopy
 from pathlib import Path
 from types import SimpleNamespace
@@ -31,6 +32,7 @@ __all__ = ["workflow"]
 
 @pytest_asyncio.fixture
 async def illustration_world(auth_client, monkeypatch, tmp_path):
+    """Keep the pre-plan contract covered on the unchanged NSFW compatibility route."""
     monkeypatch.setattr(settings, "DATA_DIR", str(tmp_path))
     visual_jobs._jobs.clear()
     async with TestSessionLocal() as db:
@@ -71,7 +73,7 @@ async def illustration_world(auth_client, monkeypatch, tmp_path):
                 entity_states={
                     AdventureLogic.SESSION_MANIFEST_SNAPSHOT_KEY: {
                         "adventure": {"rule_enforcement_mode": mode},
-                        "original_manifest": {},
+                        "original_manifest": {"nsfw_settings": {"enabled": True}},
                     },
                     "NPC": {"description": "Future blue coat", "secret": "hidden map"},
                 },
@@ -120,9 +122,12 @@ async def illustration_world(auth_client, monkeypatch, tmp_path):
 
     async def generate(**kwargs):
         calls.append(kwargs)
+        kwargs["provider_options"]["_generation_details"].update(
+            provider="stable_diffusion", positive_prompt="A quiet cafe", negative_prompt="blur"
+        )
         target = Path(kwargs["target_dir"], kwargs["filename"])
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_bytes(b"fake image")
+        await asyncio.to_thread(target.parent.mkdir, parents=True, exist_ok=True)
+        await asyncio.to_thread(target.write_bytes, b"fake image")
         return local_path_to_data_url(str(target))
 
     async def adapt(description, rules, user, **kwargs):
@@ -169,6 +174,8 @@ async def test_snapshot_not_current_state_drives_generation(auth_client, illustr
     assert response.status_code == 200, response.text
     assert response.json()["image_url"] == result["result"]["image_url"]
     assert response.json()["snapshot_source"] == "message_time"
+    assert response.json()["generation_details"] == result["result"]["generation_details"]
+    assert response.json()["generation_details"]["positive_prompt"] == "A quiet cafe"
     async with TestSessionLocal() as db:
         state = await db.scalar(select(SessionState).where(SessionState.session_id == "moment"))
         assert state.current_scene_id == "CAFE"
@@ -238,7 +245,7 @@ async def test_late_result_is_discarded_after_story_change(
     result = await finish(auth_client)
     assert result["state"] == "failed"
     request = illustration_world[0]
-    assert not Path(request["target_dir"], request["filename"]).exists()
+    assert not await asyncio.to_thread(Path(request["target_dir"], request["filename"]).exists)
     async with TestSessionLocal() as db:
         state = await db.scalar(select(SessionState).where(SessionState.session_id == "moment"))
         assert registry_of(state.entity_states)["images"] == {}
@@ -307,7 +314,8 @@ async def test_comfy_story_preset_is_used(
         state.selected_image_styles = [{"instruction": "Soft watercolor with ink outlines"}]
         data = deepcopy(state.entity_states)
         data[AdventureLogic.SESSION_MANIFEST_SNAPSHOT_KEY]["original_manifest"] = {
-            "visual_presets": {"advanced": "story-art"}
+            "visual_presets": {"advanced": "story-art"},
+            "nsfw_settings": {"enabled": True},
         }
         state.entity_states = data
         await db.commit()
@@ -317,7 +325,7 @@ async def test_comfy_story_preset_is_used(
     async def adapt(description, rules, user, **kwargs):
         adaptations.append(rules)
         assert "Soft watercolor with ink outlines" in description
-        return "2 adults, standing apart, woman beside window, man seated"
+        return "1 people, Лина, red coat, standing beside window"
 
     monkeypatch.setattr(render, "adapt_body", adapt)
     result = await finish(auth_client)
@@ -330,19 +338,29 @@ async def test_comfy_story_preset_is_used(
     assert adaptations[0].format == ("tags" if adapt_with_llm else "description")
     if adapt_with_llm:
         assert "Use visual tags for this checkpoint." in adaptations[0].instructions
-    assert "final visible moment" in adaptations[0].instructions
-    assert "later departure" in adaptations[0].instructions
+    assert "final visible instant" in adaptations[0].instructions
+    assert "only characters visible at the final instant" in adaptations[0].instructions
 
-    from backend.engine import image_prompt_adapter
+    from backend.engine import image_prompt_adapter, media_generation
 
     async def unexpected_adaptation(*args, **kwargs):
         raise AssertionError("The image provider must not reinterpret the final frame")
 
     monkeypatch.setattr(image_prompt_adapter, "adapt_body", unexpected_adaptation)
-    prepared = await image_prompt_adapter.prepare_prompt(illustration_world[0]["prompt"], options)
+    # Mirror the real submission seam: the prepared frame passes through
+    # _prepare_prompt before ComfyUI assembles the workflow bindings.
+    submitted = media_generation._prepare_prompt(
+        MediaEngine,
+        illustration_world[0]["prompt"],
+        "comfyui",
+        options,
+        illustration_world[0]["style_instruction"],
+    )
+    assert "Soft watercolor with ink outlines" in submitted
+    prepared = await image_prompt_adapter.prepare_prompt(submitted, options)
     assert prepared["positive"] == (
-        "model-quality-token, 2 adults, standing apart, woman beside window, man seated, "
-        "model-style-token"
+        "model-quality-token, 1 people, Лина, red coat, standing beside window, "
+        "Soft watercolor with ink outlines, model-style-token"
     )
 
 
@@ -371,14 +389,14 @@ async def test_utility_distills_prompt_before_non_comfy_provider(
 
     async def adapt(description, rules, user):
         calls.append((description, rules))
-        return "A woman in a red coat offers a cup at a cafe."
+        return "1 people. Лина in a red coat offers a cup at a cafe."
 
     monkeypatch.setattr(render, "adapt_body", adapt)
     assert (await finish(auth_client))["state"] == "succeeded"
     assert len(calls) == 1
     assert calls[0][1].language == "English"
     assert "Лина" in calls[0][0]
-    assert illustration_world[0]["prompt"] == "A woman in a red coat offers a cup at a cafe."
+    assert illustration_world[0]["prompt"] == "1 people. Лина in a red coat offers a cup at a cafe."
 
 
 async def test_utility_failure_does_not_submit_an_image(

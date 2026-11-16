@@ -18,6 +18,8 @@ from typing import Any
 from zipfile import ZipFile
 
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".tif", ".tiff", ".svg"}
+
+
 @dataclass
 class ExtractedAsset:
     """Single extracted asset entry for the output JSON."""
@@ -82,13 +84,12 @@ class ADZAssetExtractor:
             adventure_dir = self.target_dir / self._sanitize_folder_name(adventure_name)
             adventure_dir.mkdir(parents=True, exist_ok=True)
 
-            normalized_members = {
-                self._normalize_path(name): name
-                for name in archive.namelist()
-            }
+            normalized_members = {self._normalize_path(name): name for name in archive.namelist()}
 
             for entity in self._collect_entities(payload, blueprint):
-                archive_member = self._resolve_archive_member(entity["image_ref"], normalized_members)
+                archive_member = self._resolve_archive_member(
+                    entity["image_ref"], normalized_members
+                )
                 if archive_member is None:
                     continue
 
@@ -144,16 +145,40 @@ class ADZAssetExtractor:
 
         return ", ".join(style_names)
 
-    def _collect_entities(self, payload: dict[str, Any], blueprint: dict[str, Any]) -> list[dict[str, str]]:
+    def _collect_entities(
+        self, payload: dict[str, Any], blueprint: dict[str, Any]
+    ) -> list[dict[str, str]]:
         entities: list[dict[str, str]] = []
         seen: set[tuple[str, str]] = set()
 
         for source in (payload, blueprint):
             extracted = []
-            extracted.extend(self._extract_entities(source.get("scenes"), "scene", ("image_url",), ("description",)))
-            extracted.extend(self._extract_entities(source.get("npcs"), "npc", ("profile_image", "image_url"), ("description",)))
-            extracted.extend(self._extract_entities(source.get("items"), "object", ("image_url",), ("itemDescription", "description")))
-            extracted.extend(self._extract_entities(source.get("objects"), "object", ("image_url",), ("itemDescription", "description")))
+            extracted.extend(
+                self._extract_entities(
+                    source.get("scenes"), "scene", ("image_url",), ("description",)
+                )
+            )
+            extracted.extend(
+                self._extract_entities(
+                    source.get("npcs"), "npc", ("profile_image", "image_url"), ("description",)
+                )
+            )
+            extracted.extend(
+                self._extract_entities(
+                    source.get("items"),
+                    "object",
+                    ("image_url",),
+                    ("itemDescription", "description"),
+                )
+            )
+            extracted.extend(
+                self._extract_entities(
+                    source.get("objects"),
+                    "object",
+                    ("image_url",),
+                    ("itemDescription", "description"),
+                )
+            )
 
             for entity in extracted:
                 dedupe_key = (entity["typ"], entity["id"])
@@ -206,7 +231,9 @@ class ADZAssetExtractor:
                 return value.strip()
         return ""
 
-    def _resolve_archive_member(self, image_ref: str, normalized_members: dict[str, str]) -> str | None:
+    def _resolve_archive_member(
+        self, image_ref: str, normalized_members: dict[str, str]
+    ) -> str | None:
         normalized = self._normalize_path(image_ref)
         if normalized in normalized_members:
             return normalized_members[normalized]
@@ -246,12 +273,16 @@ class ADZAssetExtractor:
         payload = [
             {
                 "adventure": adventure,
-                "assets": sorted(entries, key=lambda entry: (entry["typ"], entry["name"], entry["filename"])),
+                "assets": sorted(
+                    entries, key=lambda entry: (entry["typ"], entry["name"], entry["filename"])
+                ),
             }
             for adventure, entries in sorted(grouped.items(), key=lambda item: item[0].lower())
         ]
 
-        self.output_json.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        self.output_json.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
 
     def _write_adventure_json(self, adventure_dir: Path, all_records: list[ExtractedAsset]) -> None:
         adventure_name = adventure_dir.name
@@ -266,7 +297,9 @@ class ADZAssetExtractor:
             for asset in all_records
             if self._sanitize_folder_name(asset.adventure) == adventure_name
         ]
-        entries = sorted(entries, key=lambda entry: (entry["typ"], entry["name"], entry["filename"]))
+        entries = sorted(
+            entries, key=lambda entry: (entry["typ"], entry["name"], entry["filename"])
+        )
         (adventure_dir / "metadata.json").write_text(
             json.dumps(entries, ensure_ascii=False, indent=2),
             encoding="utf-8",

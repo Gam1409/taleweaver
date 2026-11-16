@@ -1,13 +1,20 @@
 """Embedding-only HTTP clients, deliberately independent from completion routing."""
 
 import asyncio
-import ipaddress
 import math
-from typing import Any
+from typing import Any, Literal
 from urllib.parse import urlsplit
 
 import httpx
 
+from backend.core.inference import admission, receipts
+from backend.core.inference.registry import (
+    InferenceQueueError,
+    InferenceUncertainError,
+    endpoint_key,
+)
+from backend.core.llm_diagnostics import async_operation
+from backend.core.system_diagnostics import service
 from backend.engine.memory_rag.settings import MemoryRagSettings, read_settings
 from backend.utils.path_security import _resolve_host_ips, validate_provider_url
 
@@ -22,11 +29,13 @@ class EmbeddingError(ValueError):
 
 def validate_embedding_url(base_url: str) -> str:
     normalized = validate_provider_url(base_url).rstrip("/")
-    addresses = _resolve_host_ips(urlsplit(normalized).hostname)
+    hostname = urlsplit(normalized).hostname
+    if hostname is None:
+        raise EmbeddingError("Embedding URL must include a hostname.")
+    addresses = _resolve_host_ips(hostname)
     if not addresses:
         raise EmbeddingError("Could not resolve embedding endpoint hostname.")
-    for address in addresses:
-        ip = ipaddress.ip_address(address)
+    for ip in addresses:
         forbidden = ip.is_link_local or ip.is_multicast or ip.is_unspecified
         if (
             forbidden
@@ -87,28 +96,38 @@ def _request_url(settings: MemoryRagSettings, base: str) -> str:
 
 
 async def embed_texts(
-    user: Any, texts: list[str], *, timeout: float | None = None
+    user: Any,
+    texts: list[str],
+    *,
+    timeout: float | None = None,
+    purpose: Literal["query", "document"] = "document",
 ) -> list[list[float]]:
     settings = read_settings(user)
     return await embed_with_settings(
-        settings, texts, api_key=_credential_key(user), timeout=timeout
+        settings, texts, api_key=_credential_key(user), timeout=timeout, purpose=purpose
     )
 
 
+@async_operation("embedding")
 async def embed_with_settings(
     settings: MemoryRagSettings,
     texts: list[str],
     *,
     api_key: str = "",
     timeout: float | None = None,
+    purpose: Literal["query", "document"] = "document",
 ) -> list[list[float]]:
     if not settings.enabled or not settings.base_url or not settings.model:
         raise EmbeddingError("Enable memory and configure an embedding URL and model first.")
     if not texts:
         return []
     if len(texts) > MAX_BATCH_SIZE or any(
-        not isinstance(t, str) or not t.strip() or len(t) > MAX_TEXT_LENGTH for t in texts
+        not isinstance(text, str) or not text.strip() for text in texts
     ):
+        raise EmbeddingError("Embedding input is empty or exceeds batch/text limits.")
+    prefix = settings.query_prefix if purpose == "query" else settings.document_prefix
+    texts = [prefix + text for text in texts]
+    if any(len(text) > MAX_TEXT_LENGTH for text in texts):
         raise EmbeddingError("Embedding input is empty or exceeds batch/text limits.")
     duration = (
         settings.timeout_seconds if timeout is None else min(settings.timeout_seconds, timeout)
@@ -117,6 +136,8 @@ async def embed_with_settings(
         raise EmbeddingError("Embedding request timeout must be positive and finite.")
     try:
         return await asyncio.wait_for(_embed(settings, texts, duration, api_key), timeout=duration)
+    except (InferenceQueueError, InferenceUncertainError) as exc:
+        raise EmbeddingError(str(exc)) from exc
     except (httpx.HTTPError, asyncio.TimeoutError, ValueError) as exc:
         if isinstance(exc, EmbeddingError):
             raise
@@ -128,13 +149,46 @@ async def embed_with_settings(
 async def _embed(
     settings: MemoryRagSettings, texts: list[str], duration: float, api_key: str
 ) -> list[list[float]]:
+    token = service.capture_token()
+    if token is not None:
+        service.detail(
+            "detail.embedding.prepared",
+            token=token,
+            texts=texts,
+            model=settings.model,
+            provider=settings.provider,
+            timeout_seconds=duration,
+        )
     base = await asyncio.to_thread(validate_embedding_url, settings.base_url)
-    headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
-    body = {"model": settings.model, "input": texts}
-    async with httpx.AsyncClient(timeout=duration, follow_redirects=False) as client:
-        response = await client.post(_request_url(settings, base), json=body, headers=headers)
+    if admission.enabled():
+        async with admission.reserve(endpoint_key(base), settings.timeout_seconds) as lease:
+            response = await receipts.wait_for_response(
+                _post(settings, base, texts, api_key, settings.timeout_seconds), lease
+            )
+            lease.certain = True
+    else:
+        response = await _post(settings, base, texts, api_key, duration)
+    if token is not None:
+        service.detail(
+            "detail.embedding.http.response",
+            token=token,
+            status_code=response.status_code,
+            body=response.text,
+        )
     response.raise_for_status()
     return _parse_vectors(response.json(), settings.provider, len(texts))
+
+
+async def _post(
+    settings: MemoryRagSettings, base: str, texts: list[str], api_key: str, duration: float
+) -> httpx.Response:
+    headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+    async with httpx.AsyncClient(timeout=duration, follow_redirects=False) as client:
+        return await client.post(
+            _request_url(settings, base),
+            json={"model": settings.model, "input": texts},
+            headers=headers,
+        )
 
 
 def _credential_key(user: Any) -> str:

@@ -15,6 +15,12 @@ from backend.api.routes.adventures.editing.entity_update.fields import (
     template_rows,
     validated_new_id,
 )
+from backend.api.routes.adventures.editing.entity_update.rename_refs import (
+    cascade_template_references,
+)
+from backend.api.routes.adventures.editing.exit_fields import (
+    EXIT_SCRIPT_FIELDS as _EXIT_SCRIPT_FIELDS,
+)
 from backend.api.routes.adventures.editing.schemas import EntityUpdateRequest
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.world_entity import WorldEntity, WorldExit, WorldScene
@@ -25,17 +31,7 @@ _SCENE_SCRIPT_FIELDS = (
     "on_leave_scene_script",
     "on_leave_scene_text",
 )
-_EXIT_SCRIPT_FIELDS = (
-    "unlock_expression",
-    "on_open_exit_script",
-    "on_open_exit_text",
-    "on_exit_used_script",
-    "on_exit_used_text",
-    "on_unlock_success_script",
-    "on_unlock_success_text",
-    "on_unlock_failure_script",
-    "on_unlock_failure_text",
-)
+
 # Exit columns mirrored into the manifest's exit entries.
 _EXIT_MANIFEST_FIELDS = (
     "label",
@@ -76,10 +72,7 @@ async def _rename_scene(
         if ent.current_scene_id == old_id:
             ent.current_scene_id = new_id
 
-    manifest = deepcopy(adv.original_manifest or {})
-    if manifest.get("start_scene_id") == old_id:
-        manifest["start_scene_id"] = new_id
-        adv.original_manifest = manifest
+    await cascade_template_references(db, adv, old_id, new_id, "scene")
 
 
 def _decorative_objects(values: list[str]) -> list[str] | None:
@@ -178,13 +171,13 @@ async def update_exit(
     world_exit = res.scalars().first()
     if not world_exit:
         return
-    if given(payload, "name"):
+    if given(payload, "name") and payload.name is not None:
         world_exit.label = payload.name
     if given(payload, "locked"):
         world_exit.is_locked = bool(payload.locked)
     if given(payload, "description"):
         world_exit.lock_description = payload.description
-    if given(payload, "exit_type"):
+    if given(payload, "exit_type") and payload.exit_type is not None:
         world_exit.exit_type = payload.exit_type
     copy_scripts(world_exit, payload, _EXIT_SCRIPT_FIELDS)
     if any(given(payload, f) for f in _LOCK_FIELDS):

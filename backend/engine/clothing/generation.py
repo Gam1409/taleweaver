@@ -4,7 +4,11 @@ from copy import deepcopy
 from typing import Any
 
 from backend.core.game_modes import mode_policy
-from backend.engine.clothing.profiles import reconcile_profile, sanitize_garment
+from backend.engine.clothing.profiles import (
+    attachment_item_allowed,
+    reconcile_profile,
+    sanitize_garment,
+)
 from backend.engine.clothing.settings import clothing_settings
 
 GENERATION_INSTRUCTION = """
@@ -16,6 +20,10 @@ Choose clothing individually from the setting, culture, profession, status, weat
 current circumstances. Do not assign everybody the same outfit, uniform, or underwear set.
 Do not invent uniforms just because someone has a profession. Non-humanoid characters do
 not need human clothing or fabricated human anatomy.
+Optional body.form records the established physical shape (humanoid, non_humanoid,
+unknown); body.silhouette is optional. body.attachment_slots records only explicitly
+established regions: null is unassessed, [] explicitly unavailable. Gender alone
+does not establish anatomy. Leave worn.source absent; source proof belongs to the host.
 Worn clothes are real canonical objects: declare each garment ONCE in objects with its
 clothing metadata (layer 0..4, coverage regions, opaque, underwear, description) and a
 single owner. Each worn item_id references that same owned object ID, also present in the
@@ -82,17 +90,30 @@ def _actor_profile(
     if profile is not None:
         age = (profile.get("appearance") or {}).get("age_years")
         adult = isinstance(age, int) and not isinstance(age, bool) and age >= 18
+        allowed = (profile.get("body") or {}).get("attachment_slots")
         profile["worn"] = [
             worn
             for worn in profile.get("worn", [])
             if worn["item_id"] not in blocked
-            and objects.get(worn["item_id"], {}).get("clothing")
-            and (
-                not (objects.get(worn["item_id"], {}).get("clothing") or {}).get("underwear")
-                or (detailed and adult)
-            )
+            and _initial_wear_allowed(worn, objects, adult, detailed, allowed)
         ]
     actor["visual_profile"] = profile
+
+
+def _initial_wear_allowed(
+    worn: dict, objects: dict, adult: bool, detailed: bool, allowed: list | None
+) -> bool:
+    item = objects.get(worn["item_id"], {})
+    slot = worn.get("attachment_slot")
+    if slot:
+        return (
+            bool(item)
+            and adult
+            and attachment_item_allowed(item)
+            and (allowed is None or slot in allowed)
+        )
+    garment = item.get("clothing")
+    return bool(garment) and (not garment.get("underwear") or (detailed and adult))
 
 
 def normalize_manifest_clothing(manifest: dict, *, detailed: bool) -> None:
@@ -108,7 +129,7 @@ def normalize_manifest_clothing(manifest: dict, *, detailed: bool) -> None:
     }
     blocked: set[str] = set()
     for obj in objects.values():
-        stored = obj.get("metadata_json") if isinstance(obj.get("metadata_json"), dict) else {}
+        stored = raw_metadata if isinstance(raw_metadata := obj.get("metadata_json"), dict) else {}
         garment = sanitize_garment(obj.get("clothing") or stored.get("clothing"))
         if garment and garment.get("underwear") and not detailed:
             blocked.add(obj["id"])

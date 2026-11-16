@@ -1,0 +1,42 @@
+/* Teleported authoring dialogs inherit the active route's presentation. */
+[data-authoring-theme="archive"] .authoring-modal-overlay {
+  background: #030812c9;
+  backdrop-filter: blur(8px);
+}
+[data-authoring-theme="archive"] .authoring-dialog {
+  min-width: 0;
+  border: 1px solid #334155;
+  border-radius: 18px;
+  background: #101827;
+  color: #cbd5e1;
+  box-shadow: 0 24px 80px #0007;
+  font-family: "Alegreya Sans", sans-serif;
+  font-size: 16px;
+}
+[data-authoring-theme="archive"] .authoring-dialog::backdrop { background: #030812c9; backdrop-filter: blur(8px); }
+[data-authoring-theme="archive"] .authoring-dialog :is(.font-black, .font-extrabold) { font-weight: 600; }
+[data-authoring-theme="archive"] .authoring-dialog .uppercase { text-transform: none; letter-spacing: .025em; }
+[data-authoring-theme="archive"] .authoring-dialog :is(h2, h3, h4) { letter-spacing: -.01em; }
+[data-authoring-theme="archive"] .authoring-dialog :is(input, select, textarea) { font-size: 15px; border-radius: 10px; }
+[data-authoring-theme="archive"] .authoring-dialog :is(input, select, textarea, button):focus-visible { outline: 2px solid #d6b46f; outline-offset: 3px; }
+[data-authoring-theme="archive"] .authoring-dialog :is(.text-xxs, .text-\[10px\], .text-\[11px\]) { font-size: 12px; line-height: 1.5; }
+[data-authoring-theme="archive"] .authoring-dialog :is(.rounded-3xl, .rounded-2xl) { border-radius: 12px; }
+[data-authoring-theme="archive"] .authoring-dialog [class~="text-aether-primary"] { color: #e5c789; }
+[data-authoring-theme="archive"] .authoring-dialog :is([class~="bg-aether-primary/10"], [class~="bg-aether-primary/20"]) { background-color: #d6b46f12; }
+[data-authoring-theme="archive"] .authoring-dialog :is([class~="border-aether-primary/20"], [class~="border-aether-primary/30"]) { border-color: #d6b46f55; }
+[data-authoring-theme="archive"] .authoring-dialog.w-80 { width: min(20rem, 100%); }
+[data-authoring-theme="archive"] .authoring-dialog :is(input, select, textarea) { min-width: 0; }
+[data-authoring-theme="archive"] .authoring-dialog button[class~="bg-emerald-600"]:not([class~="rounded-full"]) { background: #d6b46f; color: #151b25; box-shadow: none; }
+[data-authoring-theme="archive"] .entity-editor-dialog > div:first-child h3 { font-size: 21px; font-weight: 600; color: #f1f3f7; }
+[data-authoring-theme="archive"] .entity-editor-dialog > div:last-child { flex-shrink: 0; }
+[data-authoring-theme="archive"] .entity-editor-dialog > div:nth-child(2) { flex-shrink: 0; }
+[data-authoring-theme="archive"] .entity-identifier { border-top: 1px solid #293548; padding-top: 12px; }
+[data-authoring-theme="archive"] .entity-identifier > summary { color: #94a3b8; font-size: 13px; cursor: pointer; }
+[data-authoring-theme="archive"] .entity-identifier[open] > summary { margin-bottom: 14px; }
+@media (max-width: 639px) {
+  [data-authoring-theme="archive"] .authoring-modal-overlay { padding: 12px; }
+  [data-authoring-theme="archive"] .authoring-dialog { border-radius: 14px; }
+  [data-authoring-theme="archive"] .authoring-dialog :is(.p-8, .p-10) { padding: 20px; }
+  [data-authoring-theme="archive"] .entity-editor-dialog > div { padding-inline: 16px; }
+  [data-authoring-theme="archive"] .entity-editor-dialog .entity-field-body { padding-inline: 12px; }
+}

@@ -61,9 +61,12 @@ class ApplyContext:
         return bool(self.gen_scenes or self.gen_npc or self.gen_items or self.gen_protagonist_image)
 
     async def commit_and_refresh(self, refresh_user: bool = True) -> None:
-        """Commits and reloads the adventure (and user) so later steps never see expired rows."""
+        """Flush atomic imports; publish completed stages of ordinary generation."""
         await self.guard_write()
-        await self.db.commit()
+        if self.db.info.get("adventure_import_transaction") is not None:
+            await self.db.flush()
+        else:
+            await self.db.commit()
         self.adventure = await self.db.get(AdventureTemplate, self.template_id)
         if refresh_user and self.user:
             self.user = await self.db.get(User, self.user.id)

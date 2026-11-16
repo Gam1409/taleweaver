@@ -8,6 +8,7 @@ import pytest
 from sqlalchemy import select
 
 from backend.api.routes.adventures.gameplay_logic import GameTurnManager
+from backend.engine.narrated_items.schema import ItemExtraction
 from backend.engine.scene_illustrations.snapshots import REGISTRY_KEY
 from backend.engine.visual_novel.schema import STATE_KEY, InteractionPlan, SocialProposal
 from backend.engine.visual_novel.state import load_state
@@ -16,6 +17,7 @@ from backend.models.game_session import GameSession
 from backend.models.session_state import SessionState
 from backend.models.world_entity import WorldEntity, WorldScene
 from tests.conftest import TestSessionLocal
+from tests.state_response_fixture import extraction
 from tests.test_game_loop import _seed_game_context
 
 PRIOR = "Лина и герой вместе починили сломанную полку."
@@ -42,6 +44,8 @@ class TurnRoles:
     async def structured(self, *args, **kwargs):
         schema = kwargs.get("response_model") or args[2]
         self.calls.append((schema.__name__, args, kwargs))
+        if issubclass(schema, ItemExtraction):
+            return extraction(schema)
         if schema is InteractionPlan:
             if self.social_failure:
                 raise TimeoutError("Simulated slow Small model")
@@ -90,6 +94,7 @@ class TurnRoles:
 def install_roles(monkeypatch, roles):
     monkeypatch.setattr("backend.api.routes.adventures.gameplay_logic.GameMasterLLM", roles)
     monkeypatch.setattr("backend.engine.visual_novel.social.GameMasterLLM", roles)
+    monkeypatch.setattr("backend.engine.narrated_items.runtime.GameMasterLLM", roles)
     monkeypatch.setattr(
         "backend.api.routes.adventures.gameplay_logic.schedule_npc_journal", lambda *_: None
     )
@@ -188,12 +193,18 @@ async def test_real_vn_turn_roles_language_social_state_snapshot_and_reload(monk
         assert (avatar.hp, avatar.exp) == (before_hp, before_xp)
         assert state.quests[0]["status"] == "open"
         assert user.earned_awards == []
-        assert [call[0] for call in roles.calls] == ["VNProgressionIntent", "InteractionPlan"]
-        assert roles.roles.count("small") == 2
+        assert [call[0] for call in roles.calls] == [
+            "VNProgressionIntent",
+            "InteractionPlan",
+            "SharedItemExtraction",
+        ]
+        assert roles.roles.count("small") == 3
         assert roles.roles.count("complex") == 1
         prompt = json.dumps(roles.prompts, ensure_ascii=False, default=str)
         assert "VISUAL NOVEL NARRATION CONTRACT" in prompt
         assert "PACING: LEISURELY" in prompt
+        assert "PROSE FOCUS FOR THIS TURN" in prompt
+        assert "CONTINUING SCENE" in prompt
         assert "RUSSIAN" in prompt
         assert "sitcom" not in prompt.lower()
         messages = list(

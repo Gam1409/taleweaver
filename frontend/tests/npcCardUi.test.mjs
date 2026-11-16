@@ -3,16 +3,20 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { createSSRApp, h, ref, reactive, effectScope, nextTick } from 'vue'
 import { renderToString } from '@vue/server-renderer'
-import { parse, compileScript } from '@vue/compiler-sfc'
+import { parse, compileScript, compileTemplate } from '@vue/compiler-sfc'
 import ts from 'typescript'
 
 let sequence = 0
+const snapshotCode = ts.transpileModule(readFileSync(new URL('../src/utils/conditionSnapshot.ts', import.meta.url), 'utf8'), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText
+const snapshotUrl = `data:text/javascript;base64,${Buffer.from(snapshotCode).toString('base64')}`
 const read = name => readFileSync(new URL(`../src/components/game/${name}.vue`, import.meta.url), 'utf8')
 async function component(name, inject = '') {
   const { descriptor } = parse(read(name))
   let source = compileScript(descriptor, { id: name, inlineTemplate: true }).content
   source = source.replace(/import[\s\S]*?from ['"]([^'"]+)['"];?/g, (statement, path) => {
     if (path === 'vue') return statement.replace(/['"]vue['"]/, `'${import.meta.resolve('vue')}'`)
+    if (path === 'lucide-vue-next') return statement.replace(/['"]lucide-vue-next['"]/, `'${import.meta.resolve('lucide-vue-next')}'`)
+    if (path === '@/utils/conditionSnapshot') return statement.replace(/['"]@\/utils\/conditionSnapshot['"]/, `'${snapshotUrl}'`)
     if (path.endsWith('.vue')) return `const ${statement.match(/import (\w+)/)[1]} = { render: () => null };`
     return ''
   })
@@ -21,16 +25,59 @@ async function component(name, inject = '') {
 }
 const render = (component, props) => renderToString(createSSRApp({ render: () => h(component, props) }))
 
+test('the production game screen enables the approved character presentation', async () => {
+  const game = readFileSync(new URL('../src/views/GameView.vue', import.meta.url), 'utf8')
+  const { descriptor } = parse(game)
+  const nodes = [descriptor.template.ast]
+  let boundary
+  while (nodes.length) {
+    const node = nodes.shift()
+    if (node.tag === 'SessionNpcModals') { boundary = node; break }
+    nodes.push(...(node.children || []))
+  }
+  assert.ok(boundary, 'GameView must expose the character directory and card')
+  const compiled = compileTemplate({ source: boundary.loc.source, filename: 'GameCharacterBoundary.vue', id: 'game-character-boundary', ssr: true, ssrCssVars: [] })
+  assert.deepEqual(compiled.errors, [])
+  const code = compiled.code.replace(/from "(vue(?:\/server-renderer)?)"/g, (_, name) => `from '${import.meta.resolve(name)}'`)
+  const { ssrRender } = await import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`)
+  let presentation
+  const app = createSSRApp({
+    ssrRender,
+    data: () => ({ props: { id: 'session' }, showCharactersModal: false, portraitTarget: { id: 'mira', name: 'Mira' }, sheet: {}, portraitBusy: false, portraitError: '', portraitUpdated: false, openPortrait() {}, closePortrait() {}, regeneratePortrait() {} }),
+    components: { SessionNpcModals: { props: { refined: Boolean }, setup(props) { presentation = props.refined; return () => null } } },
+  })
+  await renderToString(app)
+  assert.equal(presentation, true, 'The real game route must use the refined card, just like its preview')
+})
+
 test('emotion-only estimates do not fabricate relationship scores; text is escaped', async () => {
   const ui = await component('NpcNarrativeInsights')
   const html = await render(ui, { insights: { available: true, relationship: null, emotion: '<script>alarm</script>', evidence: '<img onerror=alert(1)>' } })
   assert.match(html, /No confirmed relationship estimate/)
-  assert.doesNotMatch(html, /<dt|<script>|<img /)
+  assert.doesNotMatch(html, /<dt|<script\b|<img\b/i)
   assert.match(html, /&lt;script&gt;/)
   const scores = await render(ui, { insights: { available: true, relationship: { trust: 12, affinity: -3, respect: 4, tension: 2 }, emotion: null } })
   assert.match(scores, /\+12/)
   assert.match(scores, /-3/)
   assert.doesNotMatch(scores, /Last observed emotion:/)
+})
+
+test('the collapsible overview preserves learned facts and escaped claim text', async () => {
+  const ui = await component('NpcGeneralOverview')
+  const entries = Array.from({ length: 4 }, (_, index) => ({ id: String(index), text: index === 0 ? '<script>Claim</script>' : `Known fact ${index}`, source: index === 0 ? 'claimed' : 'observed' }))
+  const html = await render(ui, { entries })
+  assert.match(html, /General overview/)
+  assert.match(html, /Known fact 3/)
+  assert.match(html, /Claim:/)
+  assert.match(html, /&lt;script&gt;Claim&lt;\/script&gt;/)
+  assert.doesNotMatch(html, /<script\b|<details[^>]*open/i)
+})
+
+test('the compact overview keeps unobserved state and arbitrary private fields hidden', async () => {
+  const ui = await component('NpcCardOverview')
+  const html = await render(ui, { card: { name: 'Mira', description: '<script>Archivist</script>', inventory: ['PRIVATE_INVENTORY'], current_state: { availability: 'not_present', conditions: { items: [{ id: 'hidden', detail: 'HIDDEN_OBSERVATION' }] } } }, showIndicators: false })
+  assert.match(html, /&lt;script&gt;Archivist&lt;\/script&gt;/)
+  assert.doesNotMatch(html, /<script\b|PRIVATE_INVENTORY|HIDDEN_OBSERVATION/i)
 })
 
 test('history tabs show general facts and empty-state without arbitrary private fields', async t => {
@@ -113,8 +160,9 @@ test('history tabs support keyboard activation and reset for a different charact
   source = `import { computed, ref, watch, toRef, onScopeDispose as onBeforeUnmount } from '${import.meta.resolve('vue')}';
 const useNpcJournal = () => ({ details: ref(null), loading: ref(false), error: ref(''), load: () => {} });
 const useNpcCardSettings = () => ({ showState: ref(false) });
+const UserRound = {}, Layers2 = {}, History = {};
 const setInterval = () => 0;
-export function setup() { ${source}; return { history, navigateTabs, tabId }; }`
+export function setup() { ${source}; return { history, navigateTabs, tabId, activeTab, navigateSections }; }`
   const compiled = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText
   const { setup } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`)
   const scope = effectScope(), state = scope.run(setup)
@@ -134,12 +182,88 @@ export function setup() { ${source}; return { history, navigateTabs, tabId }; }`
   assert.equal(state.history.value, 'shared')
   press('Escape')
   assert.equal(prevented, 5)
+  assert.equal(state.activeTab.value, 'state')
+  state.navigateSections({ key: 'End', preventDefault: () => {}, currentTarget: { closest: () => ({ querySelector: () => ({ focus: () => {} }) }) } })
+  assert.equal(state.activeTab.value, 'history')
+  assert.equal(state.history.value, 'shared')
   globalThis[key].npcId = 'new-character'
   assert.equal(state.history.value, 'general')
+  assert.equal(state.activeTab.value, 'state')
   state.history.value = 'shared'
   globalThis[key].sessionId = 's2'
   assert.equal(state.history.value, 'general')
   assert.match(state.tabId.value, /s2-new-character/)
+})
+
+test('current state shows confirmed facts without immersion-breaking diagnostics', async () => {
+  const ui = await component('NpcCurrentState')
+  const state = {
+    availability: 'present', game_minute: 480,
+    clothing: { status: 'available', items: [], detail_limited: false },
+    conditions: { status: 'available', items: [{ id: 'wound', kind: 'injury', part: 'arm', status: 'treated', detail: '<script>Bandage</script>', last_changed_minute: 470 }] },
+  }
+  const observed = await render(ui, { state })
+  assert.match(observed, /Treated|game minute 480/)
+  assert.match(observed, /&lt;script&gt;Bandage&lt;\/script&gt;/)
+  assert.doesNotMatch(observed, /<script\b/i)
+  const absent = await render(ui, { state: { ...state, availability: 'not_present' } })
+  assert.doesNotMatch(absent, /not currently visible|Bandage|Treated/)
+  const unknown = await render(ui, { state: { ...state, clothing: { status: 'unavailable', items: [] }, conditions: { status: 'unavailable', items: [] } } })
+  assert.doesNotMatch(unknown, /Clothing details are not confirmed|Current physical conditions are not confirmed/)
+  assert.doesNotMatch(unknown, /No known physical conditions recorded/)
+})
+
+test('equipment lists preserve partial placement and escape item text', async () => {
+  const ui = await component('EquipmentList')
+  const item = { id: 'coat', name: '<b>Coat</b>', image_url: '/coat.png', layer: 2, description: '<script>detail</script>', uncovered_regions: ['torso'] }
+  const html = await render(ui, { items: [item] })
+  assert.match(html, /Partially displaced/)
+  assert.match(html, /&lt;b&gt;Coat&lt;\/b&gt;/)
+  assert.doesNotMatch(html, /<script\b|<b>/i)
+  const mixedCase = await render(ui, { items: [{ ...item, name: '<ScRiPt>Coat</ScRiPt>' }] })
+  assert.match(mixedCase, /&lt;ScRiPt&gt;Coat&lt;\/ScRiPt&gt;/)
+  assert.doesNotMatch(mixedCase, /<script\b/i)
+  const missing = await render(ui, { items: [{ ...item, image_url: null, uncovered_regions: [] }] })
+  assert.doesNotMatch(missing, /<img\b|Partially displaced/)
+})
+
+test('equipment icons use canonical images at 14 px with a missing-image fallback', async () => {
+  const ui = await component('EquipmentItemIcon', 'const getImageUrl = path => path;')
+  const html = await render(ui, { item: { id: 'coat', name: '<script>Coat</script>', image_url: '/coat.png' } })
+  assert.match(html, /src="\/coat.png"/)
+  assert.match(html, /h-3\.5 w-3\.5/)
+  assert.doesNotMatch(html, /<script\b/i)
+  const missing = await render(ui, { item: { id: 'coat', name: 'Coat', image_url: null } })
+  assert.doesNotMatch(missing, /<img\b/)
+  assert.match(missing, /ra-vest/)
+})
+
+test('silhouettes show overlapping layers and occupied named body positions', async t => {
+  const path = new URL('../src/utils/equipmentSlots.ts', import.meta.url)
+  const utility = ts.transpileModule(readFileSync(path, 'utf8'), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText
+  const key = `__equipmentSlots${sequence++}`
+  globalThis[key] = await import(`data:text/javascript;base64,${Buffer.from(utility).toString('base64')}`)
+  t.after(() => delete globalThis[key])
+  const ui = await component('EquipmentSilhouette', `
+import { ref } from '${import.meta.resolve('vue')}';
+const {EQUIPMENT_SLOTS, BODY_ITEM_SLOTS} = globalThis['${key}'];
+const maleSilhouette='male.svg', femaleSilhouette='female.png';
+const useEquipmentHover=()=>({active:ref(''),target:ref(null),style:ref({}),close:()=>{}});`)
+  const empty = await render(ui, { equipment: {}, variant: 'female', class: 'parent-width' })
+  assert.match(empty, /data-silhouette="female"/)
+  assert.match(empty, /src="female.png"/)
+  assert.match(empty, /parent-width/)
+  assert.equal((empty.match(/data-equipment-slot=/g) || []).length, 11)
+  assert.doesNotMatch(empty, /BodyAnal|BodyVaginal|NSFW/)
+  const layered = await render(ui, { variant: 'male', equipment: {
+    Feet: [{ id: 'boot', name: 'Boots' }, { id: 'sock', name: '<b>Socks</b>' }],
+    BodyAnal: [{ id: 'sensor', name: 'Medical sensor' }],
+  } })
+  assert.match(layered, /src="male.svg"/)
+  assert.equal((layered.match(/data-equipment-slot=/g) || []).length, 12)
+  assert.match(layered, /aria-label="Feet: Boots: &lt;b&gt;Socks&lt;\/b&gt;"/)
+  assert.match(layered, /aria-label="Anal area: Medical sensor"/)
+  assert.doesNotMatch(layered, /BodyVaginal|>Anal<|>Vaginal<|<b>/)
 })
 
 test('missing portrait offers generation next to the avatar before advanced options', async () => {

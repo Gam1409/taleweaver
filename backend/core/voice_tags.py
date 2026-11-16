@@ -122,6 +122,21 @@ ELEVENLABS_VOICE_TAG_CATALOG: Final[tuple[str, ...]] = (
     "Italian accent",
 )
 
+VOCAL_BURST_SET: Final[set[str]] = {
+    "cough",
+    "sigh",
+    "breath",
+    "heavy breath",
+    "laugh",
+    "chuckle",
+    "throat-clearing",
+    "short pause",
+    "long pause",
+    "gasp",
+    "groan",
+}
+
+
 VOICE_TAG_SET: Final[set[str]] = set(VOICE_TAG_CATALOG) | set(ELEVENLABS_VOICE_TAG_CATALOG)
 
 

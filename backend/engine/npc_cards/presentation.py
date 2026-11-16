@@ -2,11 +2,11 @@
 
 from typing import Any, Literal
 
-from sqlalchemy import select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.engine.npc_cards.settings import card_insights_enabled
-from backend.engine.npc_journal.records import normalized, supported_quote
+from backend.engine.npc_journal.records import fact_topic, normalized, supported_quote
 from backend.engine.visual_novel.presentation import session_is_vn
 from backend.engine.visual_novel.state import load_state
 from backend.models.chat import ChatMessage
@@ -19,6 +19,7 @@ SUMMARY_FIELDS = {
     "message_id",
     "scene_id",
     "recorded_at",
+    "game_minute",
     "category",
     "topic",
     "text",
@@ -93,8 +94,7 @@ def _latest_facts(entries: list[dict], *, limit: int) -> list[dict]:
         if not _fact_candidate(entry):
             continue
         text = normalized(entry["text"])
-        topic = normalized(str(entry.get("topic") or "general"))
-        key = (entry["category"], text if topic == "general" else topic)
+        key = (entry["category"], fact_topic(entry))
         if key in topics or text in texts:
             continue
         topics.add(key)
@@ -133,9 +133,11 @@ async def character_insights(db: AsyncSession, state: SessionState, npc_id: str)
         return _unavailable()
     social = load_state(state)
     character = social.characters.get(npc_id) if social else None
-    if character is None:
+    if character is None or social is None:
         return _unavailable()
     source_ids = set(social.reviewed_scene_message_ids)
+    if character.emotion_source_message_id:
+        source_ids.add(character.emotion_source_message_id)
     source_ids.update(memory.source_message_id for memory in character.memories)
     if not source_ids:
         return _unavailable()
@@ -145,6 +147,7 @@ async def character_insights(db: AsyncSession, state: SessionState, npc_id: str)
             .where(
                 ChatMessage.session_id == state.session_id,
                 ChatMessage.role == "assistant",
+                ChatMessage.is_debug.is_(False),
                 ChatMessage.id.in_(source_ids),
             )
             .order_by(ChatMessage.created_at.desc(), ChatMessage.id.desc())
@@ -163,16 +166,42 @@ async def character_insights(db: AsyncSession, state: SessionState, npc_id: str)
         (
             message
             for message in messages
-            if supported_quote(character.emotion_cause, message.content or "")
+            if (
+                not character.emotion_source_message_id
+                or message.id == character.emotion_source_message_id
+            )
+            and supported_quote(character.emotion_cause, message.content or "")
         ),
         None,
     )
-    if memory is None and emotion_message is None:
+    source = emotion_message
+    if source is None and memory is not None:
+        source = next(m for m in messages if m.id == memory.source_message_id)
+    if source is None:
         return _unavailable()
+    newer = await db.scalar(
+        select(func.count())
+        .select_from(ChatMessage)
+        .where(
+            ChatMessage.session_id == state.session_id,
+            ChatMessage.role == "assistant",
+            ChatMessage.is_debug.is_(False),
+            or_(
+                ChatMessage.created_at > source.created_at,
+                and_(ChatMessage.created_at == source.created_at, ChatMessage.id > source.id),
+            ),
+        )
+    )
     return {
         "available": True,
+        "source_created_at": source.created_at.isoformat(),
+        "newer_responses": int(newer or 0),
         "relationship": character.relationship.model_dump() if memory else None,
         "emotion": character.emotion if emotion_message else None,
-        "evidence": character.emotion_cause if emotion_message else memory.evidence,
-        "source_message_id": emotion_message.id if emotion_message else memory.source_message_id,
+        "evidence": character.emotion_cause
+        if emotion_message
+        else (memory.evidence if memory else None),
+        "source_message_id": emotion_message.id
+        if emotion_message
+        else (memory.source_message_id if memory else None),
     }

@@ -1,0 +1,45 @@
+.authoring-view { background: #080e18; }
+.authoring-view :is(h1, h2, h3, h4) { letter-spacing: -.015em; }
+.authoring-view :is(label, summary) { letter-spacing: .01em; }
+.authoring-view label { font-size: 14px; color: #a8b5c6; }
+.authoring-view :is(.text-xxs, .text-\[10px\], .text-\[11px\]) { font-size: 12px; line-height: 1.5; }
+.authoring-view :is(input, select, textarea):focus-visible { outline: 1px solid #d6b46f77; outline-offset: 1px; }
+.authoring-view :is(input, select, textarea) { border-radius: 10px; }
+.authoring-view :is(.rounded-3xl, .md\:rounded-3xl) { border-radius: 18px; }
+.authoring-view :is(.shadow-2xl, .shadow-xl, .shadow-lg) { box-shadow: none; }
+.authoring-view :is(.tracking-widest, .tracking-wider, .tracking-\[0\.2em\], .tracking-\[0\.18em\], .tracking-\[0\.15em\]) { letter-spacing: .03em; }
+.adventure-create-view { padding: 32px 24px 48px; }
+.authoring-heading { margin-bottom: 32px; gap: 24px; }
+.authoring-heading h1 { font-size: clamp(30px, 3vw, 40px); font-weight: 600; line-height: 1.15; }
+.authoring-heading > div:first-child > p { font-size: 16px; margin-top: 8px; color: #8d9bb0; }
+.authoring-heading > div:last-child { flex-wrap: wrap; }
+.authoring-mode-switch button[aria-pressed="true"] { background: #d6b46f18; color: #ebd5a6; box-shadow: none; }
+.authoring-mode-switch button { background-image: none; }
+.authoring-create-submit { background: #d6b46f; color: #151b25; border: 1px solid #ead6a2; box-shadow: none; letter-spacing: .04em; }
+.authoring-create-submit:hover { background: #e6c98d; transform: none; }
+.adventure-create-view main > :is(.grid, .space-y-4) { gap: 24px; }
+.adventure-create-view h3 { font-size: 16px; }
+.authoring-panel { border-color: #263243; background: #101827; }
+.authoring-editor-header { min-height: 88px; padding: 16px 28px; background: #0c1421f2; box-shadow: none; gap: 16px; flex-wrap: wrap; }
+.authoring-editor-header > div { min-width: 0; flex: 1; gap: 20px; }
+.authoring-editor-header > div > div { min-width: 0; }
+.authoring-editor-header h1 { color: #f1f3f7; font-size: 24px; font-weight: 600; background: none; overflow-wrap: anywhere; }
+.authoring-editor-header > div > button { flex-shrink: 0; padding: 9px 12px; }
+.authoring-editor-header > button { flex-shrink: 0; margin-left: auto; }
+.adventure-editor-view > main { padding: 28px 28px 56px; max-width: 1480px; }
+.authoring-section-nav { max-height: calc(100dvh - 220px); overflow-y: auto; overscroll-behavior: contain; position: sticky; top: 112px; padding: 14px 10px; background: #0d1623; border: 1px solid #263243; border-radius: 16px; }
+.authoring-section-button { display: flex; align-items: center; gap: 10px; min-height: 42px; width: 100%; margin-block: 2px; padding: 9px 10px; border: 1px solid transparent; border-radius: 9px; text-align: left; color: #94a3b8; font-size: 15px; }
+.authoring-section-button:hover { color: #e2e8f0; background: #ffffff05; }
+.authoring-section-button.is-active { color: #ebd5a6; border-color: #d6b46f30; background: #d6b46f0d; }
+.authoring-nav-count { flex-shrink: 0; border: 1px solid #47556977; border-radius: 6px; padding: 0 5px; font-size: 11px; }
+.adventure-editor-view .authoring-content { gap: 24px; }
+@media (max-width: 639px) {
+  .adventure-create-view { padding: 22px 16px 36px; }
+  .authoring-heading { gap: 18px; margin-bottom: 24px; }
+  .authoring-heading > div:last-child { gap: 8px; }
+  .authoring-editor-header { padding: 12px 16px; }
+  .authoring-editor-header > div { gap: 12px; }
+  .authoring-editor-header > div > div > div { flex-wrap: wrap; gap: 5px; }
+  .authoring-editor-header h1 { font-size: 20px; }
+  .adventure-editor-view > main { padding: 20px 16px 40px; }
+}

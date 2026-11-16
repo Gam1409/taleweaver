@@ -9,7 +9,7 @@ const source = readFileSync(new URL('../src/composables/comicDialogue.ts', impor
 const compiled = ts.transpileModule(source, {
   compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext }
 }).outputText
-const { parseComicDialogue, knownSpeakerNames, resolveSpeakerAlias } = await import(
+const { parseComicDialogue, cachedComicDialogue, knownSpeakerNames, resolveSpeakerAlias } = await import(
   `data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`
 )
 
@@ -101,12 +101,31 @@ test('inline dialogue preserves narration and ordering', () => {
   )
 })
 
-test('a leading narration emotion stays narration without an empty bubble', () => {
+test('a leading narration emotion remains visible in the narrator text', () => {
   const result = parse('[thoughtful] Одета Лина просто, но аккуратно: льняное платье.')
   assert.equal(result.dialogues.length, 1)
   assert.equal(result.dialogues[0].isNarration, true)
   assert.equal(result.dialogues[0].voiceTag, 'thoughtful')
-  assert.equal(result.dialogues[0].text, 'Одета Лина просто, но аккуратно: льняное платье.')
+  assert.equal(result.dialogues[0].text, '[thoughtful] Одета Лина просто, но аккуратно: льняное платье.')
+})
+
+test('cue-only narration, changing emotional tags and expressive pauses remain visible', () => {
+  const text = '[short pause]\n[afraid] Ah…\n[relieved] Oh!\n…\n<sigh><sigh><sigh>'
+  const { dialogues } = parse(text)
+  assert.equal(dialogues.length, 1)
+  assert.equal(dialogues[0].text, text.split('\n').join('\n\n'))
+})
+
+test('a cue-only line between speeches stays in its original position', () => {
+  const { dialogues } = parse('Лина: "Oh…"\n[long pause]\nHero: "You are safe."')
+  assert.deepEqual(dialogues.map(d => d.text), ['Oh…', '[long pause]', 'You are safe.'])
+})
+
+test('delivery cues before the speaker and inside speech are both preserved', () => {
+  const { dialogues } = parse('[afraid] Лина: [whispers] "Ah… please wait."')
+  assert.equal(dialogues.length, 1)
+  assert.equal(dialogues[0].voiceTag, 'afraid')
+  assert.equal(dialogues[0].text, '[whispers] Ah… please wait.')
 })
 
 test('object labels do not become known unquoted speakers', () => {
@@ -122,4 +141,60 @@ test('a unique learned alias resolves to the same NPC and ambiguous labels do no
   assert.equal(knownSpeakerNames('Hero', [mira]).has('искра'), true)
   const other = { id: 'other-id', name: 'Анна', entity_type: 'NPC', metadata_json: { npc_journal: { aliases: ['Девушка'] } } }
   assert.equal(resolveSpeakerAlias('Девушка', [mira, other]), null)
+})
+
+for (const [opening, closing] of [['"', '"'], ['“', '”'], ['«', '»']]) {
+  test(`inner quotations keep speech together inside ${opening}${closing}`, () => {
+    const speech = 'Как на ключ к ответу на вопрос «почему это произошло» и «что делать дальше». Другие — объект исследования.'
+    const result = parse(`Лина: [calm] ${opening}${speech}${closing} Она сделала паузу.`)
+    assert.deepEqual(result.dialogues.map(d => [d.speaker, d.text]), [
+      ['Лина', speech], ['Game Master', 'Она сделала паузу.']
+    ])
+    assert.equal(result.dialogues[0].voiceTag, 'calm')
+  })
+}
+
+test('an inner quotation at the end retains its closing delimiter', () => {
+  assert.equal(parse('Лина: "Он сказал «пора»"').dialogues[0].text, 'Он сказал «пора»')
+})
+
+test('punctuation outside a quoted reply does not create an empty narrator panel', () => {
+  const result = parse('Лина: [whispers] "Десять минут тишины".\n\nМики стоит у двери.')
+  assert.deepEqual(result.dialogues.map(line => [!!line.isNarration, line.text]), [
+    [false, 'Десять минут тишины.'], [true, 'Мики стоит у двери.'],
+  ])
+})
+
+test('inline punctuation returns to the preceding speech before new narration', () => {
+  const result = parse('Лина: "Тише". Мики закрыла дверь.')
+  assert.deepEqual(result.dialogues.map(line => [!!line.isNarration, line.text]), [
+    [false, 'Тише.'], [true, 'Мики закрыла дверь.'],
+  ])
+})
+
+test('loose formatting markers never create narrator panels, but meaningful silence remains', () => {
+  for (const marker of ['*', '**', '_', '•', '·']) {
+    const result = parse(`Лина: "Тише."\n${marker}`)
+    assert.equal(result.dialogues.length, 1)
+    assert.equal(result.dialogues[0].text, 'Тише.')
+  }
+  for (const text of ['...', '…', '?', '!', 'В комнате тихо.']) {
+    assert.equal(parse(text).dialogues[0].text, text)
+  }
+})
+
+
+test('streaming replaces only the changed message cache without evicting settled replies', () => {
+  const parser = cachedComicDialogue({ knownNames: new Set(), resolveSpeaker: () => undefined })
+  const history = Array.from({ length: 300 }, () => ({}))
+  const settled = history.map((message, index) => parser(`Earlier scene ${index}.`, message))
+  const current = {}
+  for (let token = 0; token < 400; token++) parser(`A reply ${token}`, current)
+  history.forEach((message, index) => {
+    assert.equal(parser(`Earlier scene ${index}.`, message), settled[index])
+  })
+  assert.notEqual(parser('An edited reply.', history[0]), settled[0])
+  assert.equal(settled[0].narration, 'Earlier scene 0.')
+  const other = cachedComicDialogue({ knownNames: new Set(), resolveSpeaker: () => undefined })
+  assert.notEqual(other('Earlier scene 0.', history[0]), settled[0], 'identity changes own a fresh cache')
 })

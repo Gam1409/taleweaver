@@ -2,15 +2,21 @@
 
 import asyncio
 import logging
+from typing import Any, cast
 from uuid import uuid4
 
-from sqlalchemy import select
+from sqlalchemy import or_, select, update
+from sqlalchemy.engine import CursorResult
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core import database, prompts
+from backend.core.diagnostic_operations import diagnostic_job
+from backend.core.image_purposes import image_provider
 from backend.engine.dynamic_locations.schema import policy, registry
 from backend.engine.image_profiles import advanced_for, image_timeout
 from backend.engine.image_prompt_adapter import asset_source
 from backend.engine.media_engine import MediaEngine
+from backend.engine.memory_rag.persistence import retry_transaction
 from backend.engine.session_portraits import _settings
 from backend.models.game_session import GameSession
 from backend.models.session_state import SessionState
@@ -31,7 +37,9 @@ def status(session_id: str, scene_id: str, image: str | None) -> str:
     return "generating" if key in _tasks else _results.get(key, "missing")
 
 
-async def _load(db, session_id, scene_id, user_id):
+async def _load(
+    db: AsyncSession, session_id: str, scene_id: str, user_id: str
+) -> tuple[SessionState | None, WorldScene | None]:
     state = await db.scalar(
         select(SessionState)
         .join(GameSession)
@@ -51,17 +59,20 @@ async def _load(db, session_id, scene_id, user_id):
     return state, scene
 
 
-async def _generate(session_id: str, scene_id: str, user_id: str) -> None:
+async def _generate(session_id: str, scene_id: str, user_id: str) -> bool:
     async with database.AsyncSessionLocal() as db:
         state, scene = await _load(db, session_id, scene_id, user_id)
         user = await db.get(User, user_id)
-        if scene is None or scene.image_url or user is None:
-            return
+        if state is None or scene is None or user is None:
+            return False
+        if scene.image_url:
+            return True
         t2i, style, tone = await _settings(db, state, user, "scene")
         role = "advanced" if advanced_for(t2i, "scene") else "simple"
-        provider = (t2i.get(f"{role}_model_provider") or t2i.get("provider", "openai")).lower()
+        provider = image_provider(t2i, role, "background")
         options = {
             **t2i,
+            "image_purpose": "background",
             "visual_target_type": "scene",
             "comfyui_profile": role,
             "_prompt_user": user,
@@ -82,6 +93,7 @@ async def _generate(session_id: str, scene_id: str, user_id: str) -> None:
             prompt += " Mood: " + tone
         extension = "jpg" if (t2i.get("image_format") or "jpeg").lower() == "jpeg" else "png"
         keys = dict(user.encrypted_api_keys or {})
+        source = (scene.pk, scene.label, scene.description)
         await db.commit()
         image = await asyncio.wait_for(
             MediaEngine.generate_image(
@@ -101,20 +113,45 @@ async def _generate(session_id: str, scene_id: str, user_id: str) -> None:
         )
         if not image:
             raise ValueError("No background returned")
-        # Reload after the provider call: rollback/deletion must not resurrect the scene.
-        db.expire_all()
+        return await _save_image(session_id, scene_id, user_id, source, image)
+
+
+@retry_transaction
+async def _save_image(
+    session_id: str, scene_id: str, user_id: str, source: tuple, image: str
+) -> bool:
+    async with database.AsyncSessionLocal() as db:
+        # A rewind, deletion, or changed scene must not receive an obsolete background.
         _state, current = await _load(db, session_id, scene_id, user_id)
-        if current is not None and not current.image_url:
-            current.image_url = image
-            await db.commit()
+        if current is None:
+            return False
+        if current.image_url:
+            return True
+        if (current.pk, current.label, current.description) != source:
+            return False
+        saved = await db.execute(
+            update(WorldScene)
+            .where(
+                WorldScene.pk == source[0],
+                WorldScene.session_id == session_id,
+                WorldScene.label == source[1],
+                WorldScene.description == source[2],
+                or_(WorldScene.image_url.is_(None), WorldScene.image_url == ""),
+            )
+            .values(image_url=image)
+            .execution_options(synchronize_session=False)
+        )
+        await db.commit()
+        return cast(CursorResult[Any], saved).rowcount == 1
 
 
-async def _run(session_id, scene_id, user_id):
+@diagnostic_job("scene_background")
+async def _run(session_id: str, scene_id: str, user_id: str) -> None:
     key = (session_id, scene_id)
     try:
         async with _capacity:
-            await _generate(session_id, scene_id, user_id)
-        _results[key] = "ready"
+            saved = await _generate(session_id, scene_id, user_id)
+        _results[key] = "ready" if saved else "missing"
     except asyncio.CancelledError:
         _results[key] = "interrupted"
         raise
@@ -127,20 +164,20 @@ async def _run(session_id, scene_id, user_id):
             _results.pop(next(iter(_results)))
 
 
-def schedule(session_id, scene_id, user_id):
+def schedule(session_id: str, scene_id: str, user_id: str) -> None:
     key = (session_id, scene_id)
     if key not in _tasks:
         _tasks[key] = asyncio.create_task(_run(session_id, scene_id, user_id))
 
 
-def schedule_images(state, user_id, ids):
+def schedule_images(state: SessionState, user_id: str, ids: list[str]) -> None:
     if policy(state).generate_images:
         for scene_id in ids:
             if scene_id in registry(state).get("places", {}):
                 schedule(state.session_id, scene_id, user_id)
 
 
-async def shutdown():
+async def shutdown() -> None:
     tasks = list(_tasks.values())
     for task in tasks:
         task.cancel()

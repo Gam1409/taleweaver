@@ -1,5 +1,6 @@
-"""Backward-compatible import path for the combat manager."""
+"""Compatibility module; implementation lives in the engine layer."""
 
-from backend.api.routes.adventures.combat import TurnCombatManager
+import importlib
+import sys
 
-__all__ = ["TurnCombatManager"]
+sys.modules[__name__] = importlib.import_module("backend.engine.gameplay.turn_combat")

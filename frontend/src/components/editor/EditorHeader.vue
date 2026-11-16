@@ -15,7 +15,7 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <header class="bg-slate-900/40 border-b border-white/5 px-8 py-3 flex items-center backdrop-blur-2xl sticky top-0 z-40 shadow-2xl">
+  <header class="authoring-editor-header bg-slate-900/40 border-b border-white/5 px-8 py-3 flex items-center backdrop-blur-2xl sticky top-0 z-40 shadow-2xl">
     <div class="flex items-center gap-6">
       <button 
         @click="emit('go-back')" 

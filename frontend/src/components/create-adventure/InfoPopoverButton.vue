@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 
-const props = withDefaults(defineProps<{
+withDefaults(defineProps<{
   title?: string
   text?: string
 }>(), {

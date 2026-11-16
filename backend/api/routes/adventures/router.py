@@ -1,7 +1,10 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
 from backend.api.routes.adventures.agent_routes import router as agent_router
 from backend.api.routes.adventures.assets import router as assets_router
+from backend.api.routes.adventures.blueprint_routes import router as blueprint_router
+from backend.api.routes.adventures.checkpoint_policy import router as checkpoint_policy_router
+from backend.api.routes.adventures.chpm import router as chpm_router
 from backend.api.routes.adventures.cloning import router as cloning_router
 from backend.api.routes.adventures.dynamic_locations import router as dynamic_locations_router
 from backend.api.routes.adventures.editor import router as editor_router
@@ -15,23 +18,46 @@ from backend.api.routes.adventures.editor_special_actions import (
 from backend.api.routes.adventures.gameplay import router as gameplay_router
 from backend.api.routes.adventures.generation_resume import router as generation_resume_router
 from backend.api.routes.adventures.imports import router as imports_router
+from backend.api.routes.adventures.item_repair import router as item_repair_router
 from backend.api.routes.adventures.library import router as library_router
+from backend.api.routes.adventures.living_world import router as living_world_router
+from backend.api.routes.adventures.living_world_capabilities import (
+    router as living_world_capabilities_router,
+)
+from backend.api.routes.adventures.living_world_decisions import (
+    router as living_world_decisions_router,
+)
 from backend.api.routes.adventures.npc_card_settings import router as npc_card_settings_router
+from backend.api.routes.adventures.portrait_settings import router as portrait_settings_router
 from backend.api.routes.adventures.publication import router as publication_router
+from backend.api.routes.adventures.regeneration import router as regeneration_router
+from backend.api.routes.adventures.scene_debug import router as scene_debug_router
 from backend.api.routes.adventures.scene_illustrations import router as scene_illustrations_router
+from backend.api.routes.adventures.session_content_settings import router as content_settings_router
 from backend.api.routes.adventures.session_exports import router as session_exports_router
 from backend.api.routes.adventures.session_language import router as language_router
+from backend.api.routes.adventures.session_mutations import session_mutation_lease
 from backend.api.routes.adventures.session_npcs import router as session_npcs_router
+from backend.api.routes.adventures.session_playtime import router as session_playtime_router
+from backend.api.routes.adventures.session_visual_presets import (
+    router as session_visual_presets_router,
+)
 from backend.api.routes.adventures.sessions import router as sessions_router
+from backend.api.routes.adventures.state_checks import router as state_checks_router
+from backend.api.routes.adventures.story_authoring import router as authoring_router
 from backend.api.routes.adventures.suggestions import router as suggestions_router
 from backend.api.routes.adventures.templates import router as templates_router
+from backend.api.routes.adventures.turn_replay import router as replay_router
 from backend.api.routes.adventures.visual_presets import router as visual_presets_router
 from backend.api.routes.adventures.vn_settings import router as vn_settings_router
+from backend.api.routes.adventures.world_info import router as world_info_router
 
 router = APIRouter(prefix="/adventures")
 
 # Include sub-routers in order of specificity.
 # 1. Imports (static paths like /import, /check-defaults)
+router.include_router(blueprint_router)
+router.include_router(living_world_capabilities_router)
 router.include_router(imports_router)
 router.include_router(library_router)
 router.include_router(publication_router)
@@ -39,10 +65,19 @@ router.include_router(publication_router)
 # 2. Assets (specific paths like /{template_id}/visuals/...)
 router.include_router(assets_router)
 router.include_router(visual_presets_router)
+router.include_router(session_visual_presets_router)
 
 # 3. Sessions (specific paths like /sessions)
-router.include_router(sessions_router)
+router.include_router(sessions_router, dependencies=[Depends(session_mutation_lease)])
+router.include_router(checkpoint_policy_router)
 router.include_router(session_exports_router)
+router.include_router(session_playtime_router)
+router.include_router(state_checks_router)
+router.include_router(portrait_settings_router)
+router.include_router(authoring_router)
+router.include_router(scene_debug_router)
+router.include_router(item_repair_router)
+router.include_router(world_info_router)
 
 # 4. Editor (specific paths like /{template_id}/editor/...)
 router.include_router(editor_router)
@@ -58,7 +93,9 @@ router.include_router(generation_resume_router)
 router.include_router(templates_router)
 
 # 7. Gameplay (parameterized paths like /{game_id}/chat)
-router.include_router(gameplay_router)
+router.include_router(gameplay_router, dependencies=[Depends(session_mutation_lease)])
+router.include_router(regeneration_router)
+router.include_router(replay_router)
 router.include_router(agent_router)
 router.include_router(language_router)
 router.include_router(suggestions_router)
@@ -68,4 +105,8 @@ router.include_router(npc_card_settings_router)
 router.include_router(dynamic_locations_router)
 
 router.include_router(vn_settings_router)
+router.include_router(content_settings_router)
+router.include_router(chpm_router)
 router.include_router(scene_illustrations_router)
+router.include_router(living_world_router)
+router.include_router(living_world_decisions_router)

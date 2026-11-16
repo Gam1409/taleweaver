@@ -52,6 +52,7 @@ async def test_resume_reuses_session_and_saved_request(auth_client, monkeypatch)
         assert initial_snapshot["original_manifest"] == {
             "npc_card_settings": {"show_state": False},
             "clothing_settings": {"detailed": False},
+            "nsfw_settings": {"enabled": False, "level": "soft"},
         }
         adventure.generation_checkpoint = {"results": {"outline": {"story": "saved"}}}
         await db.commit()

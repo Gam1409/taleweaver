@@ -1,16 +1,24 @@
-import { API_BASE, authHeaders } from '@/services/http'
+import type { ChpmSettings } from '@/composables/useChpmSettings'
+import type { LivingWorldPreferences } from '@/services/livingWorld'
+import { authHeaders, apiFetch } from '@/services/http'
 import { isNpcEntity, isObjectEntity, mergeUniqueById } from '@/utils/editor_utils'
 
 export interface Adventure {
+  living_world_settings?: LivingWorldPreferences | null
+  npc_personality_settings?: ChpmSettings | null
   id: string
   title: string
   teaser?: string
   version?: string
   creator?: string
   copyright?: string
+  license_url?: string | null
   license?: string
   original_prompt?: string
   rule_enforcement_mode: 'rpg' | 'story' | 'chat' | 'vn'
+  detailed_clothing?: boolean
+  nsfw_enabled?: boolean
+  nsfw_level?: 'soft' | 'medium' | 'hard'
   time_per_turn: number
   pacing_minutes?: number
   max_time_per_turn?: number | null
@@ -58,6 +66,8 @@ export interface Adventure {
 }
 
 export interface AdventureFormData {
+  living_world_settings?: LivingWorldPreferences | null
+  npc_personality_settings?: ChpmSettings | null
   title: string
   teaser: string
   version: string
@@ -66,6 +76,9 @@ export interface AdventureFormData {
   license: string
   original_prompt: string
   rule_enforcement_mode: 'rpg' | 'story' | 'chat' | 'vn'
+  detailed_clothing?: boolean
+  nsfw_enabled?: boolean
+  nsfw_level?: 'soft' | 'medium' | 'hard'
   time_per_turn: number
   pacing_minutes?: number
   max_time_per_turn?: number | null
@@ -132,7 +145,7 @@ export interface DebugPayload {
  */
 export const adventureService = {
   async fetchAdventure(adventureId: string): Promise<Adventure> {
-    const res = await fetch(`${API_BASE}/adventures/${adventureId}`, {
+    const res = await apiFetch(`/adventures/${adventureId}`, { timeoutMs: 15_000,
       headers: authHeaders(false),
     })
     if (!res.ok) throw new Error('Failed to load adventure configuration.')
@@ -140,7 +153,7 @@ export const adventureService = {
   },
 
   async fetchDebugInfo(adventureId: string): Promise<DebugPayload> {
-    const res = await fetch(`${API_BASE}/adventures/${adventureId}/editor/assets`, {
+    const res = await apiFetch(`/adventures/${adventureId}/editor/assets`, { timeoutMs: 15_000,
       headers: authHeaders(false),
     })
     if (!res.ok) {
@@ -150,7 +163,7 @@ export const adventureService = {
   },
 
   async fetchCatalogs(): Promise<CatalogData> {
-    const res = await fetch(`${API_BASE}/settings`, {
+    const res = await apiFetch(`/settings`, { timeoutMs: 15_000,
       headers: authHeaders(false),
     })
     if (!res.ok) throw new Error('Failed to fetch catalogs')
@@ -158,17 +171,20 @@ export const adventureService = {
   },
 
   async updateAdventure(adventureId: string, data: Partial<AdventureFormData>): Promise<Adventure> {
-    const res = await fetch(`${API_BASE}/adventures/${adventureId}`, {
+    const res = await apiFetch(`/adventures/${adventureId}`, { timeoutMs: 60_000,
       method: 'PATCH',
       headers: authHeaders(true),
       body: JSON.stringify(data),
     })
-    if (!res.ok) throw new Error('Failed to save changes.')
+    if (!res.ok) {
+      const error = await res.json().catch(() => null)
+      throw new Error(typeof error?.detail === 'string' ? error.detail : 'Failed to save changes.')
+    }
     return res.json()
   },
 
   async updateEditorStartScene(adventureId: string, sceneId: string): Promise<void> {
-    const res = await fetch(`${API_BASE}/adventures/${adventureId}/editor/start-scene`, {
+    const res = await apiFetch(`/adventures/${adventureId}/editor/start-scene`, { timeoutMs: 60_000,
       method: 'PATCH',
       headers: authHeaders(true),
       body: JSON.stringify({ scene_id: sceneId }),
@@ -177,7 +193,7 @@ export const adventureService = {
   },
 
   async clearCreationError(adventureId: string): Promise<void> {
-    const res = await fetch(`${API_BASE}/adventures/${adventureId}`, {
+    const res = await apiFetch(`/adventures/${adventureId}`, { timeoutMs: 60_000,
       method: 'PATCH',
       headers: authHeaders(true),
       body: JSON.stringify({ creation_error: null }),
@@ -199,7 +215,7 @@ export const adventureService = {
     gameover_guard_expression?: string
     tts_director_notes?: string
   }): Promise<{ generated_text: string }> {
-    const res = await fetch(`${API_BASE}/adventures/${adventureId}/generate-field`, {
+    const res = await apiFetch(`/adventures/${adventureId}/generate-field`, { timeoutMs: null,
       method: 'POST',
       headers: authHeaders(true),
       body: JSON.stringify(data),
@@ -215,7 +231,7 @@ export const adventureService = {
     adventureId: string,
     data: { code: string; trigger?: string; target?: string }
   ): Promise<{ valid: boolean; errors: string[]; warnings: string[] }> {
-    const res = await fetch(`${API_BASE}/adventures/${adventureId}/editor/script/validate`, {
+    const res = await apiFetch(`/adventures/${adventureId}/editor/script/validate`, { timeoutMs: 60_000,
       method: 'POST',
       headers: authHeaders(true),
       body: JSON.stringify(data),
@@ -239,7 +255,7 @@ export const adventureService = {
       is_active?: boolean
     }
   ): Promise<{ status: string; script: any; scripts: any[] }> {
-    const res = await fetch(`${API_BASE}/adventures/${adventureId}/editor/script`, {
+    const res = await apiFetch(`/adventures/${adventureId}/editor/script`, { timeoutMs: 60_000,
       method: 'POST',
       headers: authHeaders(true),
       body: JSON.stringify(script),
@@ -252,7 +268,7 @@ export const adventureService = {
   },
 
   async deleteScript(adventureId: string, scriptId: string): Promise<void> {
-    const res = await fetch(`${API_BASE}/adventures/${adventureId}/editor/script/${encodeURIComponent(scriptId)}`, {
+    const res = await apiFetch(`/adventures/${adventureId}/editor/script/${encodeURIComponent(scriptId)}`, { timeoutMs: 60_000,
       method: 'DELETE',
       headers: authHeaders(true),
     })
@@ -287,9 +303,9 @@ export const adventureService = {
     adventureId: string,
     includeAi: boolean,
   ): Promise<ValidationRunResponse> {
-    const res = await fetch(
-      `${API_BASE}/adventures/${adventureId}/editor/validate`,
-      {
+    const res = await apiFetch(
+      `/adventures/${adventureId}/editor/validate`,
+      { timeoutMs: null,
         method: 'POST',
         headers: authHeaders(true),
         body: JSON.stringify({ include_ai: includeAi }),
@@ -305,9 +321,9 @@ export const adventureService = {
   async getLatestValidation(
     adventureId: string,
   ): Promise<PersistedValidationRun | null> {
-    const res = await fetch(
-      `${API_BASE}/adventures/${adventureId}/editor/validation/latest`,
-      { method: 'GET', headers: authHeaders(false) },
+    const res = await apiFetch(
+      `/adventures/${adventureId}/editor/validation/latest`,
+      { timeoutMs: 60_000, method: 'GET', headers: authHeaders(false) },
     )
     if (!res.ok) {
       if (res.status === 404) return null
@@ -340,9 +356,9 @@ export const adventureService = {
     adventureId: string,
     request: AIFixSuggestionsRequest,
   ): Promise<AIFixSuggestionsResponse> {
-    const res = await fetch(
-      `${API_BASE}/adventures/${adventureId}/editor/validate/findings/suggest-fix`,
-      {
+    const res = await apiFetch(
+      `/adventures/${adventureId}/editor/validate/findings/suggest-fix`,
+      { timeoutMs: null,
         method: 'POST',
         headers: authHeaders(true),
         body: JSON.stringify(request),
@@ -359,9 +375,9 @@ export const adventureService = {
     adventureId: string,
     request: AIFixApplyRequest,
   ): Promise<AIFixApplyResponse> {
-    const res = await fetch(
-      `${API_BASE}/adventures/${adventureId}/editor/validate/findings/apply-fix`,
-      {
+    const res = await apiFetch(
+      `/adventures/${adventureId}/editor/validate/findings/apply-fix`,
+      { timeoutMs: 60_000,
         method: 'POST',
         headers: authHeaders(true),
         body: JSON.stringify(request),
@@ -378,9 +394,9 @@ export const adventureService = {
     adventureId: string,
     request: DeleteValidationFindingsRequest,
   ): Promise<DeleteValidationFindingsResponse> {
-    const res = await fetch(
-      `${API_BASE}/adventures/${adventureId}/editor/validation/latest/findings/delete`,
-      {
+    const res = await apiFetch(
+      `/adventures/${adventureId}/editor/validation/latest/findings/delete`,
+      { timeoutMs: 60_000,
         method: 'POST',
         headers: authHeaders(true),
         body: JSON.stringify(request),
@@ -455,6 +471,7 @@ export interface FixProposal {
 }
 
 export interface AIFixSuggestionsRequest {
+  force_refresh?: boolean
   finding_code: string
   finding_message: string
   finding_location?: string | null
@@ -463,6 +480,7 @@ export interface AIFixSuggestionsRequest {
 }
 
 export interface AIFixSuggestionsResponse {
+  served_provider?: string | null
   finding_signature: string
   proposals: FixProposal[]
   generated_at: string

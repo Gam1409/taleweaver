@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, toRef } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, toRef } from 'vue'
 import { X, Users } from 'lucide-vue-next'
 import { useNpcJournal, type NpcCard } from '@/composables/useNpcJournal'
 import { useNpcCardSettings } from '@/composables/useNpcCardSettings'
@@ -9,7 +9,20 @@ import { getImageUrl } from '@/utils/game_icons'
 const props = defineProps<{ sessionId: string }>()
 const emit = defineEmits<{ close: []; select: [npc: NpcCard] }>()
 const settings = useNpcCardSettings(toRef(props, 'sessionId'))
-const { characters, loading, error, pending, failed, load, retryLearning } = useNpcJournal(toRef(props, 'sessionId'), ref(undefined), settings.showState)
+const { learning, characters, loading, error, pending, failed, load, retryLearning } = useNpcJournal(toRef(props, 'sessionId'), ref(undefined), settings.showState)
+const learningText = computed(() => {
+  const messages: Record<string, string> = {
+    queued: 'Character learning is queued and will continue between turns.',
+    preparing: 'Preparing character information for review…',
+    extracting: 'Reviewing the story for significant character information…',
+    waiting_to_save: 'Review complete. Waiting for the current turn to finish before saving.',
+    saving: 'Saving character information…',
+    recovering: 'Recovering interrupted character learning…',
+    retry_pending: 'Character learning needs another attempt.',
+    up_to_date: 'Character learning is up to date. Only significant new information is recorded.',
+  }
+  return messages[learning.value?.phase ?? 'queued']
+})
 const dialog = ref<HTMLDialogElement | null>(null)
 const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null
 onMounted(() => dialog.value?.showModal())
@@ -24,8 +37,9 @@ onBeforeUnmount(() => { clearInterval(timer); dialog.value?.close(); previousFoc
       <button aria-label="Close characters" class="p-2 rounded-lg hover:bg-white/10" @click="emit('close')"><X class="w-5 h-5" /></button>
     </div>
     <p class="text-sm text-slate-400 mb-4">People you have met. New characters get a card when they introduce themselves by name.</p>
-    <p v-if="pending" role="status" class="mb-3 text-sm text-amber-200">Learning about characters from {{ pending }} recent response(s)… You can keep playing.</p>
-    <p v-if="failed" class="mb-3 text-sm text-rose-300">Some character information could not be saved. <button :disabled="loading" class="underline" @click="retryLearning">Retry learning</button></p>
+    <p v-if="pending" role="status" class="mb-3 text-sm text-amber-200">{{ learningText }} {{ pending }} response(s) remaining. You can keep playing.</p>
+    <p v-if="failed" class="mb-3 text-sm text-rose-300">Some responses could not be reviewed or saved. <button :disabled="loading" class="underline" @click="retryLearning">Retry learning</button></p>
+    <p v-if="!pending && !failed && learning?.phase === 'up_to_date'" role="status" class="mb-3 text-xs text-slate-400">{{ learningText }}</p>
     <p v-if="error" role="alert" class="mb-3 text-sm text-rose-300">{{ error }} <button class="underline" @click="load()">Retry</button></p>
     <p v-if="!characters.length && !loading && !error" class="text-slate-400">No known characters yet.</p>
     <p v-if="loading && !characters.length" role="status">Loading characters…</p>

@@ -1,0 +1,210 @@
+{
+  "id": "forty_turn_state_changes",
+  "player": "Miki, please wash Rin's coat now.",
+  "narration": "Miki washes the mud completely off Rin's coat. Her own coat remains dirty.",
+  "history": [
+    {
+      "turn": 1,
+      "player": "I ask them to compare the specimen forms and explain what happened during the previous procedure.",
+      "narration": "Rin washes an earlier stain from her coat before leaving the workroom. Miki checks a specimen label and returns a borrowed pen."
+    },
+    {
+      "turn": 2,
+      "player": "I ask them to compare the specimen forms and explain what happened during the previous procedure.",
+      "narration": "Mud splashes onto both coats in the garden. Rin and Miki return to the corridor carrying the forms. Their current coats are dirty again."
+    },
+    {
+      "turn": 3,
+      "player": "I ask them to compare the specimen forms and explain what happened during the previous procedure.",
+      "narration": "Rin remembers a different ankle wound that healed last year. The current neck wound remains open. Miki compares old sample numbers without changing any treatment."
+    },
+    {
+      "turn": 4,
+      "player": "I ask them to compare the specimen forms and explain what happened during the previous procedure.",
+      "narration": "A previous catheter bag is drained during an earlier procedure, then the current tube is refilled with saline. The pair return from the laboratory to the corridor."
+    },
+    {
+      "turn": 5,
+      "player": "I ask them to compare the specimen forms and explain what happened during the previous procedure.",
+      "narration": "Rin washes an earlier stain from her coat before leaving the workroom. Miki checks a specimen label and returns a borrowed pen."
+    },
+    {
+      "turn": 6,
+      "player": "I ask them to compare the specimen forms and explain what happened during the previous procedure.",
+      "narration": "Mud splashes onto both coats in the garden. Rin and Miki return to the corridor carrying the forms. Their current coats are dirty again."
+    },
+    {
+      "turn": 7,
+      "player": "I ask them to compare the specimen forms and explain what happened during the previous procedure.",
+      "narration": "Rin remembers a different ankle wound that healed last year. The current neck wound remains open. Miki compares old sample numbers without changing any treatment."
+    },
+    {
+      "turn": 8,
+      "player": "I ask them to compare the specimen forms and explain what happened during the previous procedure.",
+      "narration": "A previous catheter bag is drained during an earlier procedure, then the current tube is refilled with saline. The pair return from the laboratory to the corridor."
+    },
+    {
+      "turn": 9,
+      "player": "I ask them to compare the specimen forms and explain what happened during the previous procedure.",
+      "narration": "Rin washes an earlier stain from her coat before leaving the workroom. Miki checks a specimen label and returns a borrowed pen."
+    },
+    {
+      "turn": 10,
+      "player": "I ask them to compare the specimen forms and explain what happened during the previous procedure.",
+      "narration": "Mud splashes onto both coats in the garden. Rin and Miki return to the corridor carrying the forms. Their current coats are dirty again."
+    },
+    {
+      "turn": 11,
+      "player": "I ask them to compare the specimen forms and explain what happened during the previous procedure.",
+      "narration": "Rin remembers a different ankle wound that healed last year. The current neck wound remains open. Miki compares old sample numbers without changing any treatment."
+    },
+    {
+      "turn": 12,
+      "player": "I ask them to compare the specimen forms and explain what happened during the previous procedure.",
+      "narration": "A previous catheter bag is drained during an earlier procedure, then the current tube is refilled with saline. The pair return from the laboratory to the corridor."
+    },
+    {
+      "turn": 13,
+      "player": "I ask them to compare the specimen forms and explain what happened during the previous procedure.",
+      "narration": "Rin washes an earlier stain from her coat before leaving the workroom. Miki checks a specimen label and returns a borrowed pen."
+    },
+    {
+      "turn": 14,
+      "player": "I ask them to compare the specimen forms and explain what happened during the previous procedure.",
+      "narration": "Mud splashes onto both coats in the garden. Rin and Miki return to the corridor carrying the forms. Their current coats are dirty again."
+    },
+    {
+      "turn": 15,
+      "player": "I ask them to compare the specimen forms and explain what happened during the previous procedure.",
+      "narration": "Rin remembers a different ankle wound that healed last year. The current neck wound remains open. Miki compares old sample numbers without changing any treatment."
+    },
+    {
+      "turn": 16,
+      "player": "I ask them to compare the specimen forms and explain what happened during the previous procedure.",
+      "narration": "A previous catheter bag is drained during an earlier procedure, then the current tube is refilled with saline. The pair return from the laboratory to the corridor."
+    },
+    {
+      "turn": 17,
+      "player": "I ask them to compare the specimen forms and explain what happened during the previous procedure.",
+      "narration": "Rin washes an earlier stain from her coat before leaving the workroom. Miki checks a specimen label and returns a borrowed pen."
+    },
+    {
+      "turn": 18,
+      "player": "I ask them to compare the specimen forms and explain what happened during the previous procedure.",
+      "narration": "Mud splashes onto both coats in the garden. Rin and Miki return to the corridor carrying the forms. Their current coats are dirty again."
+    },
+    {
+      "turn": 19,
+      "player": "I ask them to compare the specimen forms and explain what happened during the previous procedure.",
+      "narration": "Rin remembers a different ankle wound that healed last year. The current neck wound remains open. Miki compares old sample numbers without changing any treatment."
+    },
+    {
+      "turn": 20,
+      "player": "I ask them to compare the specimen forms and explain what happened during the previous procedure.",
+      "narration": "A previous catheter bag is drained during an earlier procedure, then the current tube is refilled with saline. The pair return from the laboratory to the corridor."
+    },
+    {
+      "turn": 21,
+      "player": "I ask them to compare the specimen forms and explain what happened during the previous procedure.",
+      "narration": "Rin washes an earlier stain from her coat before leaving the workroom. Miki checks a specimen label and returns a borrowed pen."
+    },
+    {
+      "turn": 22,
+      "player": "I ask them to compare the specimen forms and explain what happened during the previous procedure.",
+      "narration": "Mud splashes onto both coats in the garden. Rin and Miki return to the corridor carrying the forms. Their current coats are dirty again."
+    },
+    {
+      "turn": 23,
+      "player": "I ask them to compare the specimen forms and explain what happened during the previous procedure.",
+      "narration": "Rin remembers a different ankle wound that healed last year. The current neck wound remains open. Miki compares old sample numbers without changing any treatment."
+    },
+    {
+      "turn": 24,
+      "player": "I ask them to compare the specimen forms and explain what happened during the previous procedure.",
+      "narration": "A previous catheter bag is drained during an earlier procedure, then the current tube is refilled with saline. The pair return from the laboratory to the corridor."
+    },
+    {
+      "turn": 25,
+      "player": "I ask them to compare the specimen forms and explain what happened during the previous procedure.",
+      "narration": "Rin washes an earlier stain from her coat before leaving the workroom. Miki checks a specimen label and returns a borrowed pen."
+    },
+    {
+      "turn": 26,
+      "player": "I ask them to compare the specimen forms and explain what happened during the previous procedure.",
+      "narration": "Mud splashes onto both coats in the garden. Rin and Miki return to the corridor carrying the forms. Their current coats are dirty again."
+    },
+    {
+      "turn": 27,
+      "player": "I ask them to compare the specimen forms and explain what happened during the previous procedure.",
+      "narration": "Rin remembers a different ankle wound that healed last year. The current neck wound remains open. Miki compares old sample numbers without changing any treatment."
+    },
+    {
+      "turn": 28,
+      "player": "I ask them to compare the specimen forms and explain what happened during the previous procedure.",
+      "narration": "A previous catheter bag is drained during an earlier procedure, then the current tube is refilled with saline. The pair return from the laboratory to the corridor."
+    },
+    {
+      "turn": 29,
+      "player": "I ask them to compare the specimen forms and explain what happened during the previous procedure.",
+      "narration": "Rin washes an earlier stain from her coat before leaving the workroom. Miki checks a specimen label and returns a borrowed pen."
+    },
+    {
+      "turn": 30,
+      "player": "I ask them to compare the specimen forms and explain what happened during the previous procedure.",
+      "narration": "Mud splashes onto both coats in the garden. Rin and Miki return to the corridor carrying the forms. Their current coats are dirty again."
+    },
+    {
+      "turn": 31,
+      "player": "I ask them to compare the specimen forms and explain what happened during the previous procedure.",
+      "narration": "Rin remembers a different ankle wound that healed last year. The current neck wound remains open. Miki compares old sample numbers without changing any treatment. They discuss the timing of an appointment, the route past the garden, and the distinction between old notes and the present patient. The clock advances while they speak."
+    },
+    {
+      "turn": 32,
+      "player": "I ask them to compare the specimen forms and explain what happened during the previous procedure.",
+      "narration": "A previous catheter bag is drained during an earlier procedure, then the current tube is refilled with saline. The pair return from the laboratory to the corridor. They discuss the timing of an appointment, the route past the garden, and the distinction between old notes and the present patient. The clock advances while they speak."
+    },
+    {
+      "turn": 33,
+      "player": "I ask them to compare the specimen forms and explain what happened during the previous procedure.",
+      "narration": "Rin washes an earlier stain from her coat before leaving the workroom. Miki checks a specimen label and returns a borrowed pen. They discuss the timing of an appointment, the route past the garden, and the distinction between old notes and the present patient. The clock advances while they speak."
+    },
+    {
+      "turn": 34,
+      "player": "I ask them to compare the specimen forms and explain what happened during the previous procedure.",
+      "narration": "Mud splashes onto both coats in the garden. Rin and Miki return to the corridor carrying the forms. Their current coats are dirty again. They discuss the timing of an appointment, the route past the garden, and the distinction between old notes and the present patient. The clock advances while they speak."
+    },
+    {
+      "turn": 35,
+      "player": "I ask them to compare the specimen forms and explain what happened during the previous procedure.",
+      "narration": "Rin remembers a different ankle wound that healed last year. The current neck wound remains open. Miki compares old sample numbers without changing any treatment. They discuss the timing of an appointment, the route past the garden, and the distinction between old notes and the present patient. The clock advances while they speak."
+    },
+    {
+      "turn": 36,
+      "player": "I ask them to compare the specimen forms and explain what happened during the previous procedure.",
+      "narration": "A previous catheter bag is drained during an earlier procedure, then the current tube is refilled with saline. The pair return from the laboratory to the corridor. They discuss the timing of an appointment, the route past the garden, and the distinction between old notes and the present patient. The clock advances while they speak."
+    },
+    {
+      "turn": 37,
+      "player": "I ask them to compare the specimen forms and explain what happened during the previous procedure.",
+      "narration": "Rin washes an earlier stain from her coat before leaving the workroom. Miki checks a specimen label and returns a borrowed pen. They discuss the timing of an appointment, the route past the garden, and the distinction between old notes and the present patient. The clock advances while they speak."
+    },
+    {
+      "turn": 38,
+      "player": "I ask them to compare the specimen forms and explain what happened during the previous procedure.",
+      "narration": "Mud splashes onto both coats in the garden. Rin and Miki return to the corridor carrying the forms. Their current coats are dirty again. They discuss the timing of an appointment, the route past the garden, and the distinction between old notes and the present patient. The clock advances while they speak."
+    },
+    {
+      "turn": 39,
+      "player": "I ask them to compare the specimen forms and explain what happened during the previous procedure.",
+      "narration": "Rin remembers a different ankle wound that healed last year. The current neck wound remains open. Miki compares old sample numbers without changing any treatment. They discuss the timing of an appointment, the route past the garden, and the distinction between old notes and the present patient. The clock advances while they speak."
+    },
+    {
+      "turn": 40,
+      "player": "I ask them to compare the specimen forms and explain what happened during the previous procedure.",
+      "narration": "A previous catheter bag is drained during an earlier procedure, then the current tube is refilled with saline. The pair return from the laboratory to the corridor. They discuss the timing of an appointment, the route past the garden, and the distinction between old notes and the present patient. The clock advances while they speak."
+    }
+  ],
+  "updates": {
+    "RIN_COAT": "clean"
+  }
+}

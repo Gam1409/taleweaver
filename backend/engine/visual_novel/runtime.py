@@ -1,16 +1,26 @@
 """Small integration helpers for completed VN turns."""
 
+from copy import deepcopy
 from typing import Any
 
 from sqlalchemy import select
 
+from backend.engine.character_identity import describe_character
+from backend.engine.clothing.context import actor_records, resolved_inventory
 from backend.engine.clothing.visuals import (
-    canonical_inventory,
     character_visuals,
     detailed_for_state,
     session_objects,
 )
+from backend.engine.narrated_items.evidence import stamp as stamp_item_evidence
+from backend.engine.physical_conditions.visuals import project as visual_conditions
+from backend.engine.scene_continuity.presentation import visual_facts as scene_visual_facts
 from backend.engine.scene_illustrations import capture_scene_snapshot
+from backend.engine.scene_staging import props
+from backend.engine.scene_staging.provenance import stamp
+from backend.engine.scene_staging.state import digest, project, registry
+from backend.engine.visual_novel.config import read_settings
+from backend.engine.visual_novel.environment import bind_player, room_objects
 from backend.models.world_entity import WorldScene
 
 
@@ -36,30 +46,38 @@ def _npc_facts(entity: dict, rows: dict, state: Any, detailed: bool) -> dict:
     npc = rows.get(entity.get("id"))
     override = (state.entity_states or {}).get(entity.get("id")) or {}
     profile = override.get("visual_profile", getattr(npc, "visual_profile", None))
-    inventory = override.get("inventory", getattr(npc, "inventory", [])) or []
+    metadata = getattr(npc, "metadata_json", None) or {}
+    inventory = (
+        override.get("inventory", getattr(npc, "inventory", None) or metadata.get("inventory", []))
+        or []
+    )
     projected = character_visuals(
         npc,
-        canonical_inventory(inventory, list(rows.values())),
+        resolved_inventory(inventory, list(rows.values()), state.entity_states or {}),
         profile=profile,
         detailed=detailed,
     )
     if projected is not None:
         projected["name"] = entity.get("name", projected["name"])
+        projected["position"] = entity.get("spatial_position")
         return projected
     return {
         "id": entity.get("id"),
         "name": entity.get("name"),
-        "appearance": entity.get("description"),
+        "appearance": describe_character(npc, entity.get("description")),
         "position": entity.get("spatial_position"),
     }
 
 
 async def capture_completed_moment(manager: Any, message: Any) -> None:
     """Freeze the public cast at completion; never include hidden possessions or goals."""
-    from backend.api.routes.adventures.logic import AdventureLogic
+    from backend.engine.gameplay.world import AdventureLogic
 
     # ChatMessage's insert hook stamps scene_id from the session on flush.
     await manager.db.flush([message])
+    stamp(manager.state, message)
+    props.stamp(manager.state, message)
+    stamp_item_evidence(manager, message)
     with manager.db.no_autoflush:
         entities = await AdventureLogic.build_session_entities(manager.db, manager.state)
         scene = await manager.db.scalar(
@@ -75,16 +93,18 @@ async def capture_completed_moment(manager: Any, message: Any) -> None:
     detailed = detailed_for_state(manager.state)
     player = character_visuals(
         manager.avatar,
-        canonical_inventory(manager.avatar.inventory or [], list(rows.values())),
+        resolved_inventory(
+            manager.avatar.inventory or [], list(rows.values()), manager.state.entity_states or {}
+        ),
         detailed=detailed,
     )
     player = player or {
         "id": manager.avatar.id,
         "name": manager.avatar.name,
-        "appearance": manager.avatar.description,
+        "appearance": describe_character(manager.avatar),
         "clothing": equipped_appearance(manager.avatar),
     }
-    facts = {
+    facts: dict[str, Any] = {
         "setting": scene.description if scene is not None else "",
         "characters": [
             player,
@@ -96,6 +116,43 @@ async def capture_completed_moment(manager: Any, message: Any) -> None:
         ],
     }
     if any(person.get("managed_clothing") for person in facts["characters"]):
-        # A scene label is enough to ground composition; its prose may describe hidden outfits.
+        # Raw room prose may contain obsolete outfits; verified environment is added below.
         facts["setting"] = scene.label if scene is not None else ""
+    facts.update(
+        scene_visual_facts(
+            manager.state,
+            {"__player__", manager.state.current_scene_id, *(row["id"] for row in entities)},
+            str(getattr(scene, "description", "") or ""),
+            message.id,
+        )
+    )
+    facts["physical_conditions"] = visual_conditions(
+        manager.state,
+        actor_records(manager, list(rows.values())),
+        detailed=detailed,
+    )
+    bind_player(facts, manager.avatar.id)
+    if read_settings(manager.state).scene_staging:
+        saved = registry(manager.state)
+        matches = (
+            saved.get("source_hash") == digest(message.content)
+            and saved.get("scene_id") == manager.state.current_scene_id
+        )
+        staging = project(manager.state, facts["characters"]) if matches else {}
+        facts["staging_status"] = saved.get("status", "unconfirmed") if matches else "unconfirmed"
+        for person in facts["characters"]:
+            person.update(staging.get(person["id"], {}))
+        if matches:
+            # Frozen explicit atoms are checked at render time only; narration
+            # prompts never receive them.
+            facts["explicit"] = deepcopy(saved.get("explicit") or [])
+    facts["props"] = props.project(
+        manager.state,
+        props.candidates(
+            manager.avatar,
+            list(rows.values()),
+            manager.state,
+            {row.id for row in rows.values() if row.entity_type == "NPC"},
+        ),
+    ) + room_objects(entities, scene)
     await capture_scene_snapshot(manager.db, manager.state, message, facts)

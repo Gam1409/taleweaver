@@ -5,6 +5,8 @@ import { createSSRApp, h } from 'vue'
 import { renderToString } from '@vue/server-renderer'
 import { parse, compileScript } from '@vue/compiler-sfc'
 import ts from 'typescript'
+import { uuidModule } from './uuidModule.mjs'
+import { worldBriefModule } from './worldBriefModule.mjs'
 
 const read = path => readFileSync(new URL(`../src/${path}`, import.meta.url), 'utf8')
 const moduleFor = async source => {
@@ -49,28 +51,37 @@ test('long outfits collapse and garment text is escaped', async () => {
   const html = await render(clothing, { clothing: { appearance: { age_years: null }, worn: Array.from({ length: 8 }, (_, i) => garment(`g${i}`, i % 5, { name: '<script>alert(1)</script>', description: '<img onerror=evil()>' })) } })
   assert.match(html, /<details/)
   assert.match(html, /Worn clothing · 8/)
-  assert.doesNotMatch(html, /<details[^>]*open|<script>|<img /)
+  assert.doesNotMatch(html, /<details[^>]*open|<script\b|<img\b/i)
   assert.match(html, /&lt;script&gt;/)
 })
 
 test('adult clothing preference is a separate default-off setting', async () => {
-  const off = await render(setting, { modelValue: false })
-  assert.match(off, /Adult content: detailed clothing/)
+  const off = await render(setting, { clothingValue: false, nsfwEnabled: false, nsfwLevel: "soft" })
+  assert.match(off, /Clothing layer tracking/)
   assert.match(off, /Off: general outfits/)
   assert.doesNotMatch(off, /<input[^>]*checked|NPC state|mature_themes/)
-  assert.match(await render(setting, { modelValue: true }), /<input[^>]*checked/)
+  assert.match(await render(setting, { clothingValue: true, nsfwEnabled: false, nsfwLevel: "soft" }), /<input[^>]*checked/)
 })
 
-test('creation sends the independent preference in both modes and clears it outside VN', async () => {
+let creationSequence = 0
+async function creationFixture() {
   const view = read('views/CreateAdventureView.vue')
   const formSource = view.slice(view.indexOf('const form = ref('), view.indexOf('const sourceAdventure ='))
   const createSource = view.slice(view.indexOf('async function handleCreate()'), view.indexOf('async function handleSuggestStoryIdea()'))
   const fixture = await moduleFor(`import {ref} from 'vue';
+import {createUuid} from '${uuidModule}';
+import {emptyWorldBrief,hasWorldBrief,briefTitle,worldBriefPayload} from '${worldBriefModule}';
 ${formSource}
 const calls = [], api = {createAdventure: async payload => calls.push(payload)}, router = {push: () => {}};
 const generatorMode = ref('simple'), isCoverMode = ref(false), sourceAdventure = ref(null), isGenerating = ref(false), errorMsg = ref(''), imageStyles = ref([]), tones = ref([]), coverSourceId = ref('');
 ${createSource}
-export { form, calls, generatorMode, handleCreate }`)
+export { form, calls, generatorMode, handleCreate }
+// fixture ${++creationSequence}`)
+  return fixture
+}
+
+test('creation sends the independent preference in both modes and clears it outside VN', async () => {
+  const fixture = await creationFixture()
   assert.equal(fixture.form.value.detailed_clothing, false)
   assert.equal(fixture.form.value.show_npc_state, false)
   Object.assign(fixture.form.value, { title: 'The station', storyIdea: 'Adults meet at a station.', rule_enforcement_mode: 'vn', detailed_clothing: true, show_npc_state: false })
@@ -87,6 +98,19 @@ export { form, calls, generatorMode, handleCreate }`)
   fixture.form.value.rule_enforcement_mode = 'rpg'
   await fixture.handleCreate()
   assert.equal(fixture.calls[2].detailed_clothing, false)
+})
+
+test('creation forwards exact entity tags and an open-ended brief without client-generated chapters', async () => {
+  const fixture = await creationFixture()
+  const text = '[Scene: LAB] Observatory\n[NPC: MIRA] Mira\nage: 28\n[Sequence: 1] A possible meeting'
+  Object.assign(fixture.form.value, { title: 'The observatory', storyIdea: text, rule_enforcement_mode: 'vn' })
+  fixture.form.value.world_brief.setting = 'A city with a fragile treaty'
+  fixture.form.value.world_brief.open_threads = 'Whether either court can trust the other remains undecided.'
+  await fixture.handleCreate()
+  assert.equal(fixture.calls[0].original_prompt, text)
+  assert.equal(fixture.calls[0].sequences, undefined)
+  assert.equal(fixture.calls[0].world_brief.setting, 'A city with a fragile treaty')
+  assert.match(fixture.calls[0].world_brief.open_threads, /undecided/)
 })
 
 test('VN opens Appearance without resetting an inventory tab on ordinary sheet updates', async () => {

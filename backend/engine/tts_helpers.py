@@ -86,7 +86,7 @@ def _parse_google_retry_delay_seconds(response: httpx.Response) -> Optional[floa
 def _backoff_delay_seconds(attempt: int) -> float:
     base_delay = float(getattr(settings, "TTS_RATE_LIMIT_BASE_DELAY_SECONDS", 2.0))
     max_delay = float(getattr(settings, "TTS_RATE_LIMIT_MAX_DELAY_SECONDS", 30.0))
-    return min(base_delay * (2 ** max(0, attempt - 1)), max_delay)
+    return min(base_delay * (2.0 ** max(0, attempt - 1)), max_delay)
 
 
 def _compute_429_retry_delay_seconds(response: httpx.Response, attempt: int) -> float:

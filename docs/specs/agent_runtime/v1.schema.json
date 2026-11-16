@@ -1,0 +1,233 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "Autonomy": {
+      "additionalProperties": true,
+      "properties": {
+        "enabled": {
+          "default": false,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "max_active_npcs": {
+          "default": 3,
+          "maximum": 20,
+          "minimum": 1,
+          "title": "Max Active Npcs",
+          "type": "integer"
+        }
+      },
+      "title": "Autonomy",
+      "type": "object"
+    },
+    "CorpusRef": {
+      "additionalProperties": true,
+      "properties": {
+        "id": {
+          "maxLength": 100,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9_.-]+$",
+          "title": "Id",
+          "type": "string"
+        },
+        "source": {
+          "default": "installed",
+          "enum": [
+            "installed",
+            "remote"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "library_id": {
+          "anyOf": [
+            {
+              "maxLength": 100,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9_.-]+$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Library Id"
+        },
+        "revision": {
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Revision",
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        },
+        "required": {
+          "default": false,
+          "title": "Required",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "revision",
+        "sha256"
+      ],
+      "title": "CorpusRef",
+      "type": "object"
+    },
+    "LivingWorld": {
+      "additionalProperties": true,
+      "properties": {
+        "enabled": {
+          "default": false,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "absence_mode": {
+          "default": "pause",
+          "enum": [
+            "pause",
+            "catch_up"
+          ],
+          "title": "Absence Mode",
+          "type": "string"
+        },
+        "max_catchup_minutes": {
+          "default": 360,
+          "maximum": 4320,
+          "minimum": 0,
+          "title": "Max Catchup Minutes",
+          "type": "integer"
+        },
+        "max_events": {
+          "default": 16,
+          "maximum": 128,
+          "minimum": 0,
+          "title": "Max Events",
+          "type": "integer"
+        }
+      },
+      "title": "LivingWorld",
+      "type": "object"
+    },
+    "Psychology": {
+      "additionalProperties": true,
+      "properties": {
+        "enabled": {
+          "default": false,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "model": {
+          "const": "authored-categorical-v1",
+          "default": "authored-categorical-v1",
+          "title": "Model",
+          "type": "string"
+        },
+        "observer_memory_limit": {
+          "default": 12,
+          "maximum": 24,
+          "minimum": 0,
+          "title": "Observer Memory Limit",
+          "type": "integer"
+        }
+      },
+      "title": "Psychology",
+      "type": "object"
+    },
+    "Rag": {
+      "additionalProperties": true,
+      "properties": {
+        "enabled": {
+          "default": false,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "top_k": {
+          "default": 8,
+          "maximum": 32,
+          "minimum": 1,
+          "title": "Top K",
+          "type": "integer"
+        },
+        "audience_policy": {
+          "const": "observer-scoped-v1",
+          "default": "observer-scoped-v1",
+          "title": "Audience Policy",
+          "type": "string"
+        },
+        "corpora": {
+          "items": {
+            "$ref": "#/$defs/CorpusRef"
+          },
+          "maxItems": 32,
+          "title": "Corpora",
+          "type": "array"
+        }
+      },
+      "title": "Rag",
+      "type": "object"
+    }
+  },
+  "additionalProperties": true,
+  "properties": {
+    "schema_version": {
+      "maximum": 1,
+      "minimum": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "required_features": {
+      "items": {
+        "maxLength": 64,
+        "minLength": 1,
+        "pattern": "^[a-z0-9][a-z0-9_.-]*$",
+        "type": "string"
+      },
+      "maxItems": 32,
+      "title": "Required Features",
+      "type": "array"
+    },
+    "optional_features": {
+      "items": {
+        "maxLength": 64,
+        "minLength": 1,
+        "pattern": "^[a-z0-9][a-z0-9_.-]*$",
+        "type": "string"
+      },
+      "maxItems": 32,
+      "title": "Optional Features",
+      "type": "array"
+    },
+    "fallback": {
+      "default": "core",
+      "enum": [
+        "core",
+        "block"
+      ],
+      "title": "Fallback",
+      "type": "string"
+    },
+    "autonomy": {
+      "$ref": "#/$defs/Autonomy"
+    },
+    "psychology": {
+      "$ref": "#/$defs/Psychology"
+    },
+    "rag": {
+      "$ref": "#/$defs/Rag"
+    },
+    "living_world": {
+      "$ref": "#/$defs/LivingWorld"
+    }
+  },
+  "required": [
+    "schema_version"
+  ],
+  "title": "AgentRuntime",
+  "type": "object"
+}

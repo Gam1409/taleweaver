@@ -1,6 +1,5 @@
 """Canonical recall keeps evidence, ownership and timeline boundaries intact."""
 
-import json
 from dataclasses import replace
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -212,6 +211,7 @@ async def test_legacy_compression_runs_while_vectors_paused(journal_world, monke
             db, SimpleNamespace(id=state.user_id), state, epoch=0, lease_token="lease"
         )
         assert "An older promise." in model.aexecute_simple_task.call_args.kwargs["user_prompt"]
+        await db.refresh(state, attribute_names=["compressed_history"])
         assert state.compressed_history["summary"] == "An updated chronicle."
 
 
@@ -281,15 +281,6 @@ async def test_summary_intervals_accumulate_without_overwriting_old_evidence(
             db, user, state, epoch=0, lease_token="lease"
         )
         assert model.aexecute_simple_task.await_count == 4
-
-
-def test_summary_budget_references_only_whole_included_source_groups():
-    rows = summaries._bounded_rows(
-        {"oversized": ["x" * 13000], "included": ["a", "b"], "also_included": ["c"]}
-    )
-    assert [row["source_message_id"] for row in rows] == ["included", "also_included"]
-    assert rows[0]["sources"] == ["a", "b"]
-    assert len(json.dumps(rows, ensure_ascii=False)) <= 12000
 
 
 async def test_clear_during_summary_call_prevents_canonical_write(journal_world, monkeypatch):

@@ -9,6 +9,8 @@ from typing import Any
 
 import httpx
 
+from backend.core.comfyui_errors import ComfyRequestError
+from backend.engine.visual_progress import report
 from backend.utils.path_security import validate_provider_url
 
 MAX_IMAGE_BYTES = 32 * 1024 * 1024
@@ -44,11 +46,34 @@ def _error_summary(response: httpx.Response) -> str:
         payload = response.json()
         nodes = payload.get("node_errors", {})
         names = [
-            f"{key} ({value.get('class_type', 'unknown')})"
+            f"{key} ({value.get('class_type', 'unknown')}){_validation_hint(value)}"
             for key, value in nodes.items()
             if isinstance(value, dict)
         ]
         return re.sub(r"[^a-zA-Z0-9_().,: -]", "", ", ".join(names))[:400]
+    return ""
+
+
+def _validation_hint(node: dict) -> str:
+    """Translate known error codes, never arbitrary provider text or input values."""
+    errors = node.get("errors", [])
+    if not isinstance(errors, list):
+        return ""
+    for error in errors[:8]:
+        if not isinstance(error, dict) or error.get("type") != "value_not_in_list":
+            continue
+        info = error.get("extra_info")
+        name = info.get("input_name") if isinstance(info, dict) else None
+        if isinstance(name, str) and name in {
+            "unet_name",
+            "ckpt_name",
+            "vae_name",
+            "clip_name",
+            "clip_name1",
+            "clip_name2",
+            "clip_name3",
+        }:
+            return f": {name} is not available on this server"
     return ""
 
 
@@ -68,9 +93,7 @@ class ComfyClient:
         with _request_errors(stage):
             response = await self.http.request(method, self.url + path, **kwargs)
         if response.is_error:
-            raise ValueError(
-                f"ComfyUI {path} returned HTTP {response.status_code}. Rejected nodes: {_error_summary(response) or 'see server logs'}."
-            )
+            raise ComfyRequestError(response.status_code, _error_summary(response))
         try:
             return response.json()
         except ValueError as exc:
@@ -94,14 +117,17 @@ class ComfyClient:
         return f"{subfolder}/{name}" if subfolder else name
 
     async def execute(self, graph: dict, output_node: str, timeout: int) -> bytes:
+        report("submitting")
         result = await self.json("POST", "/prompt", json={"prompt": graph})
         prompt_id = result.get("prompt_id")
         if not isinstance(prompt_id, str) or not prompt_id:
             raise ValueError("ComfyUI did not accept the workflow.")
         try:
+            report("waiting")
             output = await self._wait(prompt_id, output_node, timeout)
+            report("downloading")
             return await self._download(output)
-        except (asyncio.CancelledError, TimeoutError, httpx.TimeoutException):
+        except (asyncio.CancelledError, Exception):
             # Dequeue only this job. An already running job may continue remotely.
             with suppress(httpx.HTTPError, ValueError):
                 await self.json("POST", "/queue", json={"delete": [prompt_id]})

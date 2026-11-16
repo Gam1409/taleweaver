@@ -22,6 +22,7 @@ from backend.engine.image_prompt_adapter import (
 )
 from backend.models.user import User
 from tests.conftest import TestSessionLocal
+from tests.item_image_fixture import ITEM_CARD_COMPOSITION
 from tests.test_comfyui import fake_comfy
 from tests.test_comfyui_output import png_bytes
 
@@ -57,7 +58,9 @@ async def test_starters_render_asset_dimensions_without_manual_inputs(
     assert tuple(graph["latent"]["inputs"][key] for key in ("width", "height")) == expected
     assert graph["sampler"]["inputs"]["seed"] == 123
     binding = workflow.bindings["prompt"]
-    assert graph[binding.node_id]["inputs"][binding.input_name] == 'A lantern. "海"'
+    prompt = 'A lantern. "海"'
+    expected_prompt = f"{prompt} {ITEM_CARD_COMPOSITION}" if target == "object" else prompt
+    assert graph[binding.node_id]["inputs"][binding.input_name] == expected_prompt
     assert graph["sampler"]["inputs"]["cfg"] == FAMILIES[family]["cfg"]
     assert options == original
 
@@ -226,6 +229,8 @@ async def test_mature_theme_rule_is_opt_in_and_does_not_change_workflow(enabled,
         "comfyui_presets": {"art": preset.model_dump()},
         "comfyui_assignments": {"simple": "art"},
         "_prompt_user": object(),
+        "_nsfw_enabled": enabled,
+        "_nsfw_level": "hard",
     }
     llm = SimpleNamespace(
         model="fake", aexecute_simple_task=AsyncMock(return_value="Two adults dancing.")

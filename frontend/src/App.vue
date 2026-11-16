@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import NotificationToast from '@/components/editor/NotificationToast.vue'
+import { notificationService } from '@/services/notificationService'
+const notifications = notificationService.all
 import { onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { authState, clearAuth } from '@/store/auth'
@@ -6,6 +9,7 @@ import { configState, refreshConfig } from '@/store/config'
 import { api } from '@/composables/useApi'
 import { isPublicRoute } from '@/router'
 import GlobalHeader from '@/components/GlobalHeader.vue'
+import VisualJobProgress from '@/components/VisualJobProgress.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -15,6 +19,7 @@ function updateAppHeight() {
   const vv = window.visualViewport
   const height = vv?.height ?? window.innerHeight
   document.documentElement.style.setProperty('--app-height', `${Math.round(height)}px`)
+  document.documentElement.classList.toggle('compact-viewport', height < 500)
 }
 
 async function checkAuth() {
@@ -57,6 +62,7 @@ async function checkAuth() {
     const user = await api.getMe()
     authState.user = user
     authState.isAuthenticated = true
+    if (route.name === 'admin' && user.role !== 'admin') await router.replace({ name: 'portal' })
   } catch (err: any) {
     console.error('Initial auth check failed:', err)
     clearAuth()
@@ -103,8 +109,10 @@ onUnmounted(() => {
 </script>
 
 <template>
+  <NotificationToast :notifications="notifications" @close="notificationService.remove($event)" />
   <div class="h-app flex flex-col bg-[#050b14] overflow-hidden">
     <GlobalHeader />
+    <VisualJobProgress />
     <main class="flex-1 min-h-0 relative overflow-hidden">
       <RouterView />
     </main>

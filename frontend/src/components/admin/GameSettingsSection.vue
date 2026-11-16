@@ -27,7 +27,7 @@ watch(() => props.gameForm, (newVal) => {
     <div class="bg-slate-900 border border-slate-800 rounded-3xl p-8 shadow-2xl space-y-6">
       <div class="p-6 bg-slate-950/40 border border-slate-800/40 rounded-2xl space-y-6">
         <!-- Clock Settings -->
-        <div class="flex items-center justify-between p-4 bg-slate-900/60 rounded-xl border border-white/5">
+        <div class="flex flex-col gap-4 sm:flex-row sm:items-center justify-between p-4 bg-slate-900/60 rounded-xl border border-white/5">
           <div>
             <div class="text-sm font-bold text-white">24-Hour Format</div>
             <div class="text-xs text-slate-500">Enable to use 24h clock, otherwise 12h (AM/PM) is used.</div>
@@ -39,14 +39,14 @@ watch(() => props.gameForm, (newVal) => {
         </div>
 
         <!-- Date Format Settings -->
-        <div class="flex items-center justify-between p-4 bg-slate-900/60 rounded-xl border border-white/5">
+        <div class="flex flex-col gap-4 sm:flex-row sm:items-center justify-between p-4 bg-slate-900/60 rounded-xl border border-white/5">
           <div>
             <div class="text-sm font-bold text-white">Date Format</div>
             <div class="text-xs text-slate-500">Choose how the in-game date is presented.</div>
           </div>
           <select 
             v-model="localForm.date_format"
-            class="bg-slate-950 border border-slate-800 text-white text-xs rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block p-2 px-4"
+            class="min-w-0 w-full sm:w-auto bg-slate-950 border border-slate-800 text-white text-xs rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block p-2 px-4"
           >
             <option value="DD.MM.YY">DD.MM.YY (e.g. 24.12.26)</option>
             <option value="MM/DD/YY">MM/DD/YY (e.g. 12/24/26)</option>

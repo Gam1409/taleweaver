@@ -12,7 +12,7 @@ from collections.abc import Callable
 from typing import Any
 
 from backend.core.script_validator import check_scripts_and_guards
-from backend.core.world_validation import entities, progression, story, topology
+from backend.core.world_validation import completeness, entities, progression, story, topology
 from backend.core.world_validation.context import ValidationContext
 from backend.schemas.validation import ValidationFinding
 
@@ -20,6 +20,7 @@ Check = Callable[[ValidationContext], list[ValidationFinding]]
 
 CHECKS: tuple[Check, ...] = (
     story.check_empty_adventure,
+    completeness.check_authoring_completeness,
     topology.check_unreachable_scenes,
     topology.check_exit_targets_exist,
     topology.check_exit_labels,

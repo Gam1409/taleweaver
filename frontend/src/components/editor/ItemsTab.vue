@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { Brain } from 'lucide-vue-next'
+import { computed, ref, shallowRef } from 'vue'
+import { Brain, Plus } from 'lucide-vue-next'
 import { hasAnyScript } from '@/utils/editor_utils'
+import EditorActionMenu from './EditorActionMenu.vue'
 
 interface SceneOption {
   id: string
@@ -42,22 +43,21 @@ const emit = defineEmits<{
   (e: 'request-delete-item', itemId: string, name: string): void
   (e: 'export-entity', kind: 'item', id: string, label: string): void
   (e: 'import-entity', kind: 'item'): void
+  (e: 'add-item', sceneId: string | null): void
+  (e: 'close-menu'): void
 }>()
+
+const menuAnchor = shallowRef<HTMLElement | null>(null)
+function toggleItemMenu(id: string, event: MouseEvent) {
+  menuAnchor.value = event.currentTarget as HTMLElement | null
+  emit('toggle-menu', id, event)
+}
 
 const isContainerLocked = (obj: any): boolean => {
   if (String(obj?.item_type || '').toUpperCase() !== 'CONTAINER') return false
   if (typeof obj?.locked === 'boolean') return obj.locked
   const metadata = (obj?.metadata_json && typeof obj.metadata_json === 'object') ? obj.metadata_json : {}
   return Boolean(metadata.code_to_unlock || metadata.item_to_unlock)
-}
-
-const hasMissingImage = (obj: any): boolean => {
-  const raw = String(obj?.image_url || '').trim()
-  if (!raw) return true
-  const lowered = raw.toLowerCase()
-  if (lowered.startsWith('assets/') || lowered.startsWith('/assets/')) return true
-  if (lowered.includes('placeholder_') || lowered.includes('/placeholder-')) return true
-  return false
 }
 
 function buildVisualImageUrl(imagePath?: string | null) {
@@ -127,7 +127,10 @@ const activeFilterLabel = computed(() => {
 
 <template>
   <div class="space-y-6">
-  <div class="flex items-center justify-end">
+  <div class="flex items-center justify-end gap-5">
+    <button type="button" @click="emit('add-item', sceneFilter || activeMapSceneId || null)" class="flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-black uppercase tracking-widest text-white transition-colors hover:bg-emerald-500">
+      <Plus class="h-4 w-4" /> Add
+    </button>
     <button @click="emit('import-entity', 'item')" class="text-xs font-bold text-sky-500 hover:text-sky-400 flex items-center gap-1.5 uppercase tracking-widest transition-colors" title="Import an item from a .twe file">
       <i class="ra ra-load"></i> Import Item
     </button>
@@ -223,14 +226,14 @@ const activeFilterLabel = computed(() => {
             </div>
           </div>
           <div class="absolute top-1.5 right-1.5 z-40">
-            <button @click="emit('toggle-menu', obj.id, $event)" class="w-6 h-6 rounded-full bg-black/60 backdrop-blur-md border border-white/10 flex items-center justify-center text-white hover:bg-cyan-500 transition-all shadow-lg group/dots">
+            <button @click="toggleItemMenu(obj.id, $event)" :aria-label="`Actions for ${obj.name}`" :aria-expanded="activeMenuId === obj.id" class="w-6 h-6 rounded-full bg-black/60 backdrop-blur-md border border-white/10 flex items-center justify-center text-white hover:bg-cyan-500 transition-all shadow-lg group/dots">
               <div class="flex flex-col gap-0.5">
                 <div class="w-0.5 h-0.5 bg-white rounded-full"></div>
                 <div class="w-0.5 h-0.5 bg-white rounded-full"></div>
                 <div class="w-0.5 h-0.5 bg-white rounded-full"></div>
               </div>
             </button>
-            <div v-if="activeMenuId === obj.id" class="absolute right-0 mt-1 w-56 bg-slate-900 border border-white/20 rounded-lg shadow-2xl overflow-hidden py-1.5 z-[200] animate-fade-in ring-1 ring-white/5">
+            <EditorActionMenu v-if="activeMenuId === obj.id" :anchor="menuAnchor" :label="`${obj.name} actions`" @close="emit('close-menu')">
               <button @click="emit('quick-regen', 'object', obj.id)" class="w-full px-3 py-2 text-left text-xs font-bold text-slate-200 hover:bg-emerald-500 hover:text-white transition-all">Quick Regen</button>
               <button @click="emit('open-regen-dialog', 'object', obj.id, obj.name)" class="w-full px-3 py-2 text-left text-xs font-bold text-slate-200 hover:bg-cyan-500 hover:text-white transition-all">Regen (Prompt)</button>
               <button @click="emit('open-upload-picker', 'object', obj.id, obj.name)" class="w-full px-3 py-2 text-left text-xs font-bold text-slate-200 hover:bg-amber-500 hover:text-white transition-all">Upload Image</button>
@@ -241,7 +244,7 @@ const activeFilterLabel = computed(() => {
               <button @click="emit('request-move-item-to-scene', obj.id, obj.name, obj.current_scene_id || '')" class="w-full px-3 py-2 text-left text-xs font-bold text-slate-200 hover:bg-sky-500 hover:text-white transition-all">Move to Scene…</button>
               <button @click="emit('export-entity', 'item', obj.id, obj.name)" class="w-full px-3 py-2 text-left text-xs font-bold text-slate-200 hover:bg-teal-500 hover:text-white transition-all">Export (.twe)</button>
               <button @click="emit('request-delete-item', obj.id, obj.name)" class="w-full px-3 py-2 text-left text-xs font-bold text-slate-200 hover:bg-red-500 hover:text-white transition-all">Delete</button>
-            </div>
+            </EditorActionMenu>
           </div>
         </div>
       </div>
@@ -295,14 +298,14 @@ const activeFilterLabel = computed(() => {
             </div>
           </div>
           <div class="absolute top-1.5 right-1.5 z-40">
-            <button @click="emit('toggle-menu', obj.id, $event)" class="w-6 h-6 rounded-full bg-black/60 backdrop-blur-md border border-white/10 flex items-center justify-center text-white hover:bg-emerald-500 transition-all shadow-lg group/dots">
+            <button @click="toggleItemMenu(obj.id, $event)" :aria-label="`Actions for ${obj.name}`" :aria-expanded="activeMenuId === obj.id" class="w-6 h-6 rounded-full bg-black/60 backdrop-blur-md border border-white/10 flex items-center justify-center text-white hover:bg-emerald-500 transition-all shadow-lg group/dots">
               <div class="flex flex-col gap-0.5">
                 <div class="w-0.5 h-0.5 bg-white rounded-full"></div>
                 <div class="w-0.5 h-0.5 bg-white rounded-full"></div>
                 <div class="w-0.5 h-0.5 bg-white rounded-full"></div>
               </div>
             </button>
-            <div v-if="activeMenuId === obj.id" class="absolute right-0 mt-1 w-56 bg-slate-900 border border-white/20 rounded-lg shadow-2xl overflow-hidden py-1.5 z-[200] animate-fade-in ring-1 ring-white/5">
+            <EditorActionMenu v-if="activeMenuId === obj.id" :anchor="menuAnchor" :label="`${obj.name} actions`" @close="emit('close-menu')">
               <button @click="emit('quick-regen', 'object', obj.id)" class="w-full px-3 py-2 text-left text-xs font-bold text-slate-200 hover:bg-emerald-500 hover:text-white transition-all">Quick Regen</button>
               <button @click="emit('open-regen-dialog', 'object', obj.id, obj.name)" class="w-full px-3 py-2 text-left text-xs font-bold text-slate-200 hover:bg-cyan-500 hover:text-white transition-all">Regen (Prompt)</button>
               <button @click="emit('open-upload-picker', 'object', obj.id, obj.name)" class="w-full px-3 py-2 text-left text-xs font-bold text-slate-200 hover:bg-amber-500 hover:text-white transition-all">Upload Image</button>
@@ -313,7 +316,7 @@ const activeFilterLabel = computed(() => {
               <button @click="emit('request-move-item-to-scene', obj.id, obj.name, obj.current_scene_id || '')" class="w-full px-3 py-2 text-left text-xs font-bold text-slate-200 hover:bg-sky-500 hover:text-white transition-all">Move to Scene…</button>
               <button @click="emit('export-entity', 'item', obj.id, obj.name)" class="w-full px-3 py-2 text-left text-xs font-bold text-slate-200 hover:bg-teal-500 hover:text-white transition-all">Export (.twe)</button>
               <button @click="emit('request-delete-item', obj.id, obj.name)" class="w-full px-3 py-2 text-left text-xs font-bold text-slate-200 hover:bg-red-500 hover:text-white transition-all">Delete</button>
-            </div>
+            </EditorActionMenu>
           </div>
         </div>
       </div>
@@ -368,14 +371,14 @@ const activeFilterLabel = computed(() => {
           </div>
 
           <div class="absolute top-1.5 right-1.5 z-40">
-            <button @click="emit('toggle-menu', obj.id, $event)" class="w-6 h-6 rounded-full bg-black/60 backdrop-blur-md border border-white/10 flex items-center justify-center text-white hover:bg-emerald-500 transition-all shadow-lg group/dots">
+            <button @click="toggleItemMenu(obj.id, $event)" :aria-label="`Actions for ${obj.name}`" :aria-expanded="activeMenuId === obj.id" class="w-6 h-6 rounded-full bg-black/60 backdrop-blur-md border border-white/10 flex items-center justify-center text-white hover:bg-emerald-500 transition-all shadow-lg group/dots">
               <div class="flex flex-col gap-0.5">
                 <div class="w-0.5 h-0.5 bg-white rounded-full"></div>
                 <div class="w-0.5 h-0.5 bg-white rounded-full"></div>
                 <div class="w-0.5 h-0.5 bg-white rounded-full"></div>
               </div>
             </button>
-            <div v-if="activeMenuId === obj.id" class="absolute right-0 mt-1 w-56 bg-slate-900 border border-white/20 rounded-lg shadow-2xl overflow-hidden py-1.5 z-[200] animate-fade-in ring-1 ring-white/5">
+            <EditorActionMenu v-if="activeMenuId === obj.id" :anchor="menuAnchor" :label="`${obj.name} actions`" @close="emit('close-menu')">
               <button @click="emit('quick-regen', 'object', obj.id)" class="w-full px-3 py-2 text-left text-xs font-bold text-slate-200 hover:bg-emerald-500 hover:text-white transition-all">Quick Regen</button>
               <button @click="emit('open-regen-dialog', 'object', obj.id, obj.name)" class="w-full px-3 py-2 text-left text-xs font-bold text-slate-200 hover:bg-cyan-500 hover:text-white transition-all">Regen (Prompt)</button>
               <button @click="emit('open-upload-picker', 'object', obj.id, obj.name)" class="w-full px-3 py-2 text-left text-xs font-bold text-slate-200 hover:bg-amber-500 hover:text-white transition-all">Upload Image</button>
@@ -386,7 +389,7 @@ const activeFilterLabel = computed(() => {
               <button @click="emit('request-move-item-to-scene', obj.id, obj.name, obj.current_scene_id || '')" class="w-full px-3 py-2 text-left text-xs font-bold text-slate-200 hover:bg-sky-500 hover:text-white transition-all">Move to Scene…</button>
               <button @click="emit('export-entity', 'item', obj.id, obj.name)" class="w-full px-3 py-2 text-left text-xs font-bold text-slate-200 hover:bg-teal-500 hover:text-white transition-all">Export (.twe)</button>
               <button @click="emit('request-delete-item', obj.id, obj.name)" class="w-full px-3 py-2 text-left text-xs font-bold text-slate-200 hover:bg-red-500 hover:text-white transition-all">Delete</button>
-            </div>
+            </EditorActionMenu>
           </div>
         </div>
       </div>
@@ -444,14 +447,14 @@ const activeFilterLabel = computed(() => {
           </div>
 
           <div class="absolute top-1.5 right-1.5 z-40">
-            <button @click="emit('toggle-menu', obj.id, $event)" class="w-6 h-6 rounded-full bg-black/60 backdrop-blur-md border border-white/10 flex items-center justify-center text-white hover:bg-emerald-500 transition-all shadow-lg group/dots">
+            <button @click="toggleItemMenu(obj.id, $event)" :aria-label="`Actions for ${obj.name}`" :aria-expanded="activeMenuId === obj.id" class="w-6 h-6 rounded-full bg-black/60 backdrop-blur-md border border-white/10 flex items-center justify-center text-white hover:bg-emerald-500 transition-all shadow-lg group/dots">
               <div class="flex flex-col gap-0.5">
                 <div class="w-0.5 h-0.5 bg-white rounded-full"></div>
                 <div class="w-0.5 h-0.5 bg-white rounded-full"></div>
                 <div class="w-0.5 h-0.5 bg-white rounded-full"></div>
               </div>
             </button>
-            <div v-if="activeMenuId === obj.id" class="absolute right-0 mt-1 w-56 bg-slate-900 border border-white/20 rounded-lg shadow-2xl overflow-hidden py-1.5 z-[200] animate-fade-in ring-1 ring-white/5">
+            <EditorActionMenu v-if="activeMenuId === obj.id" :anchor="menuAnchor" :label="`${obj.name} actions`" @close="emit('close-menu')">
               <button @click="emit('quick-regen', 'object', obj.id)" class="w-full px-3 py-2 text-left text-xs font-bold text-slate-200 hover:bg-emerald-500 hover:text-white transition-all">Quick Regen</button>
               <button @click="emit('open-regen-dialog', 'object', obj.id, obj.name)" class="w-full px-3 py-2 text-left text-xs font-bold text-slate-200 hover:bg-cyan-500 hover:text-white transition-all">Regen (Prompt)</button>
               <button @click="emit('open-upload-picker', 'object', obj.id, obj.name)" class="w-full px-3 py-2 text-left text-xs font-bold text-slate-200 hover:bg-amber-500 hover:text-white transition-all">Upload Image</button>
@@ -462,7 +465,7 @@ const activeFilterLabel = computed(() => {
               <button @click="emit('request-move-item-to-scene', obj.id, obj.name, obj.current_scene_id || '')" class="w-full px-3 py-2 text-left text-xs font-bold text-slate-200 hover:bg-sky-500 hover:text-white transition-all">Move to Scene…</button>
               <button @click="emit('export-entity', 'item', obj.id, obj.name)" class="w-full px-3 py-2 text-left text-xs font-bold text-slate-200 hover:bg-teal-500 hover:text-white transition-all">Export (.twe)</button>
               <button @click="emit('request-delete-item', obj.id, obj.name)" class="w-full px-3 py-2 text-left text-xs font-bold text-slate-200 hover:bg-red-500 hover:text-white transition-all">Delete</button>
-            </div>
+            </EditorActionMenu>
           </div>
         </div>
       </div>

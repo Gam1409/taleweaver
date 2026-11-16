@@ -3,40 +3,67 @@
 import asyncio
 from copy import deepcopy
 from pathlib import Path
+from typing import Any, cast
 
 from fastapi import HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import update
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.core import database
+from backend.core.visual_queries import collect_queries
+from backend.core.visual_trace import current_id, record, traced
 from backend.engine.image_profiles import image_timeout
 from backend.engine.media_engine import MediaEngine
+from backend.engine.memory_rag.persistence import retry_transaction
+from backend.engine.visual_novel.config import read_settings
 from backend.models.session_state import SessionState
 from backend.models.user import User
+from backend.utils.async_files import run_file_operation
 
+from . import plan_cache, plan_preparation
 from .context import owned_context, require_snapshot
 from .render import image_request, prepare_moment_prompt
-from .snapshots import REGISTRY_KEY, registry_of
+from .snapshots import MAX_NARRATION, REGISTRY_KEY, registry_of
 
 
 class SceneIllustrationRequest(BaseModel):
     message_id: str = Field(min_length=1, max_length=128)
+    refresh_plan: bool = False
 
 
 async def _try_attach(
-    db: AsyncSession, session_id: str, message_id: str, owner_id: str, snapshot: dict, url: str
+    db: AsyncSession,
+    session_id: str,
+    message_id: str,
+    owner_id: str,
+    snapshot: dict,
+    url: str,
+    details: dict | None = None,
 ) -> bool:
     state, message = await owned_context(db, session_id, message_id, owner_id)
     current = require_snapshot(state, message)
     if current.get("nonce") != snapshot.get("nonce"):
         raise HTTPException(409, "The story changed while generating. This image was not attached.")
+    if (
+        snapshot.get("plan_identity")
+        and plan_cache.token(state, message, current) != snapshot["plan_identity"]
+    ):
+        raise HTTPException(
+            409, "The scene or visual settings changed. This image was not attached."
+        )
     before = deepcopy(state.entity_states or {})
     after = deepcopy(before)
     registry = registry_of(after)
-    registry["images"][message_id] = {
+    message.illustration = {
         "image_url": url,
         "content_hash": current["content_hash"],
+        "generation_details": deepcopy(details) if details else None,
     }
+    registry["images"].pop(message_id, None)
+    registry["images"][message_id] = {"image_url": url, "content_hash": current["content_hash"]}
+    registry["images"] = dict(list(registry["images"].items())[-100:])
     after[REGISTRY_KEY] = registry
     # Compare-and-swap keeps unrelated concurrent state changes intact.
     result = await db.execute(
@@ -45,40 +72,84 @@ async def _try_attach(
         .values(entity_states=after)
         .execution_options(synchronize_session=False)
     )
-    if result.rowcount != 1:
+    if cast(CursorResult[Any], result).rowcount != 1:
         await db.rollback()
         return False
     await db.commit()
     return True
 
 
+@retry_transaction
+async def _attach_once(
+    session_id: str,
+    message_id: str,
+    owner_id: str,
+    snapshot: dict,
+    url: str,
+    details: dict | None = None,
+) -> bool:
+    async with database.AsyncSessionLocal() as db:
+        return await _try_attach(db, session_id, message_id, owner_id, snapshot, url, details)
+
+
 async def _attach(
-    db: AsyncSession, session_id: str, message_id: str, owner_id: str, snapshot: dict, url: str
+    session_id: str,
+    message_id: str,
+    owner_id: str,
+    snapshot: dict,
+    url: str,
+    details: dict | None = None,
 ) -> None:
     for _attempt in range(3):
-        if await _try_attach(db, session_id, message_id, owner_id, snapshot, url):
+        if await _attach_once(session_id, message_id, owner_id, snapshot, url, details):
             return
     raise HTTPException(409, "The session changed while attaching the illustration. Try again.")
 
 
+@traced
 async def generate_scene_illustration(
     session_id: str, payload: SceneIllustrationRequest, db: AsyncSession, user: User
 ) -> dict:
     state, message = await owned_context(db, session_id, payload.message_id, user.id)
-    snapshot = require_snapshot(state, message)
+    snapshot = {
+        **require_snapshot(state, message),
+        "narration": message.content[-MAX_NARRATION:],
+        "full_narration": message.content,
+    }
+    # The hash-verified message also repairs old snapshots that retained the beginning.
+    record("snapshot", narration=snapshot["narration"], visible_facts=snapshot["visible_facts"])
+    preferences = read_settings(state)
     request = None
     owner_id = user.id
     try:
         request, t2i = await image_request(db, state, user, snapshot)
         # The provider queue must not hold a database transaction open.
         await db.commit()
-        await prepare_moment_prompt(request)
-        url = await asyncio.wait_for(
-            MediaEngine.generate_image(**request), timeout=image_timeout(t2i)
+        details: dict = {"trace_id": current_id()} if current_id() else {}
+        details["context_mode"] = (
+            "neutral_source" if t2i.get("_nsfw_enabled") else "saved_visual_plan"
         )
+        request["provider_options"]["_generation_details"] = details
+        with collect_queries() as queries:
+            if not t2i.get("_nsfw_enabled"):
+                snapshot["plan_identity"] = await plan_preparation.prepare(
+                    request,
+                    snapshot,
+                    session_id,
+                    payload.message_id,
+                    owner_id,
+                    preferences,
+                    payload.refresh_plan,
+                )
+            else:
+                await prepare_moment_prompt(request)
+            url = await asyncio.wait_for(
+                MediaEngine.generate_image(**request), timeout=image_timeout(t2i)
+            )
+        details["queries"] = queries
         if not url:
             raise HTTPException(502, "No illustration was returned. Any previous image was kept.")
-        await _attach(db, session_id, payload.message_id, owner_id, snapshot, url)
+        await _attach(session_id, payload.message_id, owner_id, snapshot, url, details)
     except TimeoutError as exc:
         raise HTTPException(
             504, "Illustration generation timed out. A remote task may still be running."
@@ -88,6 +159,13 @@ async def generate_scene_illustration(
     except HTTPException:
         if request:
             # The unique path was created by this request, never supplied by a client.
-            Path(request["target_dir"], request["filename"]).unlink(missing_ok=True)
+            await run_file_operation(
+                Path(request["target_dir"], request["filename"]).unlink, missing_ok=True
+            )
         raise
-    return {"status": "success", "message_id": payload.message_id, "image_url": url}
+    return {
+        "status": "success",
+        "message_id": payload.message_id,
+        "image_url": url,
+        "generation_details": details or None,
+    }

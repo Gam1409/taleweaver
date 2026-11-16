@@ -1,3 +1,4 @@
+import { apiFetch } from '@/services/http'
 import { ref, watch, type Ref } from 'vue'
 import { authState } from '@/store/auth'
 import { useNotifications } from '@/composables/useNotifications'
@@ -27,7 +28,7 @@ export function useSessionContentLanguage(
     if (!gameId || languageSaving.value || !canChange()) return false
     languageSaving.value = true
     try {
-      const response = await fetch(`/api/adventures/${gameId}/content-language`, {
+      const response = await apiFetch(`/adventures/${gameId}/content-language`, { timeoutMs: null,
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',

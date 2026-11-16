@@ -28,6 +28,7 @@ def decision(**changes):
     return PlaceDecision(
         **{
             "arrival_now": True,
+            "identity_resolution": "new",
             "player_moves": True,
             "local_to_current_scene": True,
             "access_allowed": True,
@@ -268,6 +269,14 @@ async def test_known_room_can_be_reused_even_when_new_incidental_rooms_are_disab
         )
         await db.flush()
         assert (
-            await apply(manager, decision(existing_scene_id="ROOM", granularity="room")) == "ROOM"
+            await apply(
+                manager,
+                decision(
+                    existing_scene_id="ROOM",
+                    granularity="room",
+                    scene_matches=[{"scene_id": "ROOM", "score": 1.0}],
+                ),
+            )
+            == "ROOM"
         )
         assert not registry(manager.state).get("places")

@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from pydantic import ValidationError
 
+from backend.engine.visual_novel.prompts import FALLBACK_CONTEXT
 from backend.engine.visual_novel.schema import (
     MAX_ACTIVE,
     MAX_FINGERPRINTS,
@@ -257,7 +258,7 @@ async def test_failed_planner_keeps_entire_existing_state(failure):
         patch("backend.engine.visual_novel.social.GameMasterLLM.for_role", return_value=llm),
     ):
         result = await plan_interaction(manager, "Hello", [], SimpleNamespace())
-    assert "No new social outcome" in result
+    assert result == FALLBACK_CONTEXT
     assert manager.state.entity_states == before
 
 
@@ -309,7 +310,7 @@ async def test_planner_deadline_cancels_call_and_preserves_state(monkeypatch):
             cancelled.set()
 
     llm = SimpleNamespace(model="small", aexecute_complex_task=slow_call)
-    monkeypatch.setattr("backend.engine.visual_novel.social.PLANNING_TIMEOUT", 0.01)
+    monkeypatch.setattr("backend.engine.visual_novel.social.role_timeout", lambda *_: 0.01)
     with (
         patch("backend.engine.visual_novel.social._present_npcs", AsyncMock(return_value=[npc()])),
         patch(
@@ -319,7 +320,7 @@ async def test_planner_deadline_cancels_call_and_preserves_state(monkeypatch):
     ):
         result = await plan_interaction(manager, "Hello", [], SimpleNamespace())
     assert cancelled.is_set()
-    assert "No new social outcome" in result
+    assert result == FALLBACK_CONTEXT
     assert manager.state.entity_states == before
 
 

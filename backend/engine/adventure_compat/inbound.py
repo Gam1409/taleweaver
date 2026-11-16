@@ -20,6 +20,7 @@ def _check_supported_fields(result: dict[str, Any]) -> None:
         "protagonist",
         "init_script",
         "metadata",
+        "extensions",
         "id",
         *COLLECTIONS,
         *EXTENSIONS,

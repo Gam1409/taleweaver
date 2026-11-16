@@ -152,7 +152,7 @@ class SwitchService:
             code_matches = (
                 provided_code is not None
                 and str(provided_code).strip().lower() == required_code.lower()
-            ) or (lowered_prompt and required_code.lower() in lowered_prompt)
+            ) or (lowered_prompt.strip() == required_code.lower())
             if not code_matches:
                 return False, fail_msg or f"Incorrect code for {switch_name}."
 
@@ -216,4 +216,3 @@ class SwitchService:
         s_script = str(config.get("on_failure_script") or "").strip()
         if s_script:
             runner.execute_code(s_script, scope, script_id=f"switch_{switch_id}_on_failure")
-

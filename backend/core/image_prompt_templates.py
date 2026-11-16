@@ -1,21 +1,23 @@
 """Editable starting points, not guarantees for every derivative checkpoint."""
 
+from typing import Any, Literal
+
 from backend.core.image_prompt_rules import ImagePromptRules
 
 
 def _template(
-    key,
-    name,
-    format,
-    instructions,
+    key: str,
+    name: str,
+    format: Literal["tags", "hybrid", "description"],
+    instructions: str,
     *,
-    words=100,
-    prefix="",
-    suffix="",
-    negative="",
-    source="",
-    notes="",
-):
+    words: int = 100,
+    prefix: str = "",
+    suffix: str = "",
+    negative: str = "",
+    source: str = "",
+    notes: str = "",
+) -> dict[str, Any]:
     return {
         "id": key,
         "name": name,
@@ -34,6 +36,22 @@ def _template(
 
 
 TEMPLATES = [
+    _template(
+        "nova_anime_am",
+        "Nova Anime AM — visual tags",
+        "tags",
+        "Output only comma-separated visual tags, not sentences or a Tags: heading. "
+        "Use spaces within tags. Preserve subject counts, appearance, clothing, action, "
+        "environment, lighting and composition from the supplied scene. "
+        "Do not invent artist, franchise or character tags.",
+        words=140,
+        prefix="masterpiece, best quality, score_9, score_8, score_7, year 2025, newest, highres, absurdres, very aesthetic",
+        negative="worst quality, low quality, early, old, score_1, score_2, score_3, blurry, jpeg artifacts, lowres",
+        source="https://civitai.red/models/2604424?modelVersionId=3395337",
+        notes="Tag-based starting point for Nova Anime AM v6.0:2.9B. "
+        "Based on the author's recommended prompt; scene-specific tags must come from the scene. "
+        "Other Anima models may use different prompt formats.",
+    ),
     _template(
         "anima",
         "Anima — tags and description",

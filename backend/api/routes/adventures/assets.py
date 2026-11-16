@@ -3,23 +3,21 @@ import logging
 import os
 import re
 import uuid
-from io import BytesIO
 from typing import Any, Literal, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
-from PIL import Image
-from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.routes.adventures.schemas import SuggestPromptRequest, SuggestPromptResponse
 from backend.core.auth import get_current_user
-from backend.core.config import settings
 from backend.core.database import get_db
-from backend.core.visual_limits import VISUAL_LIMITS as _VISUAL_UPLOAD_LIMITS
 from backend.engine.media_engine import MediaEngine
+from backend.engine.template_avatar import get_template_avatar
 from backend.models.adventure_template import AdventureTemplate
+from backend.models.avatar import Avatar
 from backend.models.user import User
+from backend.schemas.adventure_visuals import RegenerateVisualRequest
 from backend.utils.path_security import (
     ensure_within_base_dir,
     ensure_within_data_dir,
@@ -27,60 +25,12 @@ from backend.utils.path_security import (
     sanitize_path_component,
 )
 
-_ALLOWED_MIME_TYPES = {"image/png", "image/jpeg", "image/webp"}
-
 __all__ = ["MediaEngine", "router"]
 
 router = APIRouter(prefix="/{template_id}/visuals", tags=["Assets"])
 logger = logging.getLogger(__name__)
 _SAFE_IMAGE_EXTENSIONS = {"png", "jpg", "jpeg", "webp"}
 _ALLOWED_VISUAL_TARGET_TYPES = {"cover", "scene", "npc", "object", "protagonist"}
-
-
-def _build_visual_prompt(
-    target_type: str,
-    target_obj: Any,
-    custom_prompt: Optional[str],
-    *,
-    style_instruction: Optional[str] = None,
-    tone_instruction: Optional[str] = None,
-) -> str:
-    if custom_prompt and custom_prompt.strip():
-        return custom_prompt.strip()
-
-    prompt_suffix = ""
-    if style_instruction:
-        prompt_suffix += f" Style constraints: {style_instruction}."
-    if tone_instruction:
-        prompt_suffix += f" Narrative tone reference: {tone_instruction}."
-
-    def get_attr(obj, attr, default=""):
-        if isinstance(obj, dict):
-            return obj.get(attr) or default
-        return getattr(obj, attr, None) or default
-
-    if target_type == "protagonist":
-        name = get_attr(target_obj, "name", "The protagonist")
-        role = get_attr(target_obj, "role", "adventurer")
-        description = get_attr(target_obj, "description", "A distinctive fantasy hero.")
-        return f"Portrait of character {name}, {role}. {description}. Game character art style.{prompt_suffix}"
-
-    if target_type == "scene":
-        label = get_attr(target_obj, "label") or get_attr(target_obj, "name") or "Scene"
-        description = get_attr(target_obj, "description")
-        return f"Atmospheric background: {label}. {description}. RPG visual novel style, high detail.{prompt_suffix}"
-
-    if target_type == "npc":
-        name = get_attr(target_obj, "name", "NPC")
-        description = get_attr(target_obj, "description", "A distinctive non-player character.")
-        return f"Portrait of NPC {name}. {description}. Character portrait, high detail.{prompt_suffix}"
-
-    if target_type == "object":
-        name = get_attr(target_obj, "name", "Object")
-        description = get_attr(target_obj, "description", "A detailed fantasy object.")
-        return f"Detailed illustration of object {name}. {description}. Fantasy item concept art, isolated and clearly readable.{prompt_suffix}"
-
-    raise HTTPException(status_code=400, detail="Unsupported visual target type.")
 
 
 def _sanitize_image_extension(filename: Optional[str]) -> str:
@@ -141,21 +91,13 @@ def _build_uploaded_visual_path(
     return ensure_within_base_dir(candidate_path, safe_storage_path)
 
 
-class RegenerateVisualRequest(BaseModel):
-    target_type: Literal["cover", "scene", "npc", "object", "protagonist"]
-    target_id: str
-    prompt: Optional[str] = None
-    use_advanced_model: Optional[bool] = None
-    use_current_image: bool = False
-
-
-@router.post("/regenerate")
+@router.post("/regenerate", response_model=None)
 async def regenerate_visual(
     template_id: str,
     payload: RegenerateVisualRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """Regenerate a specific owned visual, preserving the old image on failure."""
     from backend.engine.image_profiles import image_timeout
     from backend.engine.story_visual_presets import story_t2i
@@ -189,9 +131,8 @@ async def suggest_prompt(
     payload: SuggestPromptRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> SuggestPromptResponse:
     """Generate an AI prompt suggestion based on the asset's description."""
-    from backend.models.avatar import Avatar
     from backend.models.world_entity import WorldEntity, WorldScene
 
     adv = await db.get(AdventureTemplate, template_id)
@@ -212,33 +153,27 @@ async def suggest_prompt(
         name = adv.title
         description = adv.teaser or adv.original_prompt or ""
     elif payload.target_type == "protagonist":
-        av_res = await db.execute(
-            select(Avatar)
-            .where(Avatar.template_id == template_id)
-            .order_by(Avatar.created_at.asc(), Avatar.id.asc())
-            .limit(1)
-        )
-        avatar = av_res.scalars().first()
+        avatar = await get_template_avatar(db, template_id)
         if avatar:
             name = avatar.name
-            description = avatar.description
+            description = avatar.description or ""
     elif payload.target_type == "scene":
-        res = await db.execute(
+        scene_result = await db.execute(
             select(WorldScene).where(
                 WorldScene.id == payload.target_id, WorldScene.template_id == template_id
             )
         )
-        scene = res.scalars().first()
+        scene = scene_result.scalars().first()
         if scene:
             name = scene.label
             description = scene.description
     elif payload.target_type in ["npc", "object"]:
-        res = await db.execute(
+        entity_result = await db.execute(
             select(WorldEntity).where(
                 WorldEntity.id == payload.target_id, WorldEntity.template_id == template_id
             )
         )
-        entity = res.scalars().first()
+        entity = entity_result.scalars().first()
         if entity:
             name = entity.name
             description = entity.description
@@ -257,7 +192,7 @@ async def suggest_prompt(
     return SuggestPromptResponse(suggested_prompt=suggested)
 
 
-@router.post("/upload")
+@router.post("/upload", response_model=None)
 async def upload_visual(
     template_id: str,
     target_type: Literal["cover", "scene", "npc", "object", "protagonist"] = Form(...),
@@ -265,15 +200,18 @@ async def upload_visual(
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """Manually upload a visual asset."""
     if sanitize_path_component(template_id) != template_id:
         raise HTTPException(status_code=400, detail="Invalid template ID format.")
     if not target_id or sanitize_path_component(target_id) != target_id:
         raise HTTPException(status_code=400, detail="Invalid target ID format.")
 
-    from backend.models.avatar import Avatar
-    from backend.models.world_entity import WorldEntity, WorldScene
+    from backend.api.routes.adventures.visual_upload import (
+        resolve_visual_upload_target,
+        validate_visual_upload_content,
+        write_visual_upload,
+    )
 
     adv = await db.get(AdventureTemplate, template_id)
     if not adv or adv.owner_id != current_user.id:
@@ -281,122 +219,24 @@ async def upload_visual(
 
     try:
         content = await file.read()
-
-        # Validate mime type
-        if file.content_type and file.content_type not in _ALLOWED_MIME_TYPES:
-            raise HTTPException(
-                status_code=400, detail="Unsupported file type. Please use PNG, JPEG, or WEBP."
-            )
-
-        limits = _VISUAL_UPLOAD_LIMITS.get(target_type)
-        if not limits:
-            raise HTTPException(status_code=400, detail="Invalid visual target type.")
-
-        # Validate raw file bytes size first
-        if limits and len(content) > int(limits["maxBytes"]):
-            raise HTTPException(
-                status_code=400,
-                detail=f"Max file size for this asset is {int(limits['maxBytes']) // (1024 * 1024)} MB.",
-            )
-
-        # Validate image dimensions
-        try:
-            img = Image.open(BytesIO(content))
-            width, height = img.size
-        except Exception:
-            raise HTTPException(status_code=400, detail="Could not read image dimensions.")
-
-        if width > int(limits["maxWidth"]) or height > int(limits["maxHeight"]):
-            raise HTTPException(
-                status_code=400,
-                detail=(
-                    f"Max size for this asset is {limits['maxWidth']}x{limits['maxHeight']} px. "
-                    f"Uploaded image is {width}x{height} px."
-                ),
-            )
-
-        avatar = None
-        scene = None
-        entity = None
-        trusted_target_token: Optional[str] = None
-
-        if target_type == "protagonist":
-            av_res = await db.execute(
-                select(Avatar)
-                .where(Avatar.template_id == template_id)
-                .order_by(Avatar.created_at.asc(), Avatar.id.asc())
-                .limit(1)
-            )
-            avatar = av_res.scalars().first()
-            if not avatar:
-                raise HTTPException(
-                    status_code=404, detail="Protagonist not found for this adventure"
-                )
-            trusted_target_token = avatar.id
-        elif target_type == "scene":
-            sc_res = await db.execute(
-                select(WorldScene).where(
-                    WorldScene.template_id == template_id,
-                    WorldScene.session_id.is_(None),
-                    WorldScene.id == target_id,
-                )
-            )
-            scene = sc_res.scalars().first()
-            if not scene:
-                raise HTTPException(status_code=404, detail="Scene not found for this adventure")
-            trusted_target_token = scene.id
-        elif target_type in ["npc", "object"]:
-            en_res = await db.execute(
-                select(WorldEntity).where(
-                    WorldEntity.template_id == template_id,
-                    WorldEntity.session_id.is_(None),
-                    WorldEntity.id == target_id,
-                )
-            )
-            entity = en_res.scalars().first()
-            if not entity:
-                raise HTTPException(status_code=404, detail="Entity not found for this adventure")
-            trusted_target_token = entity.id
-
+        validate_visual_upload_content(content, file.content_type, target_type)
+        target = await resolve_visual_upload_target(db, adv, target_type, target_id)
+        trusted_target_token = None if target_type == "cover" else target.id
         full_path = _build_uploaded_visual_path(
             adv.id,
             target_type,
             _extension_from_content_type(file.content_type),
             trusted_target_token=trusted_target_token,
         )
-        safe_parent_dir = ensure_within_data_dir(os.path.dirname(full_path))
-        full_path = ensure_within_base_dir(full_path, safe_parent_dir)
-        # Re-verify containment at the sink so the taint analysis trusts the path.
-        data_root = os.path.realpath(settings.DATA_DIR)
-        if os.path.commonpath([os.path.realpath(full_path), data_root]) != data_root:
-            raise HTTPException(status_code=400, detail="Invalid upload path.")
-        with open(full_path, "wb") as f:
-            f.write(content)
-
-        rel_path = os.path.relpath(full_path, settings.DATA_DIR).replace("\\", "/")
-        relative_url = f"/data/{rel_path}"
-
-        if target_type == "cover":
-            adv.image_url = relative_url
-        elif target_type == "protagonist":
-            if not avatar:
-                raise HTTPException(
-                    status_code=404, detail="Protagonist not found for this adventure"
-                )
-            avatar.profile_image = relative_url
-        elif target_type == "scene":
-            if not scene:
-                raise HTTPException(status_code=404, detail="Scene not found for this adventure")
-            scene.image_url = relative_url
-        elif target_type in ["npc", "object"]:
-            if not entity:
-                raise HTTPException(status_code=404, detail="Entity not found for this adventure")
-            entity.image_url = relative_url
-
+        relative_url = write_visual_upload(full_path, content)
+        if isinstance(target, Avatar):
+            target.profile_image = relative_url
+        else:
+            target.image_url = relative_url
         await db.commit()
         return {"status": "uploaded", "target_type": target_type, "image_url": relative_url}
     except HTTPException:
         raise
-    except Exception as exc:
+    except Exception:
         logger.exception("Failed to upload visual for %s", template_id)
         raise HTTPException(status_code=500, detail="Visual upload failed.") from None

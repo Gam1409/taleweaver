@@ -264,3 +264,58 @@ async def test_empty_extraction_is_successful_and_uses_one_existing_model_call(
         assert message.npc_journal["status"] == "done"
     extract.assert_awaited_once()
     portraits.assert_not_called()
+
+
+@pytest.mark.parametrize("topic", ["general", "commitment"])
+def test_multiple_independent_facts_survive_storage_and_prompt_context(topic):
+    from backend.engine.npc_cards.presentation import recent_summary
+    from backend.engine.npc_journal.records import memory_context
+
+    npc = SimpleNamespace(metadata_json={})
+    observations = [
+        promise(topic=topic),
+        promise(topic=topic, text="Lina promised to bring a map.", evidence="I will bring a map."),
+    ]
+    record(npc, observations)
+    assert len(journal_of(npc)["entries"]) == 2
+    context = memory_context(npc)
+    for observation in observations:
+        assert observation.text in context
+    assert len(recent_summary(journal_of(npc)["entries"])) == 2
+    record(npc, [observations[0]], 2)
+    assert len(journal_of(npc)["entries"]) == 2
+
+
+def test_specific_fact_change_keeps_latest_value_in_prompt():
+    from backend.engine.npc_journal.records import memory_context
+
+    npc = SimpleNamespace(metadata_json={})
+    record(npc, [promise(topic="return_book", text="Return on Monday")])
+    record(npc, [promise(topic="return_book", text="Return on Friday")], 2)
+    context = memory_context(npc)
+    assert "Return on Friday" in context and "Return on Monday" not in context
+    assert len(journal_of(npc)["entries"]) == 2
+
+
+@pytest.mark.asyncio
+async def test_extraction_keeps_several_valid_facts_but_filters_transient_one(monkeypatch):
+    first = promise()
+    second = promise(topic="bring_map", text="A map was promised", evidence="I will bring a map")
+    transient = promise(topic="glance", significance="ephemeral", effect="none")
+    output = JournalExtraction(
+        characters=[CharacterObservation(name="Lina", observations=[first, second, transient])]
+    )
+    llm = SimpleNamespace(
+        model="test", aexecute_complex_task=AsyncMock(return_value=output.model_dump())
+    )
+    monkeypatch.setattr(extraction_module.GameMasterLLM, "for_role", lambda *_: llm)
+    result = await extraction_module.extract(
+        SimpleNamespace(default_language="English"),
+        SimpleNamespace(content_language="English", template_id="template", id="session"),
+        "message",
+        "story data",
+    )
+    assert [observation.topic for observation in result.characters[0].observations] == [
+        "promise_return_book",
+        "bring_map",
+    ]

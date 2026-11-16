@@ -203,7 +203,7 @@ async def test_unlock_exit_direct_with_guard_success(monkeypatch):
         AsyncMock(return_value=state),
     )
     monkeypatch.setattr(
-        "backend.api.routes.adventures.gameplay._resolve_session_exit",
+        "backend.engine.gameplay.unlock_targets._resolve_session_exit",
         AsyncMock(return_value=exit_obj),
     )
 
@@ -249,7 +249,7 @@ async def test_unlock_exit_direct_with_guard_failure(monkeypatch):
         AsyncMock(return_value=state),
     )
     monkeypatch.setattr(
-        "backend.api.routes.adventures.gameplay._resolve_session_exit",
+        "backend.engine.gameplay.unlock_targets._resolve_session_exit",
         AsyncMock(return_value=exit_obj),
     )
 

@@ -58,7 +58,9 @@ const emit = defineEmits<{
       <span>{{ modelCount }} models</span>
     </div>
     <p class="text-xs text-slate-400">
-      Save endpoint settings before Test Model. Select this provider for any pass and choose a detected model or Custom Model ID.
+      Select this provider for any pass and choose a detected model or Custom Model ID.
+      Discovery and Test Model use the current URL and model fields; save routing to use them during play.
+      Save changes to the API key, timeout or structured output support before testing those options.
       Detection is optional. Local servers require ALLOW_PRIVATE_NETWORK_MODELS=true.
       In Docker, use host.docker.internal where available to reach a server on the host.
     </p>

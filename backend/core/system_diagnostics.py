@@ -1,0 +1,299 @@
+"""Opt-in rotating diagnostics with separately enabled full-content records."""
+
+from __future__ import annotations
+
+import json
+import logging
+import os
+import sys
+import threading
+from collections.abc import Iterator, Mapping
+from contextlib import contextmanager
+from contextvars import ContextVar
+from datetime import datetime, timezone
+from logging.handlers import RotatingFileHandler
+from pathlib import Path
+from typing import Any
+from uuid import uuid4
+
+from typing_extensions import override
+
+from backend.core.diagnostic_fields import EVENTS, safe_error, safe_fields
+
+_context: ContextVar[dict | None] = ContextVar("system_diagnostic_context", default=None)
+MAX_BYTES = 5 * 1024 * 1024
+MAX_DETAIL_BYTES = 50 * 1024 * 1024
+BACKUP_COUNT = 4
+
+
+class MetadataHandler(logging.Handler):
+    """Discard arbitrary log text, including preformatted SQL/provider exceptions."""
+
+    def __init__(self, owner: DiagnosticService) -> None:
+        super().__init__(logging.NOTSET)
+        self.owner = owner
+
+    def emit(self, record: logging.LogRecord) -> None:
+        if not self.owner.enabled:
+            return
+        source = {
+            "file": Path(record.pathname).name,
+            "function": record.funcName,
+            "line": record.lineno,
+        }
+        error = record.exc_info[1] if record.exc_info else None
+        self.owner._write(
+            "system.log",
+            {
+                "severity": logging.getLevelName(record.levelno),
+                "source": source,
+                "error": safe_error(error) if error is not None else None,
+                **(_context.get() or {}),
+            },
+        )
+        if self.owner.capture_token() is not None and record.name.startswith("backend.engine."):
+            from backend.core.diagnostic_detail import operational_message
+
+            try:
+                message = operational_message(record.getMessage())
+            except Exception as exc:
+                message = f"[Message unavailable: {type(exc).__name__}]"
+            self.owner.detail(
+                "detail.engine.log",
+                logger=record.name,
+                source=source,
+                severity=logging.getLevelName(record.levelno),
+                message=message,
+            )
+
+
+class DiagnosticWriter(RotatingFileHandler):
+    def __init__(self, owner: DiagnosticService) -> None:
+        self.owner = owner
+        super().__init__(
+            owner.directory / "system-debug.jsonl",
+            maxBytes=MAX_BYTES,
+            backupCount=BACKUP_COUNT,
+            encoding="utf-8",
+        )
+
+    @override
+    def handleError(self, record: logging.LogRecord) -> None:
+        # Disk failures must neither fail gameplay nor dump a logging exception.
+        self.owner.write_failed = True
+
+
+class DiagnosticService:
+    def __init__(self, directory: Path):
+        self.directory = directory
+        self.enabled = False
+        self.detailed_logging = False
+        self.state_failure_traces = False
+        self.detail_epoch = 0
+        self.write_failed = False
+        self._writer: DiagnosticWriter | None = None
+        self._capture = MetadataHandler(self)
+        self._lock = threading.RLock()
+
+    def status(self) -> dict:
+        return {
+            "enabled": self.enabled,
+            "detailed_logging": self.detailed_logging,
+            "state_failure_traces": self.state_failure_traces,
+            "log_directory": "log",
+            "retention_files": BACKUP_COUNT + 1,
+            "max_file_bytes": MAX_DETAIL_BYTES if self.detailed_logging else MAX_BYTES,
+            "write_error": "Diagnostic storage is unavailable." if self.write_failed else None,
+        }
+
+    def current_context(self) -> dict:
+        return dict(_context.get() or {})
+
+    @contextmanager
+    def context(self, **fields: object) -> Iterator[None]:
+        token = _context.set({**(_context.get() or {}), **safe_fields(fields)})
+        try:
+            yield
+        finally:
+            _context.reset(token)
+
+    def initialize(self) -> None:
+        try:
+            data = json.loads((self.directory / ".system-debug.json").read_text())
+            self.set_enabled(
+                data.get("enabled") is True,
+                detailed_logging=data.get("detailed_logging") is True,
+                state_failure_traces=data.get("state_failure_traces") is True,
+                persist=False,
+            )
+        except FileNotFoundError:
+            return
+        except (OSError, ValueError, TypeError, AttributeError):
+            self.write_failed = True
+
+    def _save_setting(
+        self, enabled: bool, detailed_logging: bool = False, state_failure_traces: bool = False
+    ) -> None:
+        self.directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+        temporary = self.directory / f".system-debug-{uuid4().hex}.tmp"
+        try:
+            temporary.write_text(
+                json.dumps(
+                    {
+                        "enabled": enabled,
+                        "detailed_logging": detailed_logging,
+                        "state_failure_traces": state_failure_traces,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            os.replace(temporary, self.directory / ".system-debug.json")
+        finally:
+            temporary.unlink(missing_ok=True)
+
+    def set_enabled(
+        self,
+        enabled: bool,
+        *,
+        detailed_logging: bool = False,
+        state_failure_traces: bool = False,
+        persist: bool = True,
+    ) -> dict:
+        with self._lock:
+            detailed_logging = enabled and detailed_logging
+            state_failure_traces = enabled and state_failure_traces
+            writer = self._writer
+            if enabled and writer is None:
+                self.directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+                writer = DiagnosticWriter(self)
+                writer.setFormatter(logging.Formatter("%(message)s"))
+            try:
+                if persist:
+                    self._save_setting(enabled, detailed_logging, state_failure_traces)
+            except OSError:
+                if writer is not self._writer and writer is not None:
+                    writer.close()
+                raise
+            self._writer = writer
+            if writer is not None:
+                writer.maxBytes = MAX_DETAIL_BYTES if detailed_logging else MAX_BYTES
+            self.write_failed = False
+            self.detail_epoch += 1
+            from backend.core.state_rejection_trace import invalidate
+
+            invalidate(self)
+            self.detailed_logging = detailed_logging
+            self.state_failure_traces = state_failure_traces
+            if enabled:
+                self.enabled = True
+                logging.getLogger().addHandler(self._capture)
+                self.emit("diagnostics.enabled")
+            else:
+                self.emit("diagnostics.disabled")
+                self.close()
+            return self.status()
+
+    def close(self) -> None:
+        with self._lock:
+            logging.getLogger().removeHandler(self._capture)
+            self.enabled = False
+            self.detailed_logging = False
+            self.state_failure_traces = False
+            self.detail_epoch += 1
+            from backend.core.state_rejection_trace import invalidate
+
+            invalidate(self)
+            if self._writer is not None:
+                self._writer.close()
+                self._writer = None
+
+    def emit(self, event: str, **fields: object) -> None:
+        if not self.enabled or not isinstance(event, str) or event not in EVENTS:
+            return
+        data = {**(_context.get() or {}), **safe_fields(fields)}
+        error = fields.get("error")
+        if isinstance(error, BaseException):
+            data["error"] = safe_error(error)
+        frame = sys._getframe(1)
+        data["source"] = {
+            "file": Path(frame.f_code.co_filename).name,
+            "function": frame.f_code.co_name,
+            "line": frame.f_lineno,
+        }
+        self._write(event, data)
+
+    def detail_token(self) -> int | None:
+        return self.detail_epoch if self.enabled and self.detailed_logging else None
+
+    def capture_token(self) -> int | None:
+        return (
+            self.detail_epoch
+            if self.enabled and (self.detailed_logging or self.state_failure_traces)
+            else None
+        )
+
+    def detail(self, event: str, *, token: int | None = None, **payload: object) -> None:
+        """Explicit business payloads only; ordinary emit/HTTP/SQL logs stay metadata-only."""
+        with self._lock:
+            if self.capture_token() is None or (token is not None and token != self.detail_epoch):
+                return
+            from backend.core.diagnostic_detail import entries
+            from backend.core.state_rejection_trace import record
+
+            try:
+                record(self, event, payload, self.current_context())
+                if self.detailed_logging:
+                    for data in entries(payload):
+                        self._write(event, {**self.current_context(), **data}, capture=False)
+            except Exception:
+                self.write_failed = True
+
+    def http_event(self, event: str, scope: Mapping[str, Any], **fields: object) -> None:
+        if not self.enabled or event not in EVENTS:
+            return
+        data = {**(_context.get() or {}), **safe_fields(fields)}
+        route = scope.get("route")
+        # The registered route pattern is code, never the user's path/query.
+        data["route"] = getattr(route, "path", "<unmatched>")
+        data.update(safe_fields(scope.get("path_params", {})))
+        error = fields.get("error")
+        if isinstance(error, BaseException):
+            data["error"] = safe_error(error)
+        self._write(event, data)
+
+    def _write(self, event: str, data: dict, *, capture: bool = True) -> None:
+        with self._lock:
+            if not self.enabled or self._writer is None:
+                return
+            if capture and self.state_failure_traces:
+                from backend.core.state_rejection_trace import record as record_capture
+
+                payload = dict(data)
+                if event == "db.transaction":
+                    # SQLAlchemy transaction hooks run before the DBAPI action.
+                    # Observing COMMIT here does not establish persisted success.
+                    payload["transaction_observation"] = "attempted"
+                try:
+                    record_capture(self, event, payload, self.current_context())
+                except Exception:
+                    self.write_failed = True
+            entry = {"timestamp": datetime.now(timezone.utc).isoformat(), "event": event, **data}
+            record = logging.LogRecord(
+                "system_diagnostics",
+                logging.INFO,
+                "",
+                0,
+                json.dumps(entry, ensure_ascii=True),
+                (),
+                None,
+            )
+            try:
+                # Do not use logger propagation: this record is already sanitized.
+                self._writer.emit(record)
+            except OSError:
+                self.write_failed = True
+
+
+service = DiagnosticService(
+    Path(os.environ.get("TALEWEAVER_LOG_DIR") or Path(__file__).resolve().parents[2] / "log")
+)

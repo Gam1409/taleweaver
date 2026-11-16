@@ -23,6 +23,7 @@ Usage:
 import argparse
 import asyncio
 import json
+import logging
 import os
 import sys
 from pathlib import Path
@@ -34,11 +35,17 @@ if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
 if sys.platform == "win32":
-    try:
-        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
-    except Exception:
-        pass
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if not callable(reconfigure):
+            continue
+        try:
+            reconfigure(encoding="utf-8", errors="replace")
+        except (OSError, ValueError) as error:
+            logging.getLogger(__name__).warning(
+                "Could not configure console UTF-8 output (%s). Keeping the existing encoding.",
+                type(error).__name__,
+            )
 
 from sqlalchemy import desc, func, select, text
 
@@ -54,6 +61,7 @@ from backend.models.session_checkpoint import SessionCheckpoint
 from backend.models.session_state import SessionState
 from backend.models.user import User
 from backend.models.world_entity import WorldEntity, WorldExit, WorldScene
+from backend.utils.async_files import run_file_operation
 
 
 def _format_json(data: Any) -> str:
@@ -113,6 +121,49 @@ def _print_kv(key: str, value: Any, indent: int = 2):
 # -----------------------------------------------------------------------------
 
 
+def _disk_status(db_path):
+    # Files on disk
+    files_info: dict[str, Any] = {}
+    if db_path and db_path.exists():
+        files_info["database_file"] = {
+            "path": str(db_path),
+            "size_bytes": db_path.stat().st_size,
+            "size_formatted": _format_bytes(db_path.stat().st_size),
+        }
+        for ext in ["-wal", "-shm"]:
+            sidecar = Path(str(db_path) + ext)
+            if sidecar.exists():
+                files_info[f"database{ext}"] = {
+                    "path": str(sidecar),
+                    "size_bytes": sidecar.stat().st_size,
+                    "size_formatted": _format_bytes(sidecar.stat().st_size),
+                }
+
+    # Data directory breakdown
+    data_dir = Path(PROJECT_ROOT) / settings.DATA_DIR
+    dirs_info: dict[str, Any] = {}
+    subdirs = [
+        "adventures/library",
+        "adventures/sessions",
+        "characters",
+        "audio",
+        "logs",
+        "presets/adventures",
+        "imports/adventures",
+    ]
+    for sub in subdirs:
+        target = data_dir / sub
+        if target.exists():
+            b, c = _get_dir_size(target)
+            dirs_info[sub] = {
+                "bytes": b,
+                "formatted": _format_bytes(b),
+                "count": c,
+            }
+
+    return files_info, dirs_info
+
+
 async def cmd_db_status(args):
     db_url = settings.DATABASE_URL
     db_path = None
@@ -163,44 +214,7 @@ async def cmd_db_status(args):
         except Exception:
             calc_size = 0
 
-    # Files on disk
-    files_info: dict[str, Any] = {}
-    if db_path and db_path.exists():
-        files_info["database_file"] = {
-            "path": str(db_path),
-            "size_bytes": db_path.stat().st_size,
-            "size_formatted": _format_bytes(db_path.stat().st_size),
-        }
-        for ext in ["-wal", "-shm"]:
-            sidecar = Path(str(db_path) + ext)
-            if sidecar.exists():
-                files_info[f"database{ext}"] = {
-                    "path": str(sidecar),
-                    "size_bytes": sidecar.stat().st_size,
-                    "size_formatted": _format_bytes(sidecar.stat().st_size),
-                }
-
-    # Data directory breakdown
-    data_dir = Path(PROJECT_ROOT) / settings.DATA_DIR
-    dirs_info: dict[str, Any] = {}
-    subdirs = [
-        "adventures/library",
-        "adventures/sessions",
-        "characters",
-        "audio",
-        "logs",
-        "presets/adventures",
-        "imports/adventures",
-    ]
-    for sub in subdirs:
-        target = data_dir / sub
-        if target.exists():
-            b, c = _get_dir_size(target)
-            dirs_info[sub] = {
-                "bytes": b,
-                "formatted": _format_bytes(b),
-                "count": c,
-            }
+    files_info, dirs_info = await run_file_operation(_disk_status, db_path)
 
     if args.json:
         print(
@@ -219,13 +233,14 @@ async def cmd_db_status(args):
         return
 
     _print_header("TaleWeaver Database & Storage Status")
-    if db_path and db_path.exists():
-        _print_kv("Database File", f"{db_path} ({_format_bytes(db_path.stat().st_size)})")
+    if "database_file" in files_info:
+        info = files_info["database_file"]
+        _print_kv("Database File", f"{info['path']} ({info['size_formatted']})")
         for ext in ["-wal", "-shm"]:
-            sidecar = Path(str(db_path) + ext)
-            if sidecar.exists():
+            info = files_info.get(f"database{ext}")
+            if info:
                 _print_kv(
-                    f"Sidecar ({ext})", f"{sidecar.name} ({_format_bytes(sidecar.stat().st_size)})"
+                    f"Sidecar ({ext})", f"{Path(info['path']).name} ({info['size_formatted']})"
                 )
     else:
         _print_kv("Database URL", db_url)
@@ -237,6 +252,7 @@ async def cmd_db_status(args):
     for tbl, cnt in counts.items():
         _print_kv(tbl, cnt)
 
+    data_dir = Path(PROJECT_ROOT) / settings.DATA_DIR
     _print_header(f"Data Directory Storage ({data_dir.name}/)", char="-")
     for sdir, info in dirs_info.items():
         _print_kv(sdir, f"{info['formatted']} ({info['count']} files)")
@@ -565,10 +581,10 @@ async def cmd_show_adventure(args):
             _print_header(f"Exits & Passages ({len(exits)})", char="-")
             for x in exits:
                 lock_tag = "\033[1;31m[LOCKED]\033[0m" if x.is_locked else "\033[1;32m[OPEN]\033[0m"
-                exit_label = getattr(x, "exit_type", None) or getattr(x, "direction", None) or "path"
-                print(
-                    f"  • {x.from_scene_id} -> {x.to_scene_id} ({exit_label}) {lock_tag}"
+                exit_label = (
+                    getattr(x, "exit_type", None) or getattr(x, "direction", None) or "path"
                 )
+                print(f"  • {x.from_scene_id} -> {x.to_scene_id} ({exit_label}) {lock_tag}")
                 if x.is_locked:
                     if x.item_to_unlock:
                         print(f"    Key Item: {x.item_to_unlock}")

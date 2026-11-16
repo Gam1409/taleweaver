@@ -1,0 +1,18 @@
+{
+  "case": "forty_turn_state_changes",
+  "turns": 40,
+  "prompt_tokens_qwen3": 3478,
+  "expected": {
+    "WOUND": "open",
+    "RIN_COAT": "clean",
+    "MIKI_COAT": "dirty",
+    "TUBE_FLUID": "present",
+    "RIN_LOCATION": "corridor",
+    "MIKI_LOCATION": "corridor",
+    "PLAYER_LOCATION": "corridor"
+  },
+  "required_updates": 1,
+  "max_context_length": 4096,
+  "max_output_tokens": 256,
+  "error": "TimeoutError: Horde did not complete within 100 seconds; canceled"
+}

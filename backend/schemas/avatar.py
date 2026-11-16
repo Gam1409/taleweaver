@@ -2,8 +2,10 @@ from typing import Any, Optional
 
 from pydantic import BaseModel
 
+from backend.schemas.character_identity import CharacterIdentityFields
 
-class AvatarBase(BaseModel):
+
+class AvatarBase(CharacterIdentityFields):
     name: str
     role: Optional[str] = None
     description: Optional[str] = None
@@ -22,8 +24,10 @@ class AvatarBase(BaseModel):
     equipment: Optional[dict[str, Any]] = None
     status_effects: Optional[list[str]] = None
 
+
 class AvatarCreate(AvatarBase):
     user_id: str
+
 
 class AvatarUpdate(BaseModel):
     name: Optional[str] = None
@@ -41,11 +45,13 @@ class AvatarUpdate(BaseModel):
     equipment: Optional[dict[str, Any]] = None
     status_effects: Optional[list[str]] = None
 
+
 class AvatarInDBBase(AvatarBase):
     id: str
     user_id: str
 
     model_config = {"from_attributes": True}
+
 
 class Avatar(AvatarInDBBase):
     pass

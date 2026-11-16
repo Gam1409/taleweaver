@@ -85,14 +85,19 @@ def test_sync_and_structured_routing(monkeypatch, local_policy, key):
 
 
 @pytest.mark.asyncio
-async def test_async_and_streaming_routing(monkeypatch, local_policy):
+@pytest.mark.parametrize("serialized", [False, True])
+async def test_async_and_streaming_routing(monkeypatch, local_policy, serialized):
+    monkeypatch.setattr(settings, "INFERENCE_SERIALIZATION_ENABLED", serialized)
     router = make_router()
     captured = []
 
     async def chunks():
         yield SimpleNamespace(
             choices=[
-                SimpleNamespace(delta=SimpleNamespace(content="hello", reasoning_content=None))
+                SimpleNamespace(
+                    delta=SimpleNamespace(content="hello", reasoning_content=None),
+                    finish_reason="stop",
+                )
             ]
         )
 
@@ -393,12 +398,14 @@ def test_explicit_structured_output_capability(local_policy, mode):
         value: int
 
     request = router._build_structured_request("sys", "hello", Answer, "vendor/model")
-    assert "SCHEMA:" in request.system_prompt
+    assert ("SCHEMA:" in request.system_prompt) is (mode != "json_schema")
     if mode == "prompt":
         assert "response_format" not in request.kwargs
         return
     assert request.kwargs["response_format"]["type"] == mode
     if mode == "json_schema":
-        assert (
-            request.kwargs["response_format"]["json_schema"]["schema"] == Answer.model_json_schema()
-        )
+        assert request.kwargs["response_format"]["json_schema"]["schema"] == {
+            "type": "object",
+            "properties": {"value": {"type": "integer"}},
+            "required": ["value"],
+        }

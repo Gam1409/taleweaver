@@ -1,10 +1,15 @@
 <script setup lang="ts">
-import { computed, ref, watch, nextTick } from 'vue'
+import { useAuthoringTheme } from '@/composables/useAuthoringTheme'
+import EditorNavigation from '@/components/editor/EditorNavigation.vue'
+import type { ClothingDraft } from '@/services/clothingAuthoring'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { adventureService } from '@/services/adventureService'
+import type { LivingWorldPreferences } from '@/services/livingWorld'
 import { visualService } from '@/services/visualService'
 import type { VisualKind } from '@/services/visualService'
 import { entityService } from '@/services/entityService'
+import { characterResourceFields, createEntityPayload, switchScriptFields } from '@/services/entityAuthoringPayload'
 import { notificationService } from '@/services/notificationService'
 import { useEntityTransfer } from '@/composables/useEntityTransfer'
 
@@ -12,14 +17,21 @@ import { useEntityTransfer } from '@/composables/useEntityTransfer'
 
 // Components
 import EditorHeader from '@/components/editor/EditorHeader.vue'
-import { Save, X, Trash2, ArrowLeft } from 'lucide-vue-next'
+
 import WorldTab from '@/components/editor/WorldTab.vue'
+import LivingWorldTab from '@/components/editor/LivingWorldTab.vue'
+import type { ChpmSettings } from '@/composables/useChpmSettings'
 import SequencesSection from '@/components/editor/SequencesSection.vue'
 import ProtagonistTab from '@/components/editor/ProtagonistTab.vue'
 import ItemsTab from '@/components/editor/ItemsTab.vue'
+import ItemCreateDialog from '@/components/editor/ItemCreateDialog.vue'
+import NpcCreateDialog from '@/components/editor/NpcCreateDialog.vue'
+import type { ItemDraft } from '@/services/itemGeneration'
+import { itemDraftFields } from '@/services/itemDraftFields'
 import MoveItemToSceneModal from '@/components/editor/MoveItemToSceneModal.vue'
 import VisualsTab from '@/components/editor/VisualsTab.vue'
 import ToneTab from '@/components/editor/ToneTab.vue'
+import WorldBriefEditor from '@/components/editor/WorldBriefEditor.vue'
 import InhabitantsTab from '@/components/editor/InhabitantsTab.vue'
 import ScenesTab from '@/components/editor/ScenesTab.vue'
 import MapTab from '@/components/editor/MapTab.vue'
@@ -29,35 +41,27 @@ import ScriptsTab from '@/components/editor/ScriptsTab.vue'
 import AdvancedTab from '@/components/editor/AdvancedTab.vue'
 import ValidationTab from '@/components/editor/ValidationTab.vue'
 import EntityTooltip from '@/components/editor/EntityTooltip.vue'
-import NotificationToast from '@/components/editor/NotificationToast.vue'
 import EditEntityModal from '@/components/editor/EditEntityModal.vue'
 import ItemTypeSelectorModal from '@/components/editor/ItemTypeSelectorModal.vue'
 import AddExistingItemModal from '@/components/editor/AddExistingItemModal.vue'
 import ManualVisionModal from '@/components/editor/ManualVisionModal.vue'
+import { useManualVision } from '@/composables/useManualVision'
 import DataDebugModal from '@/components/editor/DataDebugModal.vue'
 import CreateSceneForm from '@/components/editor/CreateSceneForm.vue'
 import SceneRoutePanel from '@/components/editor/SceneRoutePanel.vue'
 import ExitRoutePanel from '@/components/editor/ExitRoutePanel.vue'
 import EditExitModal from '@/components/editor/EditExitModal.vue'
 import NpcCombatModal from '@/components/editor/NpcCombatModal.vue'
+import ProtagonistImportConfirmDialog from '@/components/editor/ProtagonistImportConfirmDialog.vue'
 
 // Utilities
-import { 
-  fixNewlines, 
-  isNpcEntity, 
-  isObjectEntity, 
-  mergeUniqueById, 
-  formatBytes,
-  makeSafeFilename,
-  getImageExtension,
-  itemTypePrefix,
-  buildPrefixedEditorId,
-  sanitizeEditorIdToken,
-} from '@/utils/editor_utils'
+import { fixNewlines, isNpcEntity, isObjectEntity, mergeUniqueById, formatBytes, makeSafeFilename, getImageExtension, itemTypePrefix, sanitizeEditorIdToken } from '@/utils/editor_utils'
 
 const props = defineProps<{
   adventureId: string
 }>()
+
+useAuthoringTheme()
 
 const router = useRouter()
 const route = useRoute()
@@ -69,7 +73,7 @@ const isBatchGenerating = ref<Record<string, boolean>>({})
 const isGeneratingField = ref<Record<string, boolean>>({})
 const activeAbortControllers = ref<Map<string, AbortController>>(new Map())
 const isGenerating = computed(() => {
-  return isRegenerating.value || 
+  return isRegenerating.value || isSuggestingPrompt.value ||
          Object.values(isQuickGenerating.value).some(Boolean) || 
          Object.values(isBatchGenerating.value).some(Boolean)
 })
@@ -82,13 +86,34 @@ const createEntitySceneId = ref<string | null>(null)
 const createEntityType = ref<'npc' | 'object' | null>(null)
 const pendingProtagonistAssignment = ref<{ type: 'equipment' | 'inventory'; key?: string; index?: number } | null>(null)
 const showItemTypeSelector = ref(false)
-const itemTypeSelectorSceneLabel = ref('')
+const showItemCreateDialog = ref(false)
+const showNpcCreateDialog = ref(false)
+watch(() => props.adventureId, () => { showNpcCreateDialog.value = false })
+const itemCreateInitialScene = ref<string | null>(null)
+watch(() => props.adventureId, () => { showItemCreateDialog.value = false })
+
+function openItemCreateDialog(sceneId: string | null) {
+  itemCreateInitialScene.value = sceneId || debugData.value?.adventure?.start_scene_id || null
+  showItemCreateDialog.value = true
+}
+
+function reviewNewItem(draft: ItemDraft, sceneId: string) {
+  if (!editorScenes.value.some(scene => scene.id === sceneId)) {
+    addNotification('The selected location is no longer available. Choose another location.', 'error')
+    return
+  }
+  createEntitySceneId.value = sceneId
+  handleItemTypeSelected(draft.item_type)
+  Object.assign(editForm.value, itemDraftFields(draft))
+  showItemCreateDialog.value = false
+}
+
 const showAddExistingItemModal = ref(false)
 const addExistingItemKind = ref<'items' | 'switch' | 'container' | 'text-log' | 'npc'>('items')
 const showExitModal = ref(false)
 const isCreateExitMode = ref(false)
 const activeEditExitId = ref<string | null>(null)
-const exitModalForm = ref({
+const emptyExitForm = () => ({
   from_scene_id: '',
   to_scene_id: '',
   label: '',
@@ -107,8 +132,20 @@ const exitModalForm = ref({
   on_unlock_failure_script: '',
   on_unlock_failure_text: '',
 })
+const exitModalForm = ref(emptyExitForm())
 
-const editForm = ref({
+type EntityEditorForm = InstanceType<typeof EditEntityModal>['$props']['initialForm'] & {
+  on_pickup_script?: string; on_pickup_text?: string
+  on_drop_script?: string; on_drop_text?: string
+  on_equip_script?: string; on_equip_text?: string
+  on_unequip_script?: string; on_unequip_text?: string
+  on_enter_scene_script?: string; on_enter_scene_text?: string
+  on_open_exit_script?: string; on_open_exit_text?: string
+  on_exit_used_script?: string; on_exit_used_text?: string
+  on_defeat_script?: string; on_defeat_text?: string
+  on_protagonist_enters_scene_script?: string; on_protagonist_enters_scene_text?: string
+}
+const editForm = ref<EntityEditorForm>({
   name: '',
   teaser: '',
   description: '',
@@ -117,6 +154,9 @@ const editForm = ref({
   mana: 0,
   goal: '',
   character: '',
+  gender: null as string | null,
+    age_years: null as number | null,
+    personality_profile: {} as Record<string, string>,
   is_killable: true,
   item_type: 'DEFAULT',
   is_portable: true,
@@ -128,6 +168,7 @@ const editForm = ref({
   text_log_format: 'DOCUMENT',
   entity_id: '',
   wearable_slots_input: [] as string[],
+  clothing: null as ClothingDraft | null,
   combination_ingredients_input: [] as string[],
   reveal_rule: '',
   is_hidden: false,
@@ -282,6 +323,9 @@ function openCreateNpc(targetSceneId?: string) {
     mana: 20,
     goal: '',
     character: '',
+    gender: null as string | null,
+    age_years: null as number | null,
+    personality_profile: {} as Record<string, string>,
     is_killable: true,
     moveable: false,
     allowed_scenes_input: [],
@@ -296,6 +340,7 @@ function openCreateNpc(targetSceneId?: string) {
     text_log_format: 'DOCUMENT',
     entity_id: candidateId,
     wearable_slots_input: [],
+    clothing: null,
     combination_ingredients_input: [],
     reveal_rule: '',
     is_hidden: false,
@@ -358,6 +403,9 @@ function handleItemTypeSelected(itemType: string, isFixed = false, preselectedSl
     mana: 0,
     goal: '',
     character: '',
+    gender: null as string | null,
+    age_years: null as number | null,
+    personality_profile: {} as Record<string, string>,
     is_killable: true,
     item_type: itemType,
     is_portable: String(itemType).toUpperCase() !== 'SWITCH',
@@ -369,6 +417,7 @@ function handleItemTypeSelected(itemType: string, isFixed = false, preselectedSl
     text_log_format: 'DOCUMENT',
     entity_id: defaultId,
     wearable_slots_input: preselectedSlots,
+    clothing: null,
     combination_ingredients_input: [],
     reveal_rule: '',
     is_hidden: false,
@@ -391,13 +440,7 @@ function closeExitEditModal() {
   showExitModal.value = false
   isCreateExitMode.value = false
   activeEditExitId.value = null
-  exitModalForm.value = {
-    from_scene_id: '',
-    to_scene_id: '',
-    label: '',
-    exit_type: 'one_way',
-    lock_description: '',
-  }
+  exitModalForm.value = emptyExitForm()
 }
 
 const adventure = ref<any>(null)
@@ -407,18 +450,23 @@ const isSaving = ref(false)
 const errorMsg = ref('')
 const promptError = ref('')
 const showDebug = ref(false)
-const activeTab = ref<'world' | 'sequences' | 'protagonist' | 'items' | 'visuals' | 'inhabitants' | 'scenes' | 'map' | 'quest' | 'awards' | 'scripts' | 'tone' | 'advanced' | 'validation'>('world')
-const sceneEditorReturnTab = ref<'world' | 'sequences' | 'protagonist' | 'items' | 'visuals' | 'inhabitants' | 'scenes' | 'map' | 'quest' | 'awards' | 'scripts' | 'tone' | 'advanced' | 'validation'>('scenes')
-const exitEditorReturnTab = ref<'world' | 'sequences' | 'protagonist' | 'items' | 'visuals' | 'inhabitants' | 'scenes' | 'map' | 'quest' | 'awards' | 'scripts' | 'tone' | 'advanced' | 'validation'>('map')
+const activeTab = ref<'world' | 'sequences' | 'protagonist' | 'items' | 'visuals' | 'inhabitants' | 'scenes' | 'map' | 'quest' | 'awards' | 'scripts' | 'tone' | 'advanced' | 'validation' | 'living-world'>('world')
+const sceneEditorReturnTab = ref<'world' | 'sequences' | 'protagonist' | 'items' | 'visuals' | 'inhabitants' | 'scenes' | 'map' | 'quest' | 'awards' | 'scripts' | 'tone' | 'advanced' | 'validation' | 'living-world'>('scenes')
+const exitEditorReturnTab = ref<'world' | 'sequences' | 'protagonist' | 'items' | 'visuals' | 'inhabitants' | 'scenes' | 'map' | 'quest' | 'awards' | 'scripts' | 'tone' | 'advanced' | 'validation' | 'living-world'>('map')
 
 const selectedVisual = ref<{ kind: VisualKind; id: string; label: string; description: string; hint: string } | null>(null)
 const selectedUploadTarget = ref<{ kind: VisualKind; id: string; label: string } | null>(null)
 const visualPrompt = ref('')
 const showPromptDialog = ref(false)
-const isRegenerating = ref(false)
-const isSuggestingPrompt = ref(false)
 const useAdvancedModel = ref(false)
 const useCurrentImage = ref(false)
+const { isRegenerating, isSuggestingPrompt, error: manualVisionError,
+  regenerate: regenerateVisual, suggest: suggestPrompt, cancel: closeManualVision } = useManualVision({
+  adventureId: () => props.adventureId, target: selectedVisual, open: showPromptDialog,
+  prompt: visualPrompt, advanced: useAdvancedModel, reference: useCurrentImage,
+  controllers: activeAbortControllers,
+  refresh: fetchDebugInfo, notify: addNotification,
+})
 const showRegenerateAllConfirmDialog = ref(false)
 const pendingBatchRegeneration = ref<{ kind: string; missingOnly: boolean } | null>(null)
 type PendingDeleteTarget = {
@@ -448,11 +496,9 @@ const tooltipAlignTop = ref(false)
 const windowHeight = ref(typeof window !== 'undefined' ? window.innerHeight : 1000)
 const windowWidth = ref(typeof window !== 'undefined' ? window.innerWidth : 1000)
 
-if (typeof window !== 'undefined') {
-  window.addEventListener('resize', () => {
-    windowHeight.value = window.innerHeight
-    windowWidth.value = window.innerWidth
-  })
+function updateViewportSize() {
+  windowHeight.value = window.innerHeight
+  windowWidth.value = window.innerWidth
 }
 
 function toggleMenu(id: string, event: MouseEvent) {
@@ -465,9 +511,15 @@ function toggleMenu(id: string, event: MouseEvent) {
   }
 }
 
+function dismissMenu() {
+  activeMenuId.value = null
+}
 if (typeof window !== 'undefined') {
-  window.addEventListener('click', () => {
-    activeMenuId.value = null
+  window.addEventListener('resize', updateViewportSize)
+  window.addEventListener('click', dismissMenu)
+  onBeforeUnmount(() => {
+    window.removeEventListener('resize', updateViewportSize)
+    window.removeEventListener('click', dismissMenu)
   })
 }
 
@@ -477,6 +529,7 @@ const availableVoices = ref<Array<{ name: string; gender?: string; description?:
 
 const editorTabs = [
   { key: 'world', label: 'World' },
+  { key: 'living-world', label: 'Living World' },
   { key: 'sequences', label: 'Sequences' },
   { key: 'protagonist', label: 'Protagonist' },
   { key: 'map', label: 'Map' },
@@ -536,7 +589,7 @@ function getTabLabel(key: string): string {
 }
 
 // Use notification service
-const notifications = notificationService.all
+
 
 function addNotification(message: string, type: 'error' | 'success' | 'info' = 'info') {
   notificationService.add(message, type)
@@ -631,6 +684,11 @@ const form = ref({
   license_url: '',
   original_prompt: '',
   rule_enforcement_mode: 'rpg' as 'rpg' | 'story' | 'chat' | 'vn',
+  living_world_settings: null as LivingWorldPreferences | null,
+  npc_personality_settings: null as ChpmSettings | null,
+  detailed_clothing: false,
+  nsfw_enabled: false,
+  nsfw_level: 'soft' as 'soft' | 'medium' | 'hard',
   time_per_turn: 5,
   max_time_per_turn: null as number | null,
   max_memory_turns: 10,
@@ -831,7 +889,12 @@ async function fetchAdventure() {
     form.value.license = data.license || ''
     form.value.license_url = data.license_url || ''
     form.value.original_prompt = data.original_prompt || ''
+    form.value.living_world_settings = data.living_world_settings ? { ...data.living_world_settings } : null
+    form.value.npc_personality_settings = data.npc_personality_settings ? { ...data.npc_personality_settings, actor_ids: [...data.npc_personality_settings.actor_ids] } : null
     form.value.rule_enforcement_mode = (data.rule_enforcement_mode as 'rpg' | 'story' | 'chat' | 'vn') || 'rpg'
+    form.value.detailed_clothing = data.detailed_clothing === true
+    form.value.nsfw_enabled = data.nsfw_enabled === true
+    form.value.nsfw_level = (data.nsfw_level as 'soft' | 'medium' | 'hard') || 'soft'
     form.value.time_per_turn = data.time_per_turn || 5
     form.value.max_time_per_turn = data.max_time_per_turn !== undefined ? data.max_time_per_turn : null
     form.value.max_memory_turns = typeof data.max_memory_turns === 'number' ? data.max_memory_turns : 10
@@ -917,14 +980,14 @@ async function fetchAdventure() {
     form.value.selected_style_id = Array.isArray(data.selected_image_styles) && data.selected_image_styles.length > 0 
       ? (typeof data.selected_image_styles[0] === 'string' ? data.selected_image_styles[0] : data.selected_image_styles[0].id)
       : ''
-    let rawTone = data.selected_tone
+    const rawTone = data.selected_tone
     if (rawTone && typeof rawTone === 'object') {
       form.value.selected_tone_id = rawTone.id || rawTone.name || ''
     } else if (typeof rawTone === 'string' && rawTone.startsWith('{')) {
       try {
         const obj = JSON.parse(rawTone)
         form.value.selected_tone_id = obj.id || obj.name || rawTone
-      } catch (e) {
+      } catch {
         form.value.selected_tone_id = rawTone
       }
     } else {
@@ -938,15 +1001,20 @@ async function fetchAdventure() {
   }
 }
 
-const { exportEntity, importEntity } = useEntityTransfer(() => props.adventureId, fetchDebugInfo)
+const { exportEntity, importEntity, isProtagonistImportPending, confirmProtagonistImport, cancelProtagonistImport } = useEntityTransfer(() => props.adventureId, fetchDebugInfo)
 
+let debugInfoRevision = 0
 async function fetchDebugInfo() {
+  const revision = ++debugInfoRevision
+  const adventureId = props.adventureId
   if (!props.adventureId) return
   try {
-    const payload = await adventureService.fetchDebugInfo(props.adventureId)
+    const payload = await adventureService.fetchDebugInfo(adventureId)
+    if (revision !== debugInfoRevision || adventureId !== props.adventureId) return
     debugData.value = adventureService.normalizeDebugPayload(payload)
     visualsCacheVersion.value += 1
   } catch (error) {
+    if (revision !== debugInfoRevision || adventureId !== props.adventureId) return
     console.error('Failed to fetch debug info:', error)
     debugData.value = null
     errorMsg.value = 'Failed to load world assets/debug data.'
@@ -1025,6 +1093,9 @@ function openTextEdit(type: string, id: string, currentName: string, currentDesc
     mana: mana ?? 0,
     goal: goal || '',
     character: character || '',
+    gender: (type === 'protagonist' ? debugData.value?.protagonist?.gender : selectedNpc?.gender) ?? null,
+    age_years: (type === 'protagonist' ? debugData.value?.protagonist?.age_years : selectedNpc?.age_years) ?? null,
+    personality_profile: { ...(selectedNpc?.metadata_json?.personality_profile || {}) },
     is_killable: isKillable ?? true,
     moveable: selectedNpc?.moveable != null ? Boolean(selectedNpc.moveable) : (String(selectedNpc?.movement_type || '').toUpperCase() === 'MOVABLE'),
     allowed_scenes_input: Array.isArray(selectedNpc?.allowed_scenes) ? [...selectedNpc.allowed_scenes] : [],
@@ -1043,6 +1114,7 @@ function openTextEdit(type: string, id: string, currentName: string, currentDesc
     text_log_format: String(metadata?.text_log_format || selectedObject?.text_log_format || 'DOCUMENT').trim().toUpperCase(),
     entity_id: String(selectedObject?.id || selectedNpc?.id || selectedScene?.id || id || ''),
     wearable_slots_input: selectedObject?.wearable_slots || [],
+    clothing: selectedObject?.metadata_json?.clothing ? JSON.parse(JSON.stringify(selectedObject.metadata_json.clothing)) : null,
     combination_ingredients_input: Array.isArray(selectedObject?.combination_ingredients)
       ? [...selectedObject.combination_ingredients]
       : (metadata?.combination_ingredients ? [...metadata.combination_ingredients] : []),
@@ -1055,6 +1127,7 @@ function openTextEdit(type: string, id: string, currentName: string, currentDesc
     switch_states_json: JSON.stringify(selectedObject?.switch_states || metadata?.switch?.states || metadata?.switch_states || [], null, 2),
     switch_initial_state: String(selectedObject?.switch_initial_state || metadata?.switch?.initial_state || metadata?.switch_initial_state || ''),
     switch_transitions_json: JSON.stringify(selectedObject?.switch_transitions || metadata?.switch?.transitions || metadata?.switch_transitions || [], null, 2),
+    ...switchScriptFields(selectedObject),
     effects_hp: selectedObject?.effects?.hp || metadata?.effects?.hp || 0,
     effects_stamina: selectedObject?.effects?.stamina || metadata?.effects?.stamina || 0,
     effects_mana: selectedObject?.effects?.mana || metadata?.effects?.mana || 0,
@@ -1129,7 +1202,7 @@ async function saveEntityText(data: any) {
       return
     }
 
-    let candidateId = String(data.entity_id || '').trim().toUpperCase()
+    const candidateId = String(data.entity_id || '').trim().toUpperCase()
     if (!candidateId) {
       addNotification('Entity ID is required.', 'error')
       return
@@ -1148,89 +1221,12 @@ async function saveEntityText(data: any) {
     isSavingText.value = true
     promptError.value = ''
     try {
-      if (creationType === 'npc') {
-        await entityService.createEntity(props.adventureId, {
-          entity_id: candidateId,
-          entity_type: 'NPC',
-          scene_id: sceneId,
-          name: entityName,
-          description: entityDescription,
-          hp: Number(data.hp || 20),
-          stamina: Number(data.stamina || 20),
-          mana: Number(data.mana || 20),
-          goal: String(data.goal || '').trim() || undefined,
-          character: String(data.character || '').trim() || undefined,
-          is_killable: Boolean(data.is_killable),
-          moveable: Boolean(data.moveable),
-          allowed_scenes: data.allowed_scenes || [],
-          notes: String(data.notes || '').trim() || undefined,
-          is_hidden: Boolean(data.is_hidden),
-          reveal_rule: String(data.reveal_rule || '').trim() || undefined,
-          spatial_position: String(data.spatial_position || '').trim() || undefined,
-          inventory: data.inventory || [],
-          on_defeat_script: data.on_defeat_script || undefined,
-          on_defeat_text: data.on_defeat_text || undefined,
-          on_protagonist_enters_scene_script: data.on_protagonist_enters_scene_script || undefined,
-          on_protagonist_enters_scene_text: data.on_protagonist_enters_scene_text || undefined,
-        })
-      } else {
-        const itemType = String(data.item_type || 'DEFAULT').toUpperCase()
-        if (itemType === 'READABLE' && !String(data.text_log_content || '').trim()) {
-          addNotification('Readable items require text-log content.', 'error')
-          return
-        }
-
-        const createPayload: any = {
-          entity_id: candidateId,
-          entity_type: 'OBJECT',
-          scene_id: sceneId,
-          name: entityName,
-          description: entityDescription,
-          item_type: itemType,
-          is_portable: itemType !== 'SWITCH',
-          inventory: data.inventory || [],
-          wearable_slots: data.wearable_slots || undefined,
-          combination_ingredients: data.combination_ingredients || undefined,
-          stat_modifier_strength: data.stat_modifier_strength || undefined,
-          is_hidden: data.is_hidden,
-          reveal_rule: data.reveal_rule || undefined,
-          on_pickup_script: data.on_pickup_script || undefined,
-          on_pickup_text: data.on_pickup_text || undefined,
-          on_drop_script: data.on_drop_script || undefined,
-          on_drop_text: data.on_drop_text || undefined,
-          on_equip_script: data.on_equip_script || undefined,
-          on_equip_text: data.on_equip_text || undefined,
-          on_unequip_script: data.on_unequip_script || undefined,
-          on_unequip_text: data.on_unequip_text || undefined,
-        }
-        if (itemType === 'READABLE') {
-          createPayload.metadata_json = {
-            text_log_content: String(data.text_log_content || '').trim(),
-            text_log_format: String(data.text_log_format || 'DOCUMENT').toUpperCase(),
-          }
-        }
-        if (itemType === 'SWITCH') {
-          createPayload.metadata_json = {
-            ...(createPayload.metadata_json || {}),
-            switch_states: data.switch_states || [],
-            switch_initial_state: data.switch_initial_state || '',
-            switch_transitions: data.switch_transitions || [],
-            switch: {
-              states: data.switch_states || [],
-              initial_state: data.switch_initial_state || '',
-              transitions: data.switch_transitions || [],
-              outcomes: []
-            }
-          }
-        }
-        if (itemType === 'CONSUMABLE') {
-          createPayload.metadata_json = {
-            ...(createPayload.metadata_json || {}),
-            effects: data.effects || {},
-          }
-        }
-        await entityService.createEntity(props.adventureId, createPayload)
+      if (creationType === 'object' && String(data.item_type || '').toUpperCase() === 'READABLE'
+          && !String(data.text_log_content || '').trim()) {
+        addNotification('Readable items require text-log content.', 'error')
+        return
       }
+      await entityService.createEntity(props.adventureId, createEntityPayload(creationType, sceneId, candidateId, data))
 
       if (pendingProtagonistAssignment.value) {
         const target = pendingProtagonistAssignment.value
@@ -1292,8 +1288,8 @@ async function saveEntityText(data: any) {
 
   // Persona validation (NPC and Protagonist)
   if (['npc', 'protagonist'].includes(editEntityContext.value.type)) {
-    if ((data.goal || '').length > 200 || (data.character || '').length > 200) {
-      addNotification('Motivation and traits must be under 200 characters.', 'error')
+    if ((data.goal || '').length > 300 || (data.character || '').length > 300) {
+      addNotification('Motivation and traits must be at most 300 characters.', 'error')
       return
     }
   }
@@ -1316,11 +1312,15 @@ async function saveEntityText(data: any) {
       name: data.name,
       description: data.description,
       item_type: editEntityContext.value.type === 'object' ? data.item_type : undefined,
-      hp: data.hp || undefined,
-      stamina: data.stamina || undefined,
-      mana: data.mana || undefined,
+      ...(['npc', 'protagonist'].includes(editEntityContext.value.type)
+        ? characterResourceFields(data)
+        : { hp: data.hp || undefined, stamina: data.stamina || undefined, mana: data.mana || undefined }),
       goal: ['npc', 'protagonist'].includes(editEntityContext.value.type) ? data.goal : undefined,
       character: ['npc', 'protagonist'].includes(editEntityContext.value.type) ? data.character : undefined,
+      gender: ['npc', 'protagonist'].includes(editEntityContext.value.type) ? data.gender : undefined,
+      age_years: ['npc', 'protagonist'].includes(editEntityContext.value.type) ? data.age_years : undefined,
+      personality_profile: editEntityContext.value.type === 'npc' ? data.personality_profile : undefined,
+      outfit_completion: ['npc', 'protagonist'].includes(editEntityContext.value.type) ? data.outfit_completion || undefined : undefined,
       is_killable: editEntityContext.value.type === 'npc' ? data.is_killable : undefined,
       moveable: editEntityContext.value.type === 'npc' ? data.moveable : undefined,
       allowed_scenes: editEntityContext.value.type === 'npc' ? data.allowed_scenes : undefined,
@@ -1335,6 +1335,7 @@ async function saveEntityText(data: any) {
         ? data.text_log_format
         : undefined,
       wearable_slots: editEntityContext.value.type === 'object' ? data.wearable_slots : undefined,
+      clothing: editEntityContext.value.type === 'object' && data.item_type === 'WEARABLE' ? data.clothing : undefined,
       combination_ingredients: editEntityContext.value.type === 'object' ? data.combination_ingredients : undefined,
       spatial_position: ['npc', 'object'].includes(editEntityContext.value.type) ? data.spatial_position : undefined,
       reveals_item_id: editEntityContext.value.type === 'object' ? data.reveals_item_id : undefined,
@@ -1343,6 +1344,8 @@ async function saveEntityText(data: any) {
       switch_states: editEntityContext.value.type === 'object' ? data.switch_states : undefined,
       switch_initial_state: editEntityContext.value.type === 'object' ? data.switch_initial_state : undefined,
       switch_transitions: editEntityContext.value.type === 'object' ? data.switch_transitions : undefined,
+      on_success_script: editEntityContext.value.type === 'object' && data.item_type === 'SWITCH' ? data.on_success_script : undefined,
+      on_failure_script: editEntityContext.value.type === 'object' && data.item_type === 'SWITCH' ? data.on_failure_script : undefined,
       effects: editEntityContext.value.type === 'object' ? data.effects : undefined,
       stat_modifier_strength: editEntityContext.value.type === 'object' ? data.stat_modifier_strength : undefined,
       is_hidden: ['npc', 'object'].includes(editEntityContext.value.type) ? data.is_hidden : undefined,
@@ -1404,22 +1407,35 @@ async function saveChanges() {
   isSaving.value = true
   errorMsg.value = ''
   try {
+    const livingWorldChanged = JSON.stringify(form.value.living_world_settings) !== JSON.stringify(adventure.value?.living_world_settings ?? null)
     const teaserOrPlotChanged = (form.value.teaser || '') !== (adventure.value?.teaser || '')
       || (form.value.plot || '') !== (adventure.value?.plot || '')
 
+    const detailedClothing = form.value.rule_enforcement_mode === 'vn' && form.value.detailed_clothing
+    const clothingChanged = detailedClothing !== (adventure.value?.detailed_clothing === true)
+    const nsfwEnabled = form.value.rule_enforcement_mode === 'vn' && form.value.nsfw_enabled
+    const nsfwChanged =
+      nsfwEnabled !== (adventure.value?.nsfw_enabled === true) ||
+      (nsfwEnabled && form.value.nsfw_level !== (adventure.value?.nsfw_level || 'soft'))
     const fullStyleObj = imageStylesCatalog.value.find(s => s.id === form.value.selected_style_id) || { id: form.value.selected_style_id, name: form.value.selected_style_id }
     const fullToneObj = toneCatalog.value.find(t => t.id === form.value.selected_tone_id) || { id: form.value.selected_tone_id, name: form.value.selected_tone_id }
     const payload = {
       ...form.value,
+      detailed_clothing: clothingChanged ? detailedClothing : undefined,
+      nsfw_enabled: nsfwChanged ? nsfwEnabled : undefined,
+      nsfw_level: nsfwChanged && nsfwEnabled ? form.value.nsfw_level : undefined,
       selected_image_styles: form.value.selected_style_id ? [fullStyleObj] : [],
       selected_tone: form.value.selected_tone_id ? fullToneObj : null
     }
     await adventureService.updateAdventure(props.adventureId, payload as any)
     await fetchAdventure()
-    if (teaserOrPlotChanged) {
+    if (teaserOrPlotChanged || clothingChanged || nsfwChanged) {
       await fetchDebugInfo()
     }
     addNotification('Adventure configuration updated.', 'success')
+    if (clothingChanged || nsfwChanged || livingWorldChanged) {
+      addNotification('Settings apply to this adventure and new games only. Existing saved sessions keep their previous settings.', 'info')
+    }
 
     // Auto-run structural validation after every save. Only structural —
     // AI validation remains a manual action in the Validation tab to keep
@@ -1458,6 +1474,8 @@ async function saveProtagonistField(field: string, newValue: any) {
     const updatePayload = {
       target_type: 'protagonist',
       target_id: p.id,
+      gender: field === 'gender' ? newValue : undefined,
+      age_years: field === 'age_years' ? newValue : undefined,
       name: field === 'name' ? String(newValue).trim() : p.name,
       description: field === 'description' ? String(newValue).trim() : p.description,
       hp: field === 'hp' ? Number(newValue) : p.hp,
@@ -1495,15 +1513,6 @@ async function saveProtagonistField(field: string, newValue: any) {
 
 function buildVisualImageUrl(imagePath?: string | null) {
   return visualService.buildImageUrl(imagePath, visualsCacheVersion.value)
-}
-
-function hasMissingImage(entity: any): boolean {
-  const raw = String(entity?.image_url || '').trim()
-  if (!raw) return true
-  const lowered = raw.toLowerCase()
-  if (lowered.startsWith('assets/') || lowered.startsWith('/assets/')) return true
-  if (lowered.includes('placeholder_') || lowered.includes('/placeholder-')) return true
-  return false
 }
 
 function downloadVisualAsset(imagePath: string | null | undefined, filenameLabel: string) {
@@ -1556,7 +1565,7 @@ function openUploadPicker(kind: any, id: string, label: string) {
   }
 }
 
-async function quickRegenerateVisual(kind: any, id: string, skipFetch: boolean = false) {
+async function quickRegenerateVisual(kind: any, id: string, skipFetch: boolean = false): Promise<boolean> {
   const key = `${kind}_${id}`
   isQuickGenerating.value[key] = true
   
@@ -1568,7 +1577,9 @@ async function quickRegenerateVisual(kind: any, id: string, skipFetch: boolean =
   
   try {
      await visualService.quickRegenerateVisual(props.adventureId, kind, id, controller.signal)
+    if (controller.signal.aborted || activeAbortControllers.value.get(key) !== controller) return false
     if (!skipFetch) await fetchDebugInfo()
+    return true
   } catch (error: any) {
     if (error.name === 'AbortError' || (error instanceof DOMException && error.name === 'AbortError')) {
       console.log('Quick regen aborted for', key)
@@ -1576,9 +1587,12 @@ async function quickRegenerateVisual(kind: any, id: string, skipFetch: boolean =
     }
     console.error('Quick regen error:', error)
     addNotification(error.message, 'error')
+    return false
   } finally {
-    isQuickGenerating.value[key] = false
-    activeAbortControllers.value.delete(key)
+    if (activeAbortControllers.value.get(key) === controller) {
+      isQuickGenerating.value[key] = false
+      activeAbortControllers.value.delete(key)
+    }
   }
 }
 
@@ -1656,8 +1670,9 @@ async function regenerateAll(kind: any, missingOnly: boolean = false) {
   for (const item of targets) {
     try {
       const apiKind = (kind === 'container' || kind === 'text-log' || kind === 'switch') ? 'object' : kind
-      await quickRegenerateVisual(apiKind, item.id || props.adventureId)
-      successCount += 1
+      const generated = await quickRegenerateVisual(apiKind, item.id || props.adventureId)
+      if (generated) successCount += 1
+      else errorCount += 1
     } catch (error: any) {
       if (error.name === 'AbortError' || (error instanceof DOMException && error.name === 'AbortError')) {
         addNotification('Batch generation stopped.', 'info')
@@ -1675,85 +1690,16 @@ async function regenerateAll(kind: any, missingOnly: boolean = false) {
   isBatchGenerating.value[kind] = false
 }
 
-async function regenerateVisual() {
-  if (!selectedVisual.value || isRegenerating.value) return
-  isRegenerating.value = true
-  promptError.value = ''
-  
-  const key = `${selectedVisual.value.kind}_${selectedVisual.value.id}`
-  if (activeAbortControllers.value.has(key)) {
-    activeAbortControllers.value.get(key)?.abort()
-  }
-  const controller = new AbortController()
-  activeAbortControllers.value.set(key, controller)
-  
-  try {
-     await visualService.regenerateVisual(
-       props.adventureId,
-       selectedVisual.value.kind,
-       selectedVisual.value.id,
-       visualPrompt.value,
-       useAdvancedModel.value,
-       controller.signal,
-       useCurrentImage.value
-     )
-     showPromptDialog.value = false
-     await fetchDebugInfo()
-     addNotification(`Visual for ${selectedVisual.value.label} re-woven.`, 'success')
-  } catch (error: any) {
-    if (error.name === 'AbortError' || (error instanceof DOMException && error.name === 'AbortError')) {
-      console.log('Regen aborted for', key)
-      return
-    }
-    promptError.value = error.message
-    addNotification(error.message, 'error')
-  } finally {
-    isRegenerating.value = false
-    activeAbortControllers.value.delete(key)
-  }
-}
-
-async function suggestPrompt() {
-  if (!selectedVisual.value || isSuggestingPrompt.value) return
-  isSuggestingPrompt.value = true
-  promptError.value = ''
-  try {
-     const suggested = await visualService.suggestPrompt(
-       props.adventureId,
-       selectedVisual.value.kind,
-       selectedVisual.value.id,
-       useAdvancedModel.value
-     )
-     if (suggested) {
-       visualPrompt.value = suggested
-       addNotification('AI suggested a prompt based on the description.', 'success')
-     } else {
-       addNotification('AI returned an empty suggestion.', 'info')
-     }
-  } catch (error: any) {
-    promptError.value = error.message
-    addNotification(error.message, 'error')
-  } finally {
-    isSuggestingPrompt.value = false
-  }
-}
-
 function cancelRegeneration() {
-  if (selectedVisual.value) {
-    const key = `${selectedVisual.value.kind}_${selectedVisual.value.id}`
-    if (activeAbortControllers.value.has(key)) {
-      activeAbortControllers.value.get(key)?.abort()
-    }
-  }
-  isRegenerating.value = false
-  showPromptDialog.value = false
+  closeManualVision()
   addNotification('Generation request abandoned.', 'info')
 }
 
 function stopAllGenerations() {
-  if (activeAbortControllers.value.size === 0) return
+  if (activeAbortControllers.value.size === 0 && !isRegenerating.value && !isSuggestingPrompt.value) return
+  closeManualVision()
   
-  for (const [key, controller] of activeAbortControllers.value.entries()) {
+  for (const controller of activeAbortControllers.value.values()) {
     try {
       controller.abort()
     } catch (e) {
@@ -1764,7 +1710,6 @@ function stopAllGenerations() {
   
   isQuickGenerating.value = {}
   isBatchGenerating.value = {}
-  isRegenerating.value = false
   showPromptDialog.value = false
   
   addNotification('All visual generations stopped.', 'info')
@@ -1873,53 +1818,6 @@ const routeSceneDetails = computed<any | null>(() => {
   return editorScenes.value.find((scene: any) => String(scene.id) === sceneId) || null
 })
 
-const routeSceneNpcs = computed<any[]>(() => {
-  const sceneId = String(activeMapSceneId.value || '').trim()
-  if (!sceneId) return []
-  return editorNpcs.value.filter((npc: any) => String(npc.current_scene_id || '') === sceneId)
-})
-
-const routeSceneObjects = computed<any[]>(() => {
-  const sceneId = String(activeMapSceneId.value || '').trim()
-  if (!sceneId) return []
-  return editorAllObjects.value.filter((obj: any) => String(obj.current_scene_id || '') === sceneId)
-})
-
-const routeSceneSwitches = computed<any[]>(() => {
-  return routeSceneObjects.value.filter((obj: any) => String(obj.item_type || '').toUpperCase() === 'SWITCH')
-})
-
-const routeSceneContainers = computed<any[]>(() => {
-  return routeSceneObjects.value.filter((obj: any) => String(obj.item_type || '').toUpperCase() === 'CONTAINER')
-})
-
-const routeSceneTextLogs = computed<any[]>(() => {
-  return routeSceneObjects.value.filter((obj: any) => String(obj.item_type || '').toUpperCase() === 'READABLE')
-})
-
-const routeSceneItems = computed<any[]>(() => {
-  return routeSceneObjects.value.filter((obj: any) => {
-    const itemType = String(obj.item_type || '').toUpperCase()
-    return itemType !== 'SWITCH' && itemType !== 'CONTAINER' && itemType !== 'READABLE'
-  })
-})
-
-const routeSceneExits = computed<any[]>(() => {
-  const sceneId = String(activeMapSceneId.value || '').trim()
-  const exits = Array.isArray(debugData.value?.exits) ? debugData.value.exits : []
-  if (!sceneId) return []
-  return exits.filter((worldExit: any) => {
-    return String(worldExit.from_scene_id || '') === sceneId || String(worldExit.to_scene_id || '') === sceneId
-  })
-})
-
-const routeExitDetails = computed<any | null>(() => {
-  const exitId = String(activeMapExitId.value || '').trim()
-  const exits = Array.isArray(debugData.value?.exits) ? debugData.value.exits : []
-  if (!exitId) return null
-  return exits.find((worldExit: any) => String(worldExit.id) === exitId) || null
-})
-
 const referenceOptions = computed<Array<{ id: string; name: string; imageUrl?: string | null; type: string; itemType?: string }>>(() => {
   const entries: Array<{ id: string; name: string; imageUrl?: string | null; type: string; itemType?: string }> = []
   
@@ -1967,12 +1865,10 @@ const sceneReferenceOptions = computed(() => {
 const canShowSceneRoutePanel = computed(() => route.name === 'adventure-editor-scene')
 const canShowExitRoutePanel = computed(() => route.name === 'adventure-editor-exit')
 
-const isCreatingRouteAsset = ref(false)
+
 const isDeletingRouteAsset = ref(false)
 
 const isCreatingScene = ref(false)
-const createSceneForm = ref({ sceneId: '', name: '', description: '' })
-const createSceneFormError = ref('')
 
 function openCreateSceneForm() {
   isCreatingScene.value = true
@@ -1981,58 +1877,6 @@ function openCreateSceneForm() {
 
 function cancelCreateScene() {
   isCreatingScene.value = false
-}
-
-async function saveCreateScene() {
-  const sceneId = createSceneForm.value.sceneId.trim()
-  const name = createSceneForm.value.name.trim()
-  const description = createSceneForm.value.description.trim()
-
-  if (!sceneId) {
-    createSceneFormError.value = 'Scene ID is required.'
-    return
-  }
-  if (!name) {
-    createSceneFormError.value = 'Scene name is required.'
-    return
-  }
-  if (name.length > 100) {
-    createSceneFormError.value = 'Scene name must be 100 characters or less.'
-    return
-  }
-  if (!description) {
-    createSceneFormError.value = 'Scene description is required.'
-    return
-  }
-  if (description.length > 1000) {
-    createSceneFormError.value = 'Scene description must be 1000 characters or less.'
-    return
-  }
-
-  const existingIds = new Set(editorScenes.value.map((s: any) => String(s.id || '').toUpperCase()))
-  if (existingIds.has(sceneId.toUpperCase())) {
-    createSceneFormError.value = `A scene with ID "${sceneId}" already exists.`
-    return
-  }
-
-  isSavingText.value = true
-  createSceneFormError.value = ''
-  try {
-    await entityService.createScene(props.adventureId, {
-      scene_id: sceneId,
-      label: name,
-      description,
-    })
-    await fetchDebugInfo()
-    addNotification(`Scene "${name}" created.`, 'success')
-    isCreatingScene.value = false
-    createSceneForm.value = { sceneId: '', name: '', description: '' }
-  } catch (error: any) {
-    createSceneFormError.value = error?.message || 'Failed to create scene.'
-    addNotification(createSceneFormError.value, 'error')
-  } finally {
-    isSavingText.value = false
-  }
 }
 
 function openSceneEditorRoute(sceneId: string) {
@@ -2476,9 +2320,9 @@ watch(
 </script>
 
 <template>
-  <div class="h-screen bg-slate-950 text-slate-200 font-sans flex flex-col relative overflow-x-hidden overflow-y-auto">
+  <div tabindex="0" role="region" aria-label="Adventure editor" class="workspace-view authoring-view adventure-editor-view h-full min-h-0 bg-slate-950 text-slate-200 font-sans flex flex-col relative overflow-x-hidden overflow-y-auto">
     <!-- Ambient Background -->
-    <div v-if="debugData?.adventure?.image_url" class="absolute inset-0 pointer-events-none z-0 opacity-20">
+    <div v-if="debugData?.adventure?.image_url" class="absolute inset-0 overflow-hidden pointer-events-none z-0 opacity-20">
       <img :src="ASSET_BASE + debugData.adventure.image_url" class="w-full h-full object-cover blur-3xl scale-110" />
       <div class="absolute inset-0 bg-slate-950/60"></div>
     </div>
@@ -2502,68 +2346,17 @@ watch(
       </div>
       
       <div v-else class="space-y-6">
-        <nav class="lg:hidden flex gap-2 overflow-x-auto pb-2">
-          <button
-            v-for="tab in editorTabs.filter(tab => form.rule_enforcement_mode !== 'vn' || !['quest', 'awards'].includes(tab.key))"
-            :key="tab.key"
-            @click="activeTab = tab.key"
-            :class="[
-              'shrink-0 px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-[0.15em] transition-all border flex items-center gap-2',
-              activeTab === tab.key
-                ? 'bg-emerald-600/80 border-emerald-500 text-white'
-                : 'bg-slate-900/50 border-white/10 text-slate-400 hover:text-slate-200'
-            ]"
-          >
-            <span>{{ tab.label }}</span>
-            <span
-              v-if="tab.key === 'sequences' && Array.isArray(adventure?.sequences) && adventure.sequences.length > 0"
-              class="px-1.5 py-0.5 rounded-md text-[9px] font-black border leading-none bg-emerald-500/20 border-emerald-500/50 text-emerald-300"
-            >
-              {{ adventure.sequences.length }}
-            </span>
-            <span
-              v-if="tab.key === 'validation' && validationBadgeText()"
-              :class="['px-1.5 py-0.5 rounded-md text-[9px] font-black border leading-none', validationBadgeClass()]"
-            >
-              {{ validationBadgeText() }}
-            </span>
-          </button>
-        </nav>
-
         <div class="lg:grid lg:grid-cols-[220px_minmax(0,1fr)] lg:gap-6">
-          <aside class="hidden lg:block">
-            <div class="sticky top-24 bg-slate-900/40 border border-white/5 rounded-2xl p-3 backdrop-blur-md">
-              <div class="space-y-1">
-                <button
-                  v-for="tab in editorTabs.filter(tab => form.rule_enforcement_mode !== 'vn' || !['quest', 'awards'].includes(tab.key))"
-                  :key="tab.key"
-                  @click="activeTab = tab.key"
-                  :class="[
-                    'w-full text-left px-3 py-2 rounded-xl text-xs font-black uppercase tracking-[0.18em] transition-all flex items-center justify-between gap-2',
-                    activeTab === tab.key
-                      ? 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-lg'
-                      : 'text-slate-400 hover:text-white hover:bg-white/5'
-                  ]"
-                >
-                  <span>{{ tab.label }}</span>
-                  <span
-                    v-if="tab.key === 'sequences' && Array.isArray(adventure?.sequences) && adventure.sequences.length > 0"
-                    class="px-1.5 py-0.5 rounded-md text-[9px] font-black border leading-none bg-emerald-500/20 border-emerald-500/50 text-emerald-300"
-                  >
-                    {{ adventure.sequences.length }}
-                  </span>
-                  <span
-                    v-if="tab.key === 'validation' && validationBadgeText()"
-                    :class="['px-1.5 py-0.5 rounded-md text-[9px] font-black border leading-none', validationBadgeClass()]"
-                  >
-                    {{ validationBadgeText() }}
-                  </span>
-                </button>
-              </div>
-            </div>
-          </aside>
+          <EditorNavigation
+            v-model="activeTab"
+            :tabs="editorTabs.filter(tab => form.rule_enforcement_mode !== 'vn' || !['quest', 'awards'].includes(tab.key))"
+            :sequence-count="Array.isArray(adventure?.sequences) ? adventure.sequences.length : 0"
+            :validation-text="validationBadgeText()"
+            :validation-class="validationBadgeClass()"
+          />
 
-          <div class="space-y-10 min-w-0 relative">
+          <div class="authoring-content space-y-6 min-w-0 relative">
+            <WorldBriefEditor v-if="activeTab === 'world'" :adventure-id="adventureId" />
             <WorldTab
               v-if="activeTab === 'world'"
               :form="form"
@@ -2606,8 +2399,23 @@ watch(
               @update:calendar-max-value="form.time_config = { ...(form.time_config || {}), calendar_max_value: $event }"
               @update:calendar-max-unit="form.time_config = { ...(form.time_config || {}), calendar_max_unit: $event }"
               @update:mode="form.rule_enforcement_mode = $event as any"
+              @update:detailed-clothing="form.detailed_clothing = $event"
+              @update:nsfw-enabled="form.nsfw_enabled = $event"
+              @update:nsfw-level="form.nsfw_level = $event as any"
               @save-changes="saveChanges"
               @notify="addNotification"
+            />
+
+            <LivingWorldTab
+              v-else-if="activeTab === 'living-world'"
+              :living-world="form.living_world_settings"
+              :personality="form.npc_personality_settings"
+              :characters="editorNpcs.map((actor: any) => ({ id: actor.id, name: actor.name || actor.id }))"
+              :is-vn="form.rule_enforcement_mode === 'vn'"
+              :busy="isSaving"
+              @update:living-world="form.living_world_settings = $event"
+              @update:personality="form.npc_personality_settings = $event"
+              @save="saveChanges"
             />
 
             <div v-else-if="activeTab === 'sequences'" class="space-y-6">
@@ -2658,6 +2466,8 @@ watch(
               :editor-scenes="editorScenes"
               :active-map-scene-id="activeMapSceneId"
               :adventure-scripts="adventure?.scripts || debugData?.adventure?.scripts || []"
+              @add-item="openItemCreateDialog"
+              @close-menu="activeMenuId = null"
               @quick-regen="quickRegenerateVisual"
               @regen-all="requestRegenerateAll"
               @open-regen-dialog="openRegenerateDialog"
@@ -2698,6 +2508,7 @@ watch(
               @clear-hover="clearHover"
               @request-move-npc-to-scene="requestMoveNpcToScene"
               @open-create-npc="() => openCreateNpc()"
+              @new-npc="showNpcCreateDialog = true"
               @open-special-attacks="(npc: any) => (specialAttacksNpc = npc)"
               @export-entity="(kind, id, label) => { activeMenuId = null; exportEntity(kind, id, label) }"
               @import-entity="importEntity"
@@ -2885,22 +2696,35 @@ watch(
       :fix-newlines="fixNewlines"
     />
 
+    <ProtagonistImportConfirmDialog v-if="isProtagonistImportPending" @confirm="confirmProtagonistImport" @cancel="cancelProtagonistImport" />
+
     <ManualVisionModal 
       :show="showPromptDialog"
+      :adventure-id="adventureId"
       :selected-visual="selectedVisual"
       v-model:visual-prompt="visualPrompt"
       v-model:use-advanced-model="useAdvancedModel"
       v-model:use-current-image="useCurrentImage"
       :is-suggesting-prompt="isSuggestingPrompt"
       :is-regenerating="isRegenerating"
+      :error-message="manualVisionError"
       :upload-limits="visualService.UPLOAD_LIMITS"
       :format-bytes="formatBytes"
       :fix-newlines="fixNewlines"
-      @close="showPromptDialog = false"
+      @close="closeManualVision"
       @suggest="suggestPrompt"
       @regenerate="regenerateVisual"
       @cancel-regen="cancelRegeneration"
     />
+
+    <ItemCreateDialog v-if="showItemCreateDialog" :key="adventureId" :adventure-id="adventureId"
+      :scenes="editorScenes" :initial-scene-id="itemCreateInitialScene"
+      @close="showItemCreateDialog = false" @draft="reviewNewItem" />
+
+    <NpcCreateDialog v-if="showNpcCreateDialog" :key="adventureId" :adventure-id="adventureId"
+      :scenes="editorScenes" :initial-scene-id="activeMapSceneId || debugData?.adventure?.start_scene_id"
+      :inner-clothing-enabled="adventure?.detailed_clothing === true && adventure?.nsfw_enabled === true"
+      @close="showNpcCreateDialog = false" @created="showNpcCreateDialog = false; fetchDebugInfo(); addNotification('NPC and selected belongings created.', 'success')" />
 
     <EditEntityModal 
       :show="showEditModal"
@@ -2985,12 +2809,13 @@ watch(
       @close="showDebug = false"
     />
 
+    <Teleport to="body">
     <div
       v-if="showDeleteConfirmDialog"
-      class="fixed inset-0 z-[320] flex items-center justify-center bg-black/75 backdrop-blur-sm p-4"
+      class="authoring-modal-overlay fixed inset-0 z-[320] flex items-center justify-center bg-black/75 backdrop-blur-sm p-4"
       @click="closeDeleteConfirmDialog"
     >
-      <div class="w-full max-w-lg rounded-2xl border border-red-500/30 bg-slate-900 shadow-2xl overflow-hidden" @click.stop>
+      <div class="authoring-dialog w-full max-w-lg rounded-2xl border border-red-500/30 bg-slate-900 shadow-2xl overflow-hidden" @click.stop>
         <div class="px-6 py-5 border-b border-white/10 flex items-start gap-3">
           <div class="w-10 h-10 rounded-full border border-red-400/40 bg-red-500/15 flex items-center justify-center shrink-0">
             <i class="ra ra-skull text-red-300"></i>
@@ -3025,10 +2850,10 @@ watch(
 
     <div
       v-if="showRegenerateAllConfirmDialog"
-      class="fixed inset-0 z-[90] flex items-center justify-center bg-black/75 backdrop-blur-sm p-4"
+      class="authoring-modal-overlay fixed inset-0 z-[310] flex items-center justify-center bg-black/75 backdrop-blur-sm p-4"
       @click="cancelRegenerateAllDialog"
     >
-      <div class="w-full max-w-lg rounded-2xl border border-amber-500/25 bg-slate-900 shadow-2xl overflow-hidden" @click.stop>
+      <div class="authoring-dialog w-full max-w-lg rounded-2xl border border-amber-500/25 bg-slate-900 shadow-2xl overflow-hidden" @click.stop>
         <div class="px-6 py-5 border-b border-white/10 flex items-start gap-3">
           <div class="w-10 h-10 rounded-full border border-amber-400/40 bg-amber-500/15 flex items-center justify-center shrink-0">
             <i class="ra ra-warning text-amber-300"></i>
@@ -3067,10 +2892,7 @@ watch(
       </div>
     </div>
 
-    <NotificationToast 
-      :notifications="notifications"
-      @close="notificationService.remove($event)"
-    />
+    </Teleport>
 
     <input
       ref="uploadInput"

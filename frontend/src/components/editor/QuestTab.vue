@@ -19,7 +19,7 @@ const emit = defineEmits<{
   (e: 'notify', message: string, type?: 'error' | 'success' | 'info'): void
 }>()
 
-const availableItems = computed(() => {
+const availableItems = computed<Array<{ id: string; name: string }>>(() => {
   const list =
     props.editorObjects && props.editorObjects.length > 0
       ? props.editorObjects
@@ -32,7 +32,7 @@ const availableItems = computed(() => {
     .filter((i: any) => Boolean(i.id))
 })
 
-const availableScenes = computed(() => {
+const availableScenes = computed<Array<{ id: string; name: string }>>(() => {
   const list =
     props.editorScenes && props.editorScenes.length > 0
       ? props.editorScenes
@@ -45,7 +45,7 @@ const availableScenes = computed(() => {
     .filter((s: any) => Boolean(s.id))
 })
 
-const availableNpcs = computed(() => {
+const availableNpcs = computed<Array<{ id: string; name: string }>>(() => {
   const list =
     props.editorNpcs && props.editorNpcs.length > 0
       ? props.editorNpcs
@@ -217,7 +217,7 @@ function closeModal() {
 function saveQuest() {
   if (!modalQuest.value.title.trim() || !modalQuest.value.description.trim()) return
   const raw = props.adventure?.quests || []
-  let allQuests = Array.isArray(raw) ? [...raw] : []
+  const allQuests = Array.isArray(raw) ? [...raw] : []
   modalQuest.value.is_main = false
   if (isNewQuest.value) {
     allQuests.push({ ...modalQuest.value })
@@ -249,7 +249,7 @@ function confirmDeleteQuest() {
     return
   }
   const raw = props.adventure?.quests || []
-  let allQuests = Array.isArray(raw) ? [...raw] : []
+  const allQuests = Array.isArray(raw) ? [...raw] : []
   const updatedList = allQuests.filter((q: any) => q.id !== pendingDeleteQuestId.value)
   emit('update-quests', updatedList)
   cancelDeleteQuest()
@@ -337,8 +337,8 @@ function confirmDeleteQuest() {
   <!-- Edit/Create Quest Modal -->
   <Teleport to="body">
     <Transition name="modal">
-      <div v-if="showModal" class="fixed inset-0 z-[200] flex items-center justify-center p-6 backdrop-blur-xl bg-slate-950/60">
-        <div class="modal-content w-full max-w-2xl max-h-[90vh] flex flex-col bg-slate-900 border border-white/10 rounded-[2.5rem] shadow-2xl overflow-hidden animate-modal-in">
+      <div v-if="showModal" class="authoring-modal-overlay fixed inset-0 z-[200] flex items-center justify-center p-6 backdrop-blur-xl bg-slate-950/60">
+        <div class="authoring-dialog modal-content w-full max-w-2xl max-h-[90vh] flex flex-col bg-slate-900 border border-white/10 rounded-[2.5rem] shadow-2xl overflow-hidden animate-modal-in">
           <div class="p-8 sm:p-10 space-y-6 flex-1 min-h-0 overflow-y-auto">
             <!-- Modal Header -->
             <div class="flex justify-between items-center">
@@ -608,8 +608,8 @@ function confirmDeleteQuest() {
 
   <Teleport to="body">
     <Transition name="modal">
-      <div v-if="showDeleteConfirmModal" class="fixed inset-0 z-[220] flex items-center justify-center p-6 backdrop-blur-sm bg-slate-950/70" @click="cancelDeleteQuest">
-        <div class="modal-content w-full max-w-md bg-slate-900 border border-rose-500/20 rounded-3xl shadow-2xl overflow-hidden" @click.stop>
+      <div v-if="showDeleteConfirmModal" class="authoring-modal-overlay fixed inset-0 z-[220] flex items-center justify-center p-6 backdrop-blur-sm bg-slate-950/70" @click="cancelDeleteQuest">
+        <div class="authoring-dialog modal-content w-full max-w-md bg-slate-900 border border-rose-500/20 rounded-3xl shadow-2xl overflow-hidden" @click.stop>
           <div class="px-6 py-5 border-b border-white/10 flex items-start gap-3">
             <div class="w-10 h-10 rounded-full border border-rose-400/40 bg-rose-500/15 flex items-center justify-center shrink-0">
               <i class="ra ra-warning text-rose-300"></i>

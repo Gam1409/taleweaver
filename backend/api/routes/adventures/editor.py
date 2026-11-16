@@ -10,8 +10,14 @@ from fastapi import APIRouter
 from backend.api.routes.adventures.editing import (
     ai_fix_apply,
     ai_fix_suggest,
+    character_outfits,
+    garment_generation,
     generation,
+    item_generation,
+    npc_creation,
+    npc_generation,
     payload,
+    personality,
     story_crud,
     validation,
     world_crud,
@@ -38,10 +44,16 @@ for _module in (
     validation,
     ai_fix_suggest,
     ai_fix_apply,
+    character_outfits,
     world_crud,
     story_crud,
     entity_update,
+    garment_generation,
     generation,
+    item_generation,
+    npc_creation,
+    npc_generation,
+    personality,
 ):
     router.include_router(_module.router)
 

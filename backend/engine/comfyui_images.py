@@ -2,20 +2,27 @@
 
 import asyncio
 import io
+import logging
 import secrets
 from pathlib import Path
 
 from PIL import Image
 
 from backend.core.comfyui_config import ComfySettings, select_workflow
+from backend.core.comfyui_errors import ComfyRequestError
+from backend.core.visual_trace import record
 from backend.engine.comfyui_client import ComfyClient
+from backend.engine.comfyui_diagnostics import workflow_context
 from backend.engine.comfyui_output import bounded_dimensions, prepare_generated_image
 from backend.engine.image_prompt_adapter import prepare_prompt
+from backend.engine.visual_progress import report
 from backend.utils.path_security import (
     data_url_to_local_path,
     ensure_within_data_dir,
     local_path_to_data_url,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def reference_png(url: str) -> bytes:
@@ -51,6 +58,7 @@ async def generate_comfy_image(
     settings = ComfySettings.model_validate(options)
     reference = options.get("reference_image_url")
     workflow = select_workflow(options, reference=bool(reference))
+    logger.info("ComfyUI image selection: %s", workflow_context(options, workflow))
     prepared_prompt = await prepare_prompt(prompt, options)
     render_options = dict(options)
     if options.get("width") is None and options.get("height") is None:
@@ -69,13 +77,50 @@ async def generate_comfy_image(
     async with ComfyClient(settings.comfyui_url) as client:
         if reference:
             values["image"] = await client.upload(await asyncio.to_thread(reference_png, reference))
+        graph = workflow.render(values)
+        from backend.engine.scene_illustrations.plan_artifact import verify_texts
+
+        positive_binding = workflow.bindings.get("prompt")
+        negative_binding = workflow.bindings.get("negative_prompt")
+        positive = (
+            graph[positive_binding.node_id]["inputs"][positive_binding.input_name]
+            if positive_binding
+            else ""
+        )
+        negative = (
+            graph[negative_binding.node_id]["inputs"][negative_binding.input_name]
+            if negative_binding
+            else ""
+        )
+        verify_texts(positive, negative, options)
+        record(
+            "comfy.mapped_inputs",
+            inputs={
+                name: graph[binding.node_id]["inputs"][binding.input_name]
+                for name, binding in workflow.bindings.items()
+                if name in {"prompt", "negative_prompt", "width", "height", "seed"}
+            },
+        )
+        details = options.get("_generation_details")
+        if isinstance(details, dict):
+            details.update(provider="comfyui", workflow=workflow.name)
+            # Capture only mapped inputs, never the graph, URLs or credentials.
+            for name, binding in workflow.bindings.items():
+                if name == "image":
+                    continue
+                key = "positive_prompt" if name == "prompt" else name
+                details[key] = graph[binding.node_id]["inputs"][binding.input_name]
         try:
             data = await asyncio.wait_for(
-                client.execute(
-                    workflow.render(values), workflow.output_node, settings.comfyui_timeout
-                ),
+                client.execute(graph, workflow.output_node, settings.comfyui_timeout),
                 timeout=settings.comfyui_timeout,
             )
+        except ComfyRequestError as exc:
+            raise ComfyRequestError(
+                exc.status_code,
+                exc.rejected_nodes,
+                workflow_context=workflow_context(options, workflow),
+            ) from exc
         except TimeoutError as exc:
             raise TimeoutError(
                 f"ComfyUI generation timed out (limit: {settings.comfyui_timeout}s). "
@@ -91,6 +136,7 @@ async def generate_comfy_image(
     )
     extension = "jpg" if image_format.lower() in ("jpeg", "jpg") else "png"
     filepath = _build_output_filepath(_resolve_output_dir(target_dir), filename, extension)
+    report("saving")
     await asyncio.to_thread(_write_binary_file, filepath, prepared)
     await MediaEngine._generate_thumbnail(filepath)
     return local_path_to_data_url(filepath)

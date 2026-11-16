@@ -1,13 +1,33 @@
 """Regenerate one owned visual with a common profile and optional local reference."""
 
-from fastapi import HTTPException
-from sqlalchemy import select
+from __future__ import annotations
 
+from typing import TYPE_CHECKING, Any, cast
+
+from sqlalchemy import Select
+from sqlalchemy.engine import CursorResult
+from sqlalchemy.orm import InstanceState
+
+from backend.engine.character_identity import identity_text
+from backend.models.user import User
+
+if TYPE_CHECKING:
+    from backend.schemas.adventure_visuals import RegenerateVisualRequest
+
+from fastapi import HTTPException
+from sqlalchemy import inspect, select, update
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from backend.core import database
 from backend.core.comfyui_config import prompt_rules
+from backend.core.image_purposes import image_provider, purpose_for
 from backend.core.style_catalog import resolve_style_instruction, resolve_tone_instruction
 from backend.engine.image_profiles import advanced_for
 from backend.engine.media_engine import MediaEngine
+from backend.engine.memory_rag.persistence import retry_transaction
 from backend.engine.story_visual_presets import story_t2i
+from backend.engine.template_avatar import template_avatar_query
+from backend.models.adventure_template import AdventureTemplate
 from backend.models.avatar import Avatar
 from backend.models.world_entity import WorldEntity, WorldScene
 from backend.utils.path_security import (
@@ -17,16 +37,14 @@ from backend.utils.path_security import (
 )
 
 
-async def _target(db, adventure, payload):
+async def _target(
+    db: AsyncSession, adventure: AdventureTemplate, payload: RegenerateVisualRequest
+) -> tuple[AdventureTemplate | Avatar | WorldScene | WorldEntity, str]:
+    query: Select[Any]
     if payload.target_type == "cover":
         return adventure, "image_url"
     if payload.target_type == "protagonist":
-        query = (
-            select(Avatar)
-            .where(Avatar.template_id == adventure.id)
-            .order_by(Avatar.created_at, Avatar.id)
-            .limit(1)
-        )
+        query = template_avatar_query(adventure.id)
         field = "profile_image"
     else:
         model = WorldScene if payload.target_type == "scene" else WorldEntity
@@ -40,9 +58,16 @@ async def _target(db, adventure, payload):
     return target, field
 
 
-def _reference_options(t2i: dict, target, field: str, template_id: str, advanced: bool) -> dict:
+def _reference_options(
+    t2i: dict,
+    target: AdventureTemplate | Avatar | WorldScene | WorldEntity,
+    field: str,
+    template_id: str,
+    advanced: bool,
+    purpose: str = "",
+) -> dict:
     profile = "advanced" if advanced else "simple"
-    if t2i.get(f"{profile}_model_provider") != "comfyui":
+    if image_provider(t2i, profile, purpose) != "comfyui":
         raise ValueError("Using the current image requires a ComfyUI image workflow.")
     url = getattr(target, field, None)
     path = data_url_to_local_path(url) if url else None
@@ -52,23 +77,31 @@ def _reference_options(t2i: dict, target, field: str, template_id: str, advanced
     return {**t2i, "reference_image_url": url}
 
 
-async def regenerate_owned_visual(db, adventure, user, payload) -> dict:
-    from backend.api.routes.adventures.assets import _build_visual_prompt
+async def regenerate_owned_visual(
+    db: AsyncSession, adventure: AdventureTemplate, user: User, payload: RegenerateVisualRequest
+) -> dict:
+    from backend.engine.visual_prompts import build_visual_prompt as _build_visual_prompt
 
     target, field = await _target(db, adventure, payload)
     t2i = story_t2i(user.t2i_settings, adventure)
     t2i["_prompt_prepared"] = bool(payload.prompt and payload.prompt.strip())
     advanced = advanced_for(t2i, payload.target_type, payload.use_advanced_model)
     if payload.use_current_image:
-        t2i = _reference_options(t2i, target, field, adventure.id, advanced)
+        t2i = _reference_options(
+            t2i, target, field, adventure.id, advanced, purpose_for(payload.target_type)
+        )
     style = resolve_style_instruction(adventure.selected_image_styles, user.image_styles_catalog)
-    common = {
+    common: dict[str, Any] = {
         "adventure_id": adventure.id,
         "user_config": {"t2i_settings": t2i, "prompt_user": user},
         "api_keys": user.encrypted_api_keys or {},
         "style_instruction": style,
         "use_advanced_model": advanced,
     }
+    source = _source(adventure, target, field)
+    template_id, user_id = adventure.id, user.id
+    # No transaction or write lock is retained while a remote provider runs.
+    await db.commit()
     if payload.target_type == "cover":
         image_url = await MediaEngine.generate_adventure_cover(
             title=adventure.title,
@@ -93,15 +126,79 @@ async def regenerate_owned_visual(db, adventure, user, payload) -> dict:
             tone = resolve_tone_instruction(adventure.selected_tone, user.tone_catalog)
             if tone:
                 prompt += f" Mood: {tone}"
+        if payload.target_type in {"npc", "protagonist"} and identity_text(target):
+            prompt += f"\nCharacter facts: {identity_text(target)}"
         image_url = await _generate_target(payload, target, prompt, common)
     if not image_url:
         raise ValueError("The image provider returned no image. The previous image was kept.")
-    setattr(target, field, image_url)
-    await db.commit()
+    await _save_visual(template_id, user_id, payload, source, image_url)
     return {"status": "success", "image_url": image_url}
 
 
-async def _generate_target(payload, target, prompt: str, common: dict):
+def _source(
+    adventure: AdventureTemplate,
+    target: AdventureTemplate | Avatar | WorldScene | WorldEntity,
+    field: str,
+) -> dict:
+    return {
+        "identity": cast(InstanceState[Any], inspect(target)).identity,
+        "updated_at": target.updated_at,
+        "image": getattr(target, field),
+        "template_updated_at": adventure.updated_at,
+    }
+
+
+@retry_transaction
+async def _save_visual(
+    template_id: str, user_id: str, payload: RegenerateVisualRequest, source: dict, image_url: str
+) -> None:
+    async with database.AsyncSessionLocal() as db:
+        adventure = await db.get(AdventureTemplate, template_id)
+        if adventure is None or adventure.owner_id != user_id:
+            raise HTTPException(404, "Adventure template not found.")
+        target, field = await _target(db, adventure, payload)
+        if _source(adventure, target, field) != source:
+            raise HTTPException(
+                409, "The visual target changed while generating. The current image was kept."
+            )
+        model = type(target)
+        primary_keys = model.__mapper__.primary_key
+        owned = (
+            select(AdventureTemplate.id)
+            .where(
+                AdventureTemplate.id == template_id,
+                AdventureTemplate.owner_id == user_id,
+                AdventureTemplate.updated_at == source["template_updated_at"],
+            )
+            .exists()
+        )
+        changed = await db.execute(
+            update(model)
+            .where(
+                *(
+                    column == value
+                    for column, value in zip(primary_keys, source["identity"], strict=True)
+                ),
+                model.updated_at == source["updated_at"],
+                getattr(model, field) == source["image"],
+                owned,
+            )
+            .values(**{field: image_url})
+            .execution_options(synchronize_session=False)
+        )
+        if cast(CursorResult[Any], changed).rowcount != 1:
+            raise HTTPException(
+                409, "The visual target changed while saving. The current image was kept."
+            )
+        await db.commit()
+
+
+async def _generate_target(
+    payload: RegenerateVisualRequest,
+    target: AdventureTemplate | Avatar | WorldScene | WorldEntity,
+    prompt: str,
+    common: dict,
+) -> str | None:
     if payload.target_type == "scene":
         return await MediaEngine.generate_scene_image(prompt=prompt, **common)
     return await MediaEngine.generate_entity_image(

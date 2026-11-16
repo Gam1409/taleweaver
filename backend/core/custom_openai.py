@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import ipaddress
 from typing import Any
 from urllib.parse import urlsplit
@@ -10,7 +11,23 @@ import httpx
 from fastapi import HTTPException
 from pydantic import BaseModel
 
+from backend.core.custom_openai_roles import resolve_url
+from backend.core.inference.admission import timeout_for
+from backend.core.inference.events import sent
+from backend.core.llm_connection_test import ConnectionTestResult, test_connection
+from backend.core.llm_deadlines import custom_openai_timeout
 from backend.utils.path_security import _resolve_host_ips, validate_provider_url
+
+__all__ = [
+    "ConnectionTestResult",
+    "test_connection",
+    "validate_custom_url",
+    "configure_custom_router",
+    "discover_models",
+    "complete",
+    "acomplete",
+    "structured_response_format",
+]
 
 
 def validate_custom_url(url: str) -> str:
@@ -30,6 +47,8 @@ def validate_custom_url(url: str) -> str:
             raise ValueError("Base URL must not contain credentials, a query, or a fragment.")
         if not parsed.path.endswith("/v1"):
             raise ValueError("Base URL must end in /v1 (for example http://127.0.0.1:8080/v1).")
+        if parsed.hostname is None:
+            raise ValueError("Endpoint hostname is required.")
         addresses = _resolve_host_ips(parsed.hostname)
         if not addresses:
             raise ValueError("Could not resolve endpoint hostname.")
@@ -51,23 +70,32 @@ def validate_custom_url(url: str) -> str:
     return normalized
 
 
-def configure_custom_router(router: Any, llm_settings: dict) -> None:
+def configure_custom_router(router: Any, llm_settings: dict, role: str = "") -> None:
     """Require an explicit validated base and use the existing encrypted provider vault."""
-    router.api_base = validate_custom_url(llm_settings.get("custom_openai_url") or "")
+    # Full network validation runs in a worker before each transport request.
+    base = resolve_url(llm_settings, role)
+    if not base:
+        raise HTTPException(400, "URL must be a non-empty string.")
+    parsed = urlsplit(base)
+    if (
+        parsed.scheme not in {"http", "https"}
+        or not parsed.hostname
+        or not parsed.path.endswith("/v1")
+    ):
+        raise HTTPException(400, "Base URL must end in /v1 (for example http://127.0.0.1:8080/v1).")
+    if parsed.username or parsed.password or parsed.query or parsed.fragment:
+        raise HTTPException(400, "Base URL must not contain credentials, a query, or a fragment.")
+    router.api_base = base
     router.api_key = None
     if (router.user.encrypted_api_keys or {}).get("custom_openai"):
         router.api_key = router._get_decrypted_key("custom_openai")
-    router.request_timeout = max(
-        1, min(3600, int(llm_settings.get("custom_openai_timeout") or 300))
-    )
+    router.request_timeout = custom_openai_timeout(llm_settings)
     router.custom_response_format = llm_settings.get("custom_openai_response_format", "prompt")
-    router.stream_initial_timeout = router.request_timeout
-    router.stream_chunk_timeout = router.request_timeout
 
 
 async def discover_models(base: str, api_key: str | None) -> list[str]:
     """Fetch /models without redirects or a required credential; failures remain actionable."""
-    base = validate_custom_url(base)
+    base = await asyncio.to_thread(validate_custom_url, base)
     headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
     try:
         async with httpx.AsyncClient(timeout=30, follow_redirects=False) as client:
@@ -117,7 +145,7 @@ def complete(router: Any, kwargs: dict) -> Any:
         ) as client,
     ):
         return router._get_litellm().completion(
-            **kwargs, client=client, request_timeout=router.request_timeout
+            **kwargs, client=client, request_timeout=timeout_for(router)
         )
 
 
@@ -127,34 +155,46 @@ async def acomplete(router: Any, kwargs: dict) -> Any:
         return _stream(router, kwargs)
     from openai import AsyncOpenAI
 
+    from backend.core.visual_trace import record
+
+    record(
+        "custom_openai.request",
+        messages=kwargs.get("messages"),
+        model=kwargs.get("model"),
+        response_format=kwargs.get("response_format"),
+    )
     async with (
-        httpx.AsyncClient(follow_redirects=False) as transport,
+        httpx.AsyncClient(follow_redirects=False, event_hooks={"request": [sent]}) as transport,
         AsyncOpenAI(
             api_key=router.api_key or "local-no-key",
-            base_url=validate_custom_url(router.api_base),
+            base_url=await asyncio.to_thread(validate_custom_url, router.api_base),
             http_client=transport,
             max_retries=0,
         ) as client,
     ):
-        return await router._get_litellm().acompletion(
-            **kwargs, client=client, request_timeout=router.request_timeout
+        response = await router._get_litellm().acompletion(
+            **kwargs, client=client, request_timeout=timeout_for(router)
         )
+        choices = getattr(response, "choices", None) or []
+        message = getattr(choices[0], "message", None) if choices else None
+        record("custom_openai.response", content=getattr(message, "content", None))
+        return response
 
 
 async def _stream(router: Any, kwargs: dict) -> Any:
     from openai import AsyncOpenAI
 
     async with (
-        httpx.AsyncClient(follow_redirects=False) as transport,
+        httpx.AsyncClient(follow_redirects=False, event_hooks={"request": [sent]}) as transport,
         AsyncOpenAI(
             api_key=router.api_key or "local-no-key",
-            base_url=validate_custom_url(router.api_base),
+            base_url=await asyncio.to_thread(validate_custom_url, router.api_base),
             http_client=transport,
             max_retries=0,
         ) as client,
     ):
         stream = await router._get_litellm().acompletion(
-            **kwargs, client=client, request_timeout=router.request_timeout
+            **kwargs, client=client, request_timeout=timeout_for(router)
         )
         try:
             async for chunk in stream:
@@ -163,34 +203,16 @@ async def _stream(router: Any, kwargs: dict) -> Any:
             await stream.aclose()
 
 
-def structured_response_format(router: Any, response_model: type[BaseModel]) -> dict | None:
+def structured_response_format(
+    router: Any, response_model: type[BaseModel], *, schema: dict | None = None
+) -> dict | None:
     """Use only the structured-output capability explicitly selected by the administrator."""
-    mode = router.custom_response_format
-    if mode == "json_object":
-        return {"type": "json_object"}
-    if mode == "json_schema":
-        return {
-            "type": "json_schema",
-            "json_schema": {
-                "name": response_model.__name__,
-                "schema": response_model.model_json_schema(),
-            },
-        }
-    return None
+    from backend.core.llm_structured_output import select
 
-
-class ConnectionTestResult(BaseModel):
-    """Small schema used to check the endpoint's selected structured-output capability."""
-
-    message: str
-
-
-async def test_connection(router: Any, model: str) -> str:
-    """Exercise the same JSON path used for mechanics, rather than text-only connectivity."""
-    result = await router.aexecute_complex_task(
-        system_prompt="You are a helpful RPG assistant.",
-        user_prompt='Return a JSON object with a message saying "TaleWeaver connection test successful!".',
-        response_model=ConnectionTestResult,
-        model=model,
-    )
-    return result.message
+    return select(
+        "custom_openai",
+        "",
+        response_model,
+        schema=schema,
+        custom_mode=router.custom_response_format,
+    ).response_format

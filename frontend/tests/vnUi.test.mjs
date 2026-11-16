@@ -21,6 +21,7 @@ async function fixture(t, component, props, exports, request, job = async () => 
   source = `import {computed, ref, watch, onScopeDispose as onBeforeUnmount} from '${import.meta.resolve('vue')}';
 const window = globalThis;
 const onMounted = () => {};
+const useDialogFocus = () => {};
 const apiFetch = (...args) => globalThis['${key}'].request(...args);
 const runVisualJob = (...args) => globalThis['${key}'].job(...args);
 const getOriginalImageUrl = path => path;
@@ -46,7 +47,7 @@ test('VN pace loads persisted choice and generic Save sends only edited pace', a
   f.pace.value = 'brisk'
   assert.equal(await f.save(), true)
   assert.equal(calls[1].options.method, 'PATCH')
-  assert.deepEqual(JSON.parse(calls[1].options.body), { pace: 'brisk' })
+  assert.deepEqual(JSON.parse(calls[1].options.body), { pace: 'brisk', scene_staging: false, visual_audit: true, visual_audit_failure: 'block' })
 })
 
 test('a failed pace load does not overwrite settings or block unrelated Save', async t => {
@@ -135,4 +136,90 @@ test('generic settings Save stops before other writes when VN pace is busy', asy
   f.exploration.value = { save: async () => { calls.push('exploration'); return true } }
   await f.saveAll()
   assert.deepEqual(calls, ['pace'])
+})
+
+test('scene staging toggle saves independently of narration pace', async t => {
+  const calls = []
+  const f = await fixture(t, 'VnNarrationSettings', { sessionId: 'session-a' }, 'sceneStaging, save', async (_url, options) => {
+    calls.push(options)
+    return reply({ settings: { pace: 'balanced', scene_staging: false } })
+  })
+  await tick()
+  f.sceneStaging.value = true
+  assert.equal(await f.save(), true)
+  assert.deepEqual(JSON.parse(calls[1].body), { pace: 'balanced', scene_staging: true, visual_audit: true, visual_audit_failure: 'block' })
+  assert.equal(await f.save(), true)
+  assert.equal(calls.length, 2)
+})
+
+
+test('visual preparation loads persisted choices and saves them without changing narration settings', async t => {
+  const calls = []
+  const f = await fixture(t, 'VnNarrationSettings', { sessionId: 'session-a' }, 'visualAudit, auditFailure, save', async (_url, options) => {
+    calls.push(options)
+    return reply({ settings: { pace: 'leisurely', scene_staging: true, visual_audit: true, visual_audit_failure: 'block' } })
+  })
+  await tick()
+  assert.equal(f.visualAudit.value, true)
+  f.auditFailure.value = 'warn'
+  assert.equal(await f.save(), true)
+  assert.deepEqual(JSON.parse(calls[1].body), {
+    pace: 'leisurely', scene_staging: true, visual_audit: true, visual_audit_failure: 'warn',
+  })
+  assert.equal(await f.save(), true)
+  assert.equal(calls.length, 2)
+})
+
+test('older settings keep audit defaults without exposing a legacy mode', async t => {
+  const calls = []
+  const f = await fixture(t, 'VnNarrationSettings', { sessionId: 'session-a' }, 'visualAudit, auditFailure, save', async (_url, options) => {
+    calls.push(options)
+    return reply({ settings: { pace: 'balanced' } })
+  })
+  await tick()
+  assert.equal(f.visualAudit.value, true)
+  assert.equal(f.auditFailure.value, 'block')
+  assert.equal(await f.save(), true)
+  assert.equal(calls.length, 1)
+  f.visualAudit.value = false
+  assert.equal(await f.save(), true)
+  assert.equal(JSON.parse(calls[1].body).visual_preparation, undefined)
+})
+
+test('visual plans expose limits and explicitly request a rebuild', async t => {
+  const jobs = []
+  const f = await fixture(t, 'VnMomentIllustration', { sessionId: 's-a', messageId: 'm-a', canGenerate: true }, 'generate, state, planNotice', async () => reply({ available: true, plan_enabled: true, image_url: null }), async (...args) => {
+    jobs.push(args)
+    return { image_url: '/saved/plan.png', generation_details: { visual_plan: { limited_output_coverage: true, semantic_audit: 'not_run' } } }
+  })
+  await tick()
+  await f.generate(true)
+  assert.equal(jobs[0][1].refresh_plan, true)
+  assert.match(f.planNotice.value, /limited expression/)
+  assert.match(f.planNotice.value, /not been verified/)
+})
+
+test('visual fact diagnostics slice actual prompt by Unicode code points', async t => {
+  const f = await fixture(t, 'VisualPlanDetails', {
+    positive: '✨ A person.',
+    plan: { normalization_cache_hit: true, provenance: { facts: [
+      { predicate: 'present', start: 0, positive_start: 2, positive_end: 11 },
+      { predicate: 'placement', start: null, positive_start: null, positive_end: null, disposition: 'tag_binding' },
+    ] } },
+  }, 'facts, represented, reused', async () => reply({}))
+  assert.equal(f.facts.value[0].excerpt, 'A person.')
+  assert.equal(f.facts.value[1].excerpt, '')
+  assert.equal(f.facts.value[1].disposition, 'tag_binding')
+  assert.equal(f.represented.value, 1)
+  assert.equal(f.reused.value, true)
+})
+
+test('visual fact diagnostics do not guess unavailable final-text offsets', async t => {
+  const f = await fixture(t, 'VisualPlanDetails', {
+    positive: 'Text', plan: { provenance: { facts: [
+      { predicate: 'present', start: 0, positive_start: 8, positive_end: 12 },
+      { predicate: 'posture', start: 0, positive_start: 1, positive_end: 0 },
+    ] } },
+  }, 'facts', async () => reply({}))
+  assert.ok(f.facts.value.every(fact => fact.excerpt === ''))
 })

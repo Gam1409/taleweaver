@@ -14,7 +14,11 @@ from backend.api.routes.adventures.editing.entity_update.fields import (
     template_rows,
     validated_new_id,
 )
+from backend.api.routes.adventures.editing.entity_update.rename_refs import (
+    cascade_template_references,
+)
 from backend.api.routes.adventures.editing.schemas import EntityUpdateRequest
+from backend.models.adventure_template import AdventureTemplate
 from backend.models.world_entity import WorldEntity, WorldExit, WorldScene
 
 _MAX_ENTITY_ID_LENGTH = 30
@@ -57,7 +61,9 @@ async def _rename_avatar_refs(db: AsyncSession, template_id: str, old_id: str, n
         avatar.equipment = {slot: _renamed_ref(v, old_id, new_id) for slot, v in equipment.items()}
 
 
-async def rename_entity(db: AsyncSession, template_id: str, ent: WorldEntity, raw_id: str) -> None:
+async def rename_entity(
+    db: AsyncSession, template_id: str, adventure: AdventureTemplate, ent: WorldEntity, raw_id: str
+) -> None:
     """Change an entity ID and repoint exit keys, recipes, reveals, and inventories."""
     old_id = ent.id
     new_id = validated_new_id(raw_id, "Entity", _MAX_ENTITY_ID_LENGTH)
@@ -75,6 +81,7 @@ async def rename_entity(db: AsyncSession, template_id: str, ent: WorldEntity, ra
     for other in await template_rows(db, WorldEntity, template_id):
         _rename_entity_refs(other, old_id, new_id)
     await _rename_avatar_refs(db, template_id, old_id, new_id)
+    await cascade_template_references(db, adventure, old_id, new_id, "entity")
 
 
 def apply_common_fields(ent: WorldEntity, payload: EntityUpdateRequest) -> None:

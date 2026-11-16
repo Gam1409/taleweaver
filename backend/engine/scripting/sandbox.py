@@ -10,27 +10,19 @@ from __future__ import annotations
 import ast
 import logging
 import time
+from collections.abc import Callable
 from typing import Any
 
+from backend.engine.scripting import call_budget
+from backend.engine.scripting.errors import (
+    ScriptExecutionError,
+    ScriptSecurityError,
+    ScriptTimeoutError,
+)
+from backend.engine.scripting.percent_budget import check_percent
+from backend.engine.scripting.text_budget import bounded, payload_size, text_size
+
 logger = logging.getLogger(__name__)
-
-
-class ScriptSecurityError(Exception):
-    """Raised when a script attempts an unauthorized or unsafe operation."""
-
-    pass
-
-
-class ScriptExecutionError(Exception):
-    """Raised when a runtime error occurs during script evaluation."""
-
-    pass
-
-
-class ScriptTimeoutError(ScriptExecutionError):
-    """Raised when a script exceeds its maximum execution instruction budget."""
-
-    pass
 
 
 class _ReturnSignalError(Exception):
@@ -106,6 +98,7 @@ ALLOWED_AST_NODES: set[type[ast.AST]] = {
 
 # Resource limits. Adventure scripts may come from imported (untrusted) adventures, so a
 # single script must not be able to exhaust server memory or CPU.
+MAX_SOURCE_LENGTH = 100_000
 MAX_SEQUENCE_LENGTH = 100_000
 MAX_RANGE_LENGTH = 100_000
 MAX_INT_BITS = 10_000
@@ -177,8 +170,18 @@ SAFE_BUILTINS: dict[str, Any] = {
 }
 
 
+def _reserved_binding(node: ast.AST) -> bool:
+    if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
+        return node.id in _RESERVED_NAMES
+    if isinstance(node, ast.arg):
+        return node.arg in _RESERVED_NAMES
+    return isinstance(node, ast.FunctionDef) and node.name in _RESERVED_NAMES
+
+
 def _inspect_ast_node(node: ast.AST) -> str | None:
     """Returns a security error string if the node violates sandbox rules, else None."""
+    if _reserved_binding(node):
+        return "Cannot replace a reserved script binding."
     if type(node) not in ALLOWED_AST_NODES:
         return f"Forbidden syntax '{type(node).__name__}' is not allowed in sandbox."
     if isinstance(node, ast.Attribute):
@@ -221,30 +224,39 @@ def _safe_pow(left: Any, right: Any) -> Any:
     return left**right
 
 
+def _safe_mod(left: Any, right: Any) -> Any:
+    if isinstance(left, (str, bytes)):
+        check_percent(left, right, MAX_SEQUENCE_LENGTH)
+    return left % right
+
+
 _BINOPS: dict[type[ast.operator], Any] = {
     ast.Add: _safe_add,
     ast.Sub: lambda a, b: a - b,
     ast.Mult: _safe_mult,
     ast.Div: lambda a, b: a / b,
     ast.FloorDiv: lambda a, b: a // b,
-    ast.Mod: lambda a, b: a % b,
+    ast.Mod: _safe_mod,
     ast.Pow: _safe_pow,
 }
 
 
-def _guard_call_arguments(func: Any, args: list[Any], kwargs: dict[str, Any]) -> None:
-    """Rejects calls on builtin sequences that would allocate huge results in one step."""
-    owner = getattr(func, "__self__", None)
-    if not isinstance(owner, _SIZE_SENSITIVE_TYPES):
-        return
-    for value in (*args, *kwargs.values()):
-        if isinstance(value, int) and abs(value) > MAX_SEQUENCE_LENGTH:
-            raise ScriptSecurityError("Argument exceeds safe size limit.")
-    is_join = getattr(func, "__name__", "") == "join" and bool(args)
-    if is_join and isinstance(args[0], (list, tuple)):
-        total = sum(len(part) for part in args[0] if isinstance(part, _SIZE_SENSITIVE_TYPES))
-        if total > MAX_SEQUENCE_LENGTH:
-            raise ScriptSecurityError("join() result exceeds safe memory limit.")
+def _guard_call_arguments(
+    func: Any, args: list[Any], kwargs: dict[str, Any], tick: Callable[[], None]
+) -> tuple[Any, list[Any], dict[str, Any]]:
+    return call_budget.prepare(func, args, kwargs, MAX_SEQUENCE_LENGTH, _safe_print, tick)
+
+
+def check_source_size(code: str) -> None:
+    if len(code) > MAX_SOURCE_LENGTH:
+        raise ScriptSecurityError(
+            f"Script source exceeds the safe limit of {MAX_SOURCE_LENGTH} characters."
+        )
+
+
+_BREAK = object()
+_CONTINUE = object()
+_RESERVED_NAMES = frozenset({"tw", "game"})
 
 
 class SafeAstInterpreter:
@@ -289,11 +301,12 @@ class SafeAstInterpreter:
         Statically parses and validates Python script code without running it.
         Returns a list of error strings (empty if valid).
         """
-        if not code or not code.strip():
+        if not code:
             return []
 
         errors: list[str] = []
         try:
+            check_source_size(code)
             tree = ast.parse(code, mode="exec")
         except SyntaxError as exc:
             msg = f"Syntax error at line {exc.lineno or 1}"
@@ -315,11 +328,14 @@ class SafeAstInterpreter:
     @classmethod
     def check_expression_syntax(cls, code: str) -> list[str]:
         """Statically parses and validates Python expression syntax without running it."""
-        if not code or not code.strip():
+        if not code:
             return []
 
         errors: list[str] = []
         try:
+            check_source_size(code)
+            if not code.strip():
+                return []
             tree = ast.parse(code.strip(), mode="eval")
         except SyntaxError as exc:
             msg = f"Syntax error at line {exc.lineno or 1}"
@@ -344,6 +360,7 @@ class SafeAstInterpreter:
         """
         self._start_budget()
         try:
+            check_source_size(code)
             tree = ast.parse(code, mode="exec")
         except SyntaxError as exc:
             raise ScriptExecutionError(f"Syntax error in script: {exc}") from exc
@@ -356,12 +373,14 @@ class SafeAstInterpreter:
         try:
             for stmt in tree.body:
                 self._eval_stmt(stmt)
+        except RecursionError:
+            raise ScriptExecutionError("Script recursion limit exceeded.") from None
         except _ReturnSignalError:
             raise ScriptExecutionError("SyntaxError: 'return' outside function") from None
 
         # Sync back created/modified variables to caller context
         for k, v in self.env.items():
-            if k not in SAFE_BUILTINS:
+            if k not in SAFE_BUILTINS and k not in _RESERVED_NAMES:
                 context[k] = v
 
     def evaluate_expression(self, expr_str: str, context: dict[str, Any]) -> Any:
@@ -370,13 +389,17 @@ class SafeAstInterpreter:
         """
         self._start_budget()
         try:
+            check_source_size(expr_str)
             tree = ast.parse(expr_str.strip(), mode="eval")
         except SyntaxError as exc:
             raise ScriptExecutionError(f"Syntax error in expression: {exc}") from exc
 
         self.validate_ast(tree)
         self.env = {**SAFE_BUILTINS, **context}
-        return self._eval_expr(tree.body)
+        try:
+            return self._eval_expr(tree.body)
+        except RecursionError:
+            raise ScriptExecutionError("Script recursion limit exceeded.") from None
 
     # -------------------------------------------------------------------------
     # Statement Handlers
@@ -407,18 +430,20 @@ class SafeAstInterpreter:
         new_val = self._apply_binop(stmt.op, current_val, right_val)
         self._assign_target(stmt.target, new_val)
 
-    def _eval_If(self, stmt: ast.If) -> None:
+    def _eval_If(self, stmt: ast.If) -> object:
         test_val = self._eval_expr(stmt.test)
         if bool(test_val):
             for s in stmt.body:
                 res = self._eval_stmt(s)
-                if res in ("break", "continue"):
+                if res is _BREAK or res is _CONTINUE:
                     return res
         else:
             for s in stmt.orelse:
                 res = self._eval_stmt(s)
-                if res in ("break", "continue"):
+                if res is _BREAK or res is _CONTINUE:
                     return res
+
+        return None
 
     def _eval_For(self, stmt: ast.For) -> None:
         iterable = self._eval_expr(stmt.iter)
@@ -433,10 +458,10 @@ class SafeAstInterpreter:
             should_break = False
             for s in stmt.body:
                 res = self._eval_stmt(s)
-                if res == "break":
+                if res is _BREAK:
                     should_break = True
                     break
-                elif res == "continue":
+                elif res is _CONTINUE:
                     break
             if should_break:
                 break
@@ -444,11 +469,11 @@ class SafeAstInterpreter:
             for s in stmt.orelse:
                 self._eval_stmt(s)
 
-    def _eval_Break(self, stmt: ast.Break) -> str:
-        return "break"
+    def _eval_Break(self, stmt: ast.Break) -> object:
+        return _BREAK
 
-    def _eval_Continue(self, stmt: ast.Continue) -> str:
-        return "continue"
+    def _eval_Continue(self, stmt: ast.Continue) -> object:
+        return _CONTINUE
 
     def _eval_Return(self, stmt: ast.Return) -> None:
         self._tick()
@@ -532,6 +557,8 @@ class SafeAstInterpreter:
     # -------------------------------------------------------------------------
 
     def _assign_target(self, target: ast.AST, val: Any) -> None:
+        if isinstance(target, ast.Name) and target.id in _RESERVED_NAMES:
+            raise ScriptSecurityError("Cannot replace a reserved script binding.")
         if isinstance(target, ast.Name):
             if target.id.startswith("_"):
                 raise ScriptSecurityError(f"Cannot assign to private variable '{target.id}'")
@@ -541,14 +568,15 @@ class SafeAstInterpreter:
             violation = attribute_violation(target.attr)
             if violation:
                 raise ScriptSecurityError(violation)
+            payload_size(val, MAX_SEQUENCE_LENGTH)
             setattr(obj, target.attr, val)
         elif isinstance(target, ast.Subscript):
             container = self._eval_expr(target.value)
             key = self._eval_expr(target.slice)
-            container[key] = val
+            container[key] = call_budget.assignment(container, key, val, MAX_SEQUENCE_LENGTH)
         elif isinstance(target, (ast.Tuple, ast.List)):
             try:
-                items = list(val)
+                items = call_budget.collect(val, MAX_SEQUENCE_LENGTH)
             except TypeError as exc:
                 raise ScriptExecutionError(
                     f"Cannot unpack non-iterable '{type(val).__name__}'"
@@ -579,7 +607,7 @@ class SafeAstInterpreter:
         return handler(expr)
 
     def _eval_Constant(self, expr: ast.Constant) -> Any:
-        return expr.value
+        return _check_int_size(_check_sequence_size(expr.value))
 
     def _eval_Name(self, expr: ast.Name) -> Any:
         name = expr.id
@@ -666,7 +694,7 @@ class SafeAstInterpreter:
         kwargs = {kw.arg: self._eval_expr(kw.value) for kw in expr.keywords if kw.arg is not None}
         if not callable(func):
             raise ScriptExecutionError(f"'{type(func).__name__}' object is not callable")
-        _guard_call_arguments(func, args, kwargs)
+        func, args, kwargs = _guard_call_arguments(func, args, kwargs, self._tick)
         return _check_int_size(_check_sequence_size(func(*args, **kwargs)))
 
     def _eval_Attribute(self, expr: ast.Attribute) -> Any:
@@ -694,12 +722,15 @@ class SafeAstInterpreter:
         return slice(lower, upper, step)
 
     def _eval_List(self, expr: ast.List) -> list[Any]:
+        bounded(len(expr.elts), MAX_SEQUENCE_LENGTH)
         return [self._eval_expr(elt) for elt in expr.elts]
 
     def _eval_Tuple(self, expr: ast.Tuple) -> tuple[Any, ...]:
+        bounded(len(expr.elts), MAX_SEQUENCE_LENGTH)
         return tuple(self._eval_expr(elt) for elt in expr.elts)
 
     def _eval_Dict(self, expr: ast.Dict) -> dict[Any, Any]:
+        bounded(len(expr.keys), MAX_SEQUENCE_LENGTH)
         return {
             self._eval_expr(k): self._eval_expr(v)
             for k, v in zip(expr.keys, expr.values, strict=False)
@@ -749,12 +780,22 @@ class SafeAstInterpreter:
 
     def _eval_joined_str(self, expr: ast.JoinedStr) -> str:
         parts = []
+        size = 0
         for val in expr.values:
-            parts.append(str(self._eval_expr(val)))
-        return _check_sequence_size("".join(parts))
+            value = self._eval_expr(val)
+            size = bounded(
+                size + text_size(value, max(0, MAX_SEQUENCE_LENGTH - size)), MAX_SEQUENCE_LENGTH
+            )
+            parts.append(str(value))
+        result = "".join(parts)
+        _check_sequence_size(result)
+        return result
 
     def _eval_formatted_value(self, expr: ast.FormattedValue) -> str:
+        if expr.format_spec is not None or expr.conversion != -1:
+            raise ScriptExecutionError("Format specifications and conversions are not supported.")
         val = self._eval_expr(expr.value)
+        text_size(val, MAX_SEQUENCE_LENGTH)
         return str(val)
 
     # Aliases matching ast class names for dispatch

@@ -13,11 +13,11 @@ Invalidation:
   applied finding signature, because the world state has changed.
 """
 
-import uuid6
 from datetime import datetime
-from typing import Any, Dict
+from typing import Any
 
-from sqlalchemy import JSON, DateTime, ForeignKey, String
+import uuid6
+from sqlalchemy import JSON, DateTime, ForeignKey, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.models.base import Base, TimestampMixin
@@ -25,6 +25,14 @@ from backend.models.base import Base, TimestampMixin
 
 class AIFixCache(Base, TimestampMixin):
     __tablename__ = "ai_fix_cache"
+    __table_args__ = (
+        UniqueConstraint(
+            "template_id",
+            "user_id",
+            "finding_signature",
+            name="uq_ai_fix_cache_user_template_finding",
+        ),
+    )
 
     id: Mapped[str] = mapped_column(
         String(36),
@@ -46,8 +54,10 @@ class AIFixCache(Base, TimestampMixin):
         nullable=False,
         index=True,
     )
-    response: Mapped[Dict[str, Any]] = mapped_column(
-        JSON, nullable=False, default=dict,
+    response: Mapped[dict[str, Any]] = mapped_column(
+        JSON,
+        nullable=False,
+        default=dict,
     )
     expires_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

@@ -3,7 +3,7 @@
  * MapTab — Renders the adventure template scenes as an interactive world map.
  * Reuses Dagre for graph layouts and SVG/HTML rendering for visual excellence.
  */
-import { watch, ref, nextTick, onMounted, computed } from 'vue'
+import { watch, ref, onMounted, computed } from 'vue'
 import dagre from 'dagre'
 import mapSvg from '@/assets/svg/fantasy-rpg-map.svg'
 import { visualService } from '@/services/visualService'
@@ -21,7 +21,7 @@ const emit = defineEmits<{
   (e: 'open-exit', exitId: string): void
 }>()
 
-const mapContainer = ref<HTMLDivElement | null>(null)
+
 
 // Tooltip State
 const hoveredNodeId = ref<string | null>(null)
@@ -404,7 +404,7 @@ onMounted(() => {
     </div>
 
     <!-- Map Canvas Window -->
-    <div class="relative h-[65vh] bg-slate-950 border border-white/5 rounded-3xl overflow-hidden flex flex-col shadow-2xl bg-radial-gradient" ref="mapContainer">
+    <div class="relative h-[65vh] bg-slate-950 border border-white/5 rounded-3xl overflow-hidden flex flex-col shadow-2xl bg-radial-gradient">
       
       <!-- Empty state if no scenes -->
       <div

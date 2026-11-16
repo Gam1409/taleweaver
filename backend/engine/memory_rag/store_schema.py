@@ -5,7 +5,9 @@ import json
 import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Literal
+
+from backend.engine.memory_rag.ranking import ordered_terms
 
 
 @dataclass(frozen=True)
@@ -14,6 +16,13 @@ class Scope:
     session_id: str
     epoch: int
     signature: str
+    namespace: Literal["public", "observer"] = "public"
+
+
+def namespace_filter(scope: Scope) -> str:
+    if scope.namespace not in {"public", "observer"}:
+        raise ValueError("Invalid memory namespace.")
+    return "layer = 'observer'" if scope.namespace == "observer" else "layer != 'observer'"
 
 
 def literal(value: str) -> str:
@@ -29,6 +38,7 @@ def scope_filter(scope: Scope) -> str:
             f"session_id = {literal(scope.session_id)}",
             f"epoch = {scope.epoch}",
             f"signature = {literal(scope.signature)}",
+            namespace_filter(scope),
         ]
     )
 
@@ -62,8 +72,8 @@ def schema(dimension: int) -> Any:
     )
 
 
-def row(scope: Scope, document: dict, vector: list[float]) -> dict:
-    result = {
+def row(scope: Scope, document: dict, vector: list[float]) -> dict[str, str | int | list[float]]:
+    result: dict[str, str | int | list[float]] = {
         name: str(document.get(name) or "")
         for name in [
             "id",
@@ -79,6 +89,8 @@ def row(scope: Scope, document: dict, vector: list[float]) -> dict:
     }
     if not all(result[name] for name in ("id", "layer", "source_id", "source_hash", "text")):
         raise ValueError("Memory document is missing required metadata.")
+    if (result["layer"] == "observer") != (scope.namespace == "observer"):
+        raise ValueError("Memory document belongs to another namespace.")
     for field in ("user_id", "session_id"):
         if document.get(field) is not None and str(document[field]) != getattr(scope, field):
             raise ValueError("Memory document ownership differs from its scope.")
@@ -96,7 +108,11 @@ def row(scope: Scope, document: dict, vector: list[float]) -> dict:
 
 
 def query_filter(
-    scope: Scope, layers: list[str] | None, npc_ids: list[str] | None, scene_id: str | None
+    scope: Scope,
+    layers: list[str] | None,
+    npc_ids: list[str] | None,
+    scene_id: str | None,
+    source_ids: list[str] | None = None,
 ) -> str:
     filters = [scope_filter(scope)]
     if layers is not None:
@@ -105,6 +121,8 @@ def query_filter(
         filters.append(_membership("npc_id", npc_ids))
     if scene_id is not None:
         filters.append(f"scene_id = {literal(scene_id)}")
+    if source_ids is not None:
+        filters.append(_membership("source_id", source_ids))
     return " AND ".join(filters)
 
 
@@ -115,7 +133,7 @@ def _membership(field: str, values: list[str]) -> str:
 
 
 def lexical_filter(text: str) -> str:
-    terms = sorted(set(re.findall(r"\w{2,}", text.lower())))[:24]
+    terms = ordered_terms(text, 24)
     if not terms:
         return "false"
     return "(" + " OR ".join("contains(lower(text), " + literal(term) + ")" for term in terms) + ")"

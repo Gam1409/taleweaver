@@ -195,7 +195,11 @@ async def test_provider_outage_has_hard_budget_and_sql_fallback(monkeypatch):
     async def blocked_provider(*args, **kwargs):
         await asyncio.Event().wait()
 
-    monkeypatch.setattr(retrieval, "VECTOR_BUDGET", 0.02)
+    query_settings = retrieval.read_settings(actor.user).model_copy(
+        update={"timeout_seconds": 0.01}
+    )
+    monkeypatch.setattr(retrieval, "read_settings", lambda _: query_settings)
+    monkeypatch.setattr(retrieval, "VECTOR_SEARCH_GRACE", 0.01)
     monkeypatch.setattr(retrieval, "embed_texts", blocked_provider)
     monkeypatch.setattr(retrieval, "collect_documents", AsyncMock(return_value=[document()]))
     started = time.perf_counter()
@@ -228,7 +232,7 @@ async def test_sql_is_reloaded_after_network_and_rewind_epoch_rejects_semantics(
         collected.append("network")
         return [vector_row(old)], scope
 
-    async def current_documents(*args):
+    async def current_documents(*args, **kwargs):
         assert collected == ["network"]
         return [changed]
 
@@ -265,7 +269,7 @@ async def test_actual_narrator_continuity_and_social_calls_receive_shared_old_fa
         lambda *args, **kwargs: "CURRENT STATE",
     )
     world = SimpleNamespace(current_scene=None, exits=[], all_scenes=[], all_entities=[])
-    _, narrator = TurnLlmContextBuilder(actor)._build_state_blocks(world, [], [], "")
+    mechanics, narrator = TurnLlmContextBuilder(actor)._build_state_blocks(world, [], [], "")
     continuity = build_progression_context(actor, npcs=[], scenes=[], exits=[])
     llm = SimpleNamespace(
         model="small", aexecute_complex_task=AsyncMock(return_value=InteractionPlan())
@@ -278,11 +282,17 @@ async def test_actual_narrator_continuity_and_social_calls_receive_shared_old_fa
     assert all(
         "tea with honey" in value
         for value in [
+            mechanics,
             narrator,
             continuity,
             social_payload["historical_recall_untrusted_orientation_only"],
         ]
     )
-    assert set(actor._memory_recall.usage) == {"narrator", "vn_continuity", "vn_social"}
+    assert set(actor._memory_recall.usage) == {
+        "mechanics",
+        "narrator",
+        "vn_continuity",
+        "vn_social",
+    }
     assert actor._memory_recall.usage["vn_social"]["source_ids"] == ["old-fact"]
     assert "tea with honey" not in json.dumps(actor._memory_recall.usage)

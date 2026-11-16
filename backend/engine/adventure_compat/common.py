@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from backend.core.adventure_format import validate_manifest_version
+from backend.core.manifest_extensions import preserve_extensions
 from backend.engine.adventure_compat.fields import FIELDS
 
 
@@ -18,7 +19,7 @@ class ConversionReport:
     warnings: list[str] = field(default_factory=list)
     requires_acknowledgement: bool = False
     source_format: str = "fork"
-    target_format: str = "upstream-2e042ef2"
+    target_format: str = "upstream-1.3-extensions"
 
     def warn(self, message: str, *, acknowledge: bool = False) -> None:
         if message not in self.warnings:
@@ -74,7 +75,7 @@ def canonical_manifest(
 ) -> dict[str, Any]:
     """Normalize the two real ADV layouts without reserializing away extra data."""
     _validate_envelope(manifest)
-    result = deepcopy(manifest)
+    result = preserve_extensions(deepcopy(manifest))
     _normalize_metadata(result, allow_legacy_mode=allow_legacy_mode)
     if not isinstance(result.get("protagonist", {}), dict):
         raise CompatibilityError("Protagonist must be an object.")
@@ -113,7 +114,12 @@ def check_fields(record: dict[str, Any], kind: str) -> None:
 
 def script_sources(value: Any, key: str = "") -> list[str]:
     if isinstance(value, dict):
-        return [code for name, item in value.items() for code in script_sources(item, name)]
+        return [
+            code
+            for name, item in value.items()
+            if name not in {"extensions", "agent_runtime"}
+            for code in script_sources(item, name)
+        ]
     if isinstance(value, list):
         return [code for item in value for code in script_sources(item, key)]
     if isinstance(value, str) and (

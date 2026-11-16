@@ -2,7 +2,8 @@
 # This script sets up the Python environment, database, and frontend dependencies.
 
 param (
-    [switch]$SkipStart
+    [switch]$SkipStart,
+    [switch]$Concordia
 )
 
 $ErrorActionPreference = "Stop"
@@ -43,12 +44,18 @@ if (-not $poetryExe) {
     Invoke-TaleWeaverNative -Command $bootstrapPython -Arguments @("-m", "pip", "install", "--upgrade", "pip", "poetry>=2.0.0,<3.0.0")
     $poetryExe = Get-TaleWeaverPoetry -ProjectRoot $scriptPath
 }
-Invoke-TaleWeaverNative -Command $poetryExe -Arguments @("install", "--no-interaction")
+$installArgs = @("install", "--no-interaction")
+if ($Concordia) { $installArgs += @("--extras", "concordia") }
+Invoke-TaleWeaverNative -Command $poetryExe -Arguments $installArgs
 $pythonExe = Get-TaleWeaverPython -ProjectRoot $scriptPath
 if (-not (Test-TaleWeaverBackend -Python $pythonExe)) {
     throw "Backend dependencies (including LanceDB) are unavailable after installation. Check the Poetry installation output above."
 }
 Write-Host "[+] Backend Python: $pythonExe" -ForegroundColor Green
+
+if ($Concordia) {
+    Invoke-TaleWeaverNative -Command $pythonExe -Arguments @("-c", "import sys; from importlib.metadata import version; assert sys.version_info >= (3, 12), 'Concordia requires Python 3.12 or 3.13'; assert version('gdm-concordia') == '2.4.0'")
+}
 
 # 4. Security Keys
 if (-not (Test-Path "data")) {
@@ -56,38 +63,8 @@ if (-not (Test-Path "data")) {
     New-Item -ItemType Directory -Path "data" | Out-Null
 }
 
-# Helper: set or append a key=value pair in .env
-# If the key line already exists it is replaced, otherwise appended.
-function Set-EnvKey {
-    param([string]$Key, [string]$Value)
-    $content = Get-Content ".env" -Raw
-    if ($content -match "(?m)^${Key}=") {
-        $content = $content -replace "(?m)^${Key}=.*", "${Key}=${Value}"
-    } else {
-        $content = $content.TrimEnd() + "`r`n${Key}=${Value}`r`n"
-    }
-    Set-Content ".env" $content -NoNewline
-}
-
-$envFile = Get-Content ".env" -Raw
-
-# ENCRYPTION_KEY
-if ($envFile -notmatch "(?m)^ENCRYPTION_KEY=[a-zA-Z0-9+/=_-]{20,}") {
-    Write-Host "[*] Generating ENCRYPTION_KEY..." -ForegroundColor Yellow
-    $key = Invoke-TaleWeaverNative -Command $pythonExe -Arguments @("-c", "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
-    Set-EnvKey "ENCRYPTION_KEY" $key
-    Write-Host "[+] ENCRYPTION_KEY written to .env" -ForegroundColor Green
-}
-
-# SECRET_KEY
-$envFile = Get-Content ".env" -Raw
-if ($envFile -notmatch "(?m)^SECRET_KEY=[a-fA-F0-9]{64}") {
-    Write-Host "[*] Generating SECRET_KEY..." -ForegroundColor Yellow
-    $skey = Invoke-TaleWeaverNative -Command $pythonExe -Arguments @("-c", "import secrets; print(secrets.token_hex(32))")
-    Set-EnvKey "SECRET_KEY" $skey
-    Write-Host "[+] SECRET_KEY written to .env" -ForegroundColor Green
-}
-
+# Share dotenv parsing and safe existing-database behavior with Bash setup.
+Invoke-TaleWeaverNative -Command $pythonExe -Arguments @("-m", "scripts.setup_keys")
 
 # 5. Database Setup (Migrations)
 Write-Host "[*] Running database migrations..." -ForegroundColor Yellow

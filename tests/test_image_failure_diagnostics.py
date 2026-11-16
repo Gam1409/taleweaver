@@ -55,9 +55,7 @@ async def test_transport_failure_keeps_stage_type_and_submission_count(
     assert error_type.__name__ in str(caught.value)
     assert len([r for r in calls if r.url.path == "/prompt"]) == 1
     deletions = [json.loads(r.content) for r in calls if r.url.path == "/queue"]
-    expected = (
-        [{"delete": ["job-1"]}] if error_type is httpx.ReadTimeout and path != "/prompt" else []
-    )
+    expected = [{"delete": ["job-1"]}] if path != "/prompt" else []
     assert deletions == expected
     assert all(r.url.path != "/interrupt" for r in calls)
 

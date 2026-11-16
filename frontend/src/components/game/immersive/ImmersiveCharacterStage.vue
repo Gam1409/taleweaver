@@ -7,6 +7,8 @@
  */
 import { ref, watch, nextTick, computed } from 'vue'
 import { getImageUrl, getOriginalImageUrl } from '@/utils/game_icons'
+import NpcThoughtBubble from './NpcThoughtBubble.vue'
+import { DEFAULT_PORTRAIT_PREFERENCES, emotionLabel, portraitStyle, thoughtText, type PortraitCue, type PortraitPreferences } from '@/utils/npcPresentation'
 import { ImagePlus } from 'lucide-vue-next'
 import type { PortraitTarget } from '@/composables/useSessionPortrait'
 
@@ -15,6 +17,8 @@ const props = defineProps<{
   npcs: any[]
   activeSpeakers: Set<string>
   activeTurnIndex?: number
+  portraitCues?: Record<string, PortraitCue>
+  portraitPreferences?: PortraitPreferences
 }>()
 
 const emit = defineEmits<{
@@ -25,6 +29,45 @@ const emit = defineEmits<{
   portrait: [npc: PortraitTarget]
 }>()
 
+const preferences = computed(() => props.portraitPreferences || DEFAULT_PORTRAIT_PREFERENCES)
+const paletteActive = computed(() => preferences.value.emotion_palette && preferences.value.brightness > 0)
+const thought = ref({ id: '', name: '', text: '', anchor: null as HTMLElement | null })
+function closeThought() { thought.value = { id: '', name: '', text: '', anchor: null } }
+function showThought(npc: any, event: MouseEvent | FocusEvent) {
+  const useThought = preferences.value.character_thoughts && npc.id !== 'PLAYER'
+  if (!useThought) {
+    closeThought()
+    if (event instanceof MouseEvent) emit('npcHover', npc, event)
+    return
+  }
+  emit('npcLeave')
+  const text = thoughtText(props.portraitCues?.[npc.id], preferences.value)
+  if (!text) { closeThought(); return }
+  thought.value = { id: npc.id, name: npc.name, text, anchor: event.currentTarget as HTMLElement }
+}
+function onMove(npc: any, event: MouseEvent) {
+  if (!preferences.value.character_thoughts || npc.id === 'PLAYER') emit('npcHover', npc, event)
+}
+function onClick(npc: any) {
+  closeThought()
+  emit('npcLeave')
+  if (preferences.value.character_thoughts && npc.id !== 'PLAYER') {
+    emit('portrait', npc)
+    return
+  }
+  emit('npcClick', npc)
+}
+function onKeydown(npc: any, event: KeyboardEvent) {
+  if (event.target !== event.currentTarget) return
+  if (event.key === 'Escape') closeThought()
+  if (event.key === 'Enter' || event.key === ' ') {
+    event.preventDefault()
+    onClick(npc)
+  }
+}
+function onLeave() { closeThought(); emit('npcLeave') }
+watch([() => props.activeTurnIndex, () => props.portraitCues, preferences], closeThought)
+
 const stageContainerRef = ref<HTMLElement | null>(null)
 const brokenImages = ref<Record<string, boolean>>({})
 
@@ -32,6 +75,7 @@ function scrollToTop() {
   if (!stageContainerRef.value) return
   stageContainerRef.value.scrollTo({
     top: 0,
+    left: 0,
     behavior: 'smooth'
   })
 }
@@ -87,24 +131,33 @@ function isNpcSpeaking(npc: any): boolean {
 <template>
   <aside
     ref="stageContainerRef"
-    class="flex flex-col gap-2 shrink-0 overflow-y-auto w-20 sm:w-28 md:w-36 lg:w-44 custom-scrollbar pr-1 py-1 max-h-full"
+    class="game-character-stage flex gap-2 shrink-0 overflow-x-auto sm:overflow-x-hidden sm:overflow-y-auto w-full sm:w-28 md:w-36 lg:w-44 custom-scrollbar sm:pr-1 py-1 max-h-24 sm:max-h-full"
+    :class="{ 'emotion-stage': paletteActive }"
   >
-    <TransitionGroup name="npc-stage" tag="div" class="flex flex-col gap-2 w-full">
+    <TransitionGroup name="npc-stage" tag="div" class="flex flex-row sm:flex-col gap-2 w-max sm:w-full">
       <div
         v-for="npc in props.npcs"
         :key="npc.id"
-        class="relative group flex flex-col items-center bg-slate-950 rounded-xl border-2 transition-all duration-300 shrink-0 w-full aspect-[2/3] overflow-hidden cursor-pointer shadow-[0_6px_20px_rgba(0,0,0,0.7)] active:scale-98"
+        class="emotion-portrait relative group flex flex-col items-center bg-slate-950 rounded-xl border-2 transition-all duration-300 shrink-0 w-14 sm:w-full aspect-[2/3] overflow-hidden cursor-pointer shadow-[0_6px_20px_rgba(0,0,0,0.7)] active:scale-98"
         :class="[
-          isNpcSpeaking(npc)
+          isNpcSpeaking(npc) && !emotionLabel(props.portraitCues?.[npc.id], preferences)
             ? 'border-amber-400 shadow-[0_0_25px_rgba(251,191,36,0.6)] ring-2 ring-amber-400/60'
             : npc.id === 'PLAYER'
               ? 'border-emerald-500/70 hover:border-emerald-400'
               : 'border-slate-700/70 hover:border-cyan-400/80'
         ]"
-        @click="emit('npcClick', npc)"
-        @mouseenter="emit('npcHover', npc, $event)"
-        @mousemove="emit('npcHover', npc, $event)"
-        @mouseleave="emit('npcLeave')"
+        tabindex="0"
+        :aria-label="[npc.name, emotionLabel(props.portraitCues?.[npc.id], preferences)].filter(Boolean).join(' · ')"
+        :aria-describedby="thought.id === npc.id ? 'npc-current-thought' : undefined"
+        :title="!preferences.character_thoughts ? emotionLabel(props.portraitCues?.[npc.id], preferences) || undefined : undefined"
+        :style="npc.id !== 'PLAYER' ? portraitStyle(props.portraitCues?.[npc.id], preferences) : {}"
+        @click="onClick(npc)"
+        @keydown="onKeydown(npc, $event)"
+        @focusin.self="showThought(npc, $event)"
+        @focusout="closeThought"
+        @mouseenter="showThought(npc, $event)"
+        @mousemove="onMove(npc, $event)"
+        @mouseleave="onLeave"
         @contextmenu.prevent="emit('npcContextmenu', npc, $event)"
       >
         <!-- Full 2:3 Character Portrait -->
@@ -135,7 +188,7 @@ function isNpcSpeaking(npc: any): boolean {
           <ImagePlus class="w-3.5 h-3.5" />
         </button>
 
-        <div v-if="isNpcSpeaking(npc)" class="absolute top-2 right-2 z-20 px-1.5 py-0.5 rounded-full bg-amber-500 text-black text-[8px] font-black uppercase tracking-wider shadow-md animate-bounce">
+        <div v-if="isNpcSpeaking(npc)" class="speaker-badge absolute top-2 right-2 z-20 px-1.5 py-0.5 rounded-full bg-amber-500 text-black text-[8px] font-black uppercase tracking-wider shadow-md animate-bounce" title="Speaking">
           Speaking
         </div>
 
@@ -150,7 +203,7 @@ function isNpcSpeaking(npc: any): boolean {
         </div>
 
         <!-- Name & Role Overlay with Gradient & Strong Shadow -->
-        <div class="absolute inset-x-0 bottom-0 pt-8 pb-2 px-2 bg-gradient-to-t from-black/95 via-black/60 to-transparent flex flex-col items-center text-center pointer-events-none z-10">
+        <div class="portrait-caption absolute inset-x-0 bottom-0 pt-8 pb-2 px-2 bg-gradient-to-t from-black/95 via-black/60 to-transparent flex flex-col items-center text-center pointer-events-none z-10">
           <h4 class="text-[11px] sm:text-xs font-black text-white group-hover:text-amber-300 transition-colors uppercase tracking-wider drop-shadow-[0_2px_3px_rgba(0,0,0,1)] truncate w-full">
             {{ npc.name }}
           </h4>
@@ -161,9 +214,73 @@ function isNpcSpeaking(npc: any): boolean {
       </div>
     </TransitionGroup>
   </aside>
+  <NpcThoughtBubble :npc-id="thought.id" :text="thought.text" :name="thought.name" :anchor="thought.anchor" @dismiss="closeThought" />
 </template>
 
 <style scoped>
+/* Separate adjacent halos and reserve the same room at scrollport edges. */
+.game-character-stage {
+  padding-block: 0;
+  max-height: 7.25rem;
+}
+.game-character-stage > div {
+  gap: 2rem;
+  padding-block: 16px;
+  height: max-content;
+}
+/* The strongest emotion halo has 36px blur and 4px spread. */
+.emotion-stage {
+  padding: 0;
+  max-height: 8.25rem;
+}
+.emotion-stage > div {
+  gap: 3rem;
+  padding: 24px 12px;
+  height: max-content;
+}
+@media (max-width: 639px) {
+  .game-character-stage { max-height: 152px; }
+  .emotion-stage { max-height: 168px; }
+  .emotion-portrait { width: 96px; aspect-ratio: 4/5; }
+  .portrait-caption h4 {
+    white-space: normal;
+    line-height: 1.25;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+  .speaker-badge {
+    width: 9px;
+    height: 9px;
+    top: 12px;
+    right: 10px;
+    padding: 0;
+    font-size: 0;
+    animation: none;
+  }
+}
+@media (min-width: 640px) {
+  .game-character-stage { max-height: 100%; }
+  .emotion-stage { width: calc(7rem + 1.5rem); max-height: 100%; }
+}
+@media (min-width: 768px) {
+  .emotion-stage { width: calc(9rem + 1.5rem); }
+}
+@media (min-width: 1024px) {
+  .emotion-stage { width: calc(11rem + 1.5rem); }
+}
+
+/* Keep the inner glow above the image, below names and controls. */
+.emotion-portrait::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 9;
+  pointer-events: none;
+  border-radius: inherit;
+  box-shadow: var(--portrait-inner-glow, none);
+}
+
 .custom-scrollbar::-webkit-scrollbar { width: 4px; }
 .custom-scrollbar::-webkit-scrollbar-track { background: rgba(0,0,0,0.1); }
 .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.05); border-radius: 4px; }
@@ -185,5 +302,8 @@ function isNpcSpeaking(npc: any): boolean {
   display: inline-block;
   line-height: 1;
   vertical-align: middle;
+}
+@media (prefers-reduced-motion: reduce) {
+  .npc-stage-move, .npc-stage-enter-active, .npc-stage-leave-active, .emotion-portrait { transition-duration: .001ms; }
 }
 </style>

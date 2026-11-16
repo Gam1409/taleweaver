@@ -5,6 +5,15 @@ rules. It does not change your model weights. The Standard and High-Fidelity car
 select presets; **Configure** opens a drawer with Workflow and Prompt tabs.
 Additional text controls and prompt preview stay collapsed until needed.
 
+In **Create from a task template**, use **Check VAE / Checkpoint / CLIP** to read
+installed filenames and check the base workflow's node definitions at the current
+ComfyUI URL. Select missing model files directly below the recipe before creating
+the preset. These choices are copied into both its base and reference graphs.
+Custom combined checkpoints can be discovered before typing their filenames.
+Changing the recipe or URL clears the previous check. This action does not submit
+an image job or prove that embedded checkpoint components load successfully;
+use Test Generation for that. Each workflow also retains its own node check.
+
 ## Choosing a model template
 
 New presets enable **Choose template automatically from the workflow model**.
@@ -150,7 +159,46 @@ graphic details, and excludes minors and age-ambiguous characters. The preferenc
 is stored separately from automatic template selection, so detecting another model
 does not reset it. It affects LLM prompt adaptation only; manual prompts and workflow
 JSON/sampling controls remain unchanged.
-# Checkpoint VAE versus a separate VAE
+
+## A test image works but the adventure rejects its workflow
+
+The test preset, global task assignments and a saved adventure selection are separate.
+A successful test of Nova Anima does not assign it to backgrounds, items or portraits.
+Adventures store preset IDs; their workflows come from the current preset library.
+
+The preset editor's **Generate test image** uses its **Example description**. If a
+current prompt preview is available, the image uses that prepared body without a
+second adaptation request. Changing the example or workflow invalidates the old
+preview and test image. The generic profile Test Generation buttons keep their
+default smoke-test examples.
+
+A successful ComfyUI test reports the preset, workflow and model files that ran.
+It compares that draft with the saved global settings for the selected task and
+flags different model files or a different server connection. A test does not save
+its draft: click **Apply to form → Apply assignments → Save Visuals Settings** to
+use those changes outside the editor. Test descriptions and prepared preview bodies
+are not stored in the preset configuration.
+
+Open the image editor and check **Image settings for this adventure**. It displays
+the active provider, preset, workflow variant and model filenames for that specific
+image task. To follow the administrator's current assignments, choose **Use current
+global settings** and click **Apply image settings**, then generate the image.
+This changes future images in that adventure, preserves its saved selection for
+switching back and keeps existing images. Existing sessions have separate settings.
+The same source selector remains available under **Visuals → Image generation presets**.
+
+If the active global task still names an unavailable model, edit its assignment
+under **Administration → Visuals → Image tasks & presets**, apply assignments and
+save Visuals Settings. Testing a draft does not save those settings. Changing a
+workflow in the library does not overwrite the pinned workflow copy in every preset.
+
+An HTTP 400 rejection now identifies the actual task preset and its selected files.
+For `UNETLoader`, check the selected file in `ComfyUI/models/diffusion_models` (or
+legacy `models/unet`); `CheckpointLoaderSimple` reads `models/checkpoints`.
+Refresh model discovery and run the compatibility check on the **active task preset**.
+The source switch does not install files or silently substitute another model.
+
+## Checkpoint VAE versus a separate VAE
 
 The SDXL, Illustrious, Animagine and combined FLUX checkpoint starters connect
 `CheckpointLoaderSimple` output 2 directly to `VAEDecode`. Their reference workflows

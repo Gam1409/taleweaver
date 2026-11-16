@@ -8,9 +8,13 @@ Two detail levels exist:
   guardrails, so the narrator neither needs nor should be able to leak them.
 """
 
+from collections.abc import Sequence
 from typing import Any, Optional
 
+from backend.engine.character_identity import describe_character, identity_text
 from backend.engine.npc_journal.records import memory_context
+from backend.engine.personality.profile import personality_context
+from backend.models.world_entity import WorldEntity, WorldExit, WorldScene
 
 
 def _format_item_refs(items: Optional[list]) -> list[str]:
@@ -35,7 +39,9 @@ def _movement_label(entity: Any, separator: str) -> str:
         getattr(entity, "moveable", False)
         or str(getattr(entity, "movement_type", "") or "").upper() == "MOVABLE"
     )
-    allowed = getattr(entity, "allowed_scenes", None) or []
+    allowed = (
+        getattr(entity, "session_allowed_scenes", getattr(entity, "allowed_scenes", None)) or []
+    )
     if is_moveable and allowed:
         return f"{separator}Movable: Allowed in {', '.join(allowed)}"
     if is_moveable:
@@ -56,6 +62,8 @@ def _describe_npc(e: Any, detail: str) -> str:
     pos_str = f" (Position: {e.spatial_position})" if e.spatial_position else ""
     goal_str = f" [Goal: {e.goal}]" if e.goal else ""
     char_str = f" [Character: {e.character}]" if e.character else ""
+    traits = personality_context(e)
+    char_str += f" [Private personality: {traits}]" if traits else ""
     hidden_str = " [HIDDEN]" if getattr(e, "is_hidden", False) else ""
     inv_refs = _format_item_refs(e.inventory)
     inv_str = (
@@ -67,8 +75,9 @@ def _describe_npc(e: Any, detail: str) -> str:
     desc_str = f" - Description: {e.description}" if (e.description and detail != "concise") else ""
     notes_str = f' [Status/Notes: "{e.notes}"]' if getattr(e, "notes", None) else ""
     move_str = f" [{_movement_label(e, '').strip()}]"
+    identity = f" [{identity_text(e)}]" if identity_text(e) else ""
     return (
-        f"{e.name} (ID: {e.id}){stat_str}{pos_str}{goal_str}{char_str}{hidden_str}"
+        f"{e.name}{identity} (ID: {e.id}){stat_str}{pos_str}{goal_str}{char_str}{hidden_str}"
         f"{defeated_str}{notes_str}{move_str}{inv_str}{desc_str}{memory_context(e)}"
     )
 
@@ -94,7 +103,7 @@ def _switch_details(e: Any, detail: str) -> str:
         if not isinstance(t, dict):
             continue
         to_s = str(t.get("to") or t.get("to_state") or "").strip()
-        gates = t.get("gates") if isinstance(t.get("gates"), dict) else {}
+        gates = raw_gates if isinstance(raw_gates := t.get("gates"), dict) else {}
         reqs = [
             f"{label}:{value}"
             for label, value in (
@@ -138,6 +147,8 @@ def _describe_object(e: Any, detail: str) -> str:
     hidden_str = " [HIDDEN]" if getattr(e, "is_hidden", False) else ""
     item_type = str(e.item_type or "DEFAULT").upper()
     type_str = f" [Type: {item_type}]"
+    notes = getattr(e, "notes", None)
+    status_str = f" [Current notes: {notes}]" if notes else ""
 
     extra = ""
     if item_type == "SWITCH":
@@ -151,12 +162,12 @@ def _describe_object(e: Any, detail: str) -> str:
         extra = f' [Format: {fmt}] [Readable text content: "{content}"]'
 
     if detail == "concise":
-        return f"{e.name} (ID: {e.id}){type_str}{pos_str}{hidden_str}{extra}"
+        return f"{e.name} (ID: {e.id}){type_str}{pos_str}{hidden_str}{extra}{status_str}"
     desc_str = f" - Description: {e.description}" if e.description else ""
-    return f"- {e.name} (ID: {e.id}):{type_str}{desc_str}{pos_str}{hidden_str}{extra}"
+    return f"- {e.name} (ID: {e.id}):{type_str}{desc_str}{pos_str}{hidden_str}{extra}{status_str}"
 
 
-def _describe_exits(exits: list, detail: str) -> str:
+def _describe_exits(exits: Sequence[Any], detail: str) -> str:
     if detail == "concise":
         exit_list = []
         for e in exits:
@@ -182,7 +193,10 @@ def _describe_exits(exits: list, detail: str) -> str:
 
 
 def build_location_context(
-    current_scene=None, entities=None, exits=None, detail_level: str = "full"
+    current_scene: WorldScene | None = None,
+    entities: Sequence[WorldEntity] | None = None,
+    exits: Sequence[WorldExit] | None = None,
+    detail_level: str = "full",
 ) -> str:
     if not current_scene:
         return ""
@@ -285,11 +299,13 @@ def build_world_npcs_context(
         )
         pos_str = f", Position: {npc.spatial_position}" if npc.spatial_position else ""
         hidden_str = " [HIDDEN]" if getattr(npc, "is_hidden", False) else ""
-        desc = (npc.description or "").strip()
+        desc = describe_character(npc).strip()
         if desc.endswith("."):
             desc = desc[:-1]
         goal_str = f", Goal: {npc.goal}" if npc.goal else ""
         char_str = f", Character: {npc.character}" if npc.character else ""
+        traits = personality_context(npc)
+        char_str += f", Private personality: {traits}" if traits else ""
         inv_refs = _format_item_refs(npc.inventory)
         inv_str = f", PRIVATE GM Inventory: {', '.join(inv_refs)}" if inv_refs else ""
         notes_str = f', Status: "{npc.notes}"' if getattr(npc, "notes", None) else ""

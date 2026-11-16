@@ -7,11 +7,13 @@ from pathlib import Path
 from typing import Any
 
 from backend.engine.memory_rag.embeddings import validate_vectors
+from backend.engine.memory_rag.storage_tasks import mutate_storage
 from backend.engine.memory_rag.store_schema import (
     Scope,
     hybrid_rank,
     lexical_filter,
     literal,
+    namespace_filter,
     query_filter,
     row,
     schema,
@@ -21,6 +23,7 @@ from backend.engine.memory_rag.store_schema import (
 
 _WRITE_LOCK = threading.RLock()
 MAX_CANDIDATES = 128
+HASH_PAGE_SIZE = 4096
 
 
 def _table_names(connection: Any) -> set[str]:
@@ -58,7 +61,7 @@ class LanceMemoryStore:
         return connection.open_table(name) if name in _table_names(connection) else None
 
     async def upsert(self, scope: Scope, documents: list[dict], vectors: list[list[float]]) -> None:
-        await asyncio.to_thread(self._upsert, scope, documents, vectors)
+        await mutate_storage(self._upsert, scope, documents, vectors)
 
     def _upsert(self, scope: Scope, documents: list[dict], vectors: list[list[float]]) -> None:
         validated = validate_vectors(vectors, len(documents))
@@ -75,7 +78,7 @@ class LanceMemoryStore:
             if table.schema.field("vector").type.list_size != len(validated[0]):
                 raise ValueError("Embedding dimension differs from the indexed vector space.")
             table.merge_insert(
-                ["user_id", "session_id", "epoch", "signature", "id"]
+                ["user_id", "session_id", "epoch", "signature", "layer", "id"]
             ).when_matched_update_all().when_not_matched_insert_all().execute(rows)
 
     @staticmethod
@@ -94,9 +97,10 @@ class LanceMemoryStore:
         layers: list[str] | None = None,
         npc_ids: list[str] | None = None,
         scene_id: str | None = None,
+        source_ids: list[str] | None = None,
         limit: int = 8,
     ) -> list[dict]:
-        predicate = query_filter(scope, layers, npc_ids, scene_id)
+        predicate = query_filter(scope, layers, npc_ids, scene_id, source_ids)
         validated = validate_vectors([vector], 1)[0]
         return await asyncio.to_thread(
             self._query, scope, validated, text, predicate, max(1, min(limit, 32))
@@ -129,17 +133,24 @@ class LanceMemoryStore:
         table = self._table(scope)
         if table is None:
             return {}
-        records = (
-            table.search()
-            .where(scope_filter(scope))
-            .select(["id", "source_hash"])
-            .limit(100_000)
-            .to_list()
-        )
-        return {record["id"]: record["source_hash"] for record in records}
+        hashes = {}
+        offset = 0
+        while True:
+            records = (
+                table.search()
+                .where(scope_filter(scope))
+                .select(["id", "source_hash"])
+                .offset(offset)
+                .limit(HASH_PAGE_SIZE)
+                .to_list()
+            )
+            hashes.update({record["id"]: record["source_hash"] for record in records})
+            if len(records) < HASH_PAGE_SIZE:
+                return hashes
+            offset += len(records)
 
     async def prune(self, scope: Scope, valid_ids: list[str] | set[str]) -> int:
-        return await asyncio.to_thread(self._prune, scope, set(valid_ids))
+        return await mutate_storage(self._prune, scope, set(valid_ids))
 
     def _prune(self, scope: Scope, valid_ids: set[str]) -> int:
         with _WRITE_LOCK:
@@ -157,9 +168,7 @@ class LanceMemoryStore:
             return len(obsolete)
 
     async def delete_scope(self, scope: Scope) -> int:
-        return await asyncio.to_thread(
-            self._delete, scope_filter(scope), table_name(scope.signature)
-        )
+        return await mutate_storage(self._delete, scope_filter(scope), table_name(scope.signature))
 
     async def prune_generations(self, scope: Scope) -> int:
         """Remove superseded generations while the caller holds the SQL epoch fence."""
@@ -168,16 +177,17 @@ class LanceMemoryStore:
             f"user_id = {literal(scope.user_id)} AND session_id = {literal(scope.session_id)}"
             f" AND (epoch < {scope.epoch} OR"
             f" (epoch = {scope.epoch} AND signature != {literal(scope.signature)}))"
+            f" AND {namespace_filter(scope)}"
         )
-        return await asyncio.to_thread(self._delete, predicate, None)
+        return await mutate_storage(self._delete, predicate, None)
 
     async def delete_session(self, user_id: str, session_id: str) -> int:
         predicate = f"user_id = {literal(user_id)} AND session_id = {literal(session_id)}"
-        return await asyncio.to_thread(self._delete, predicate, None)
+        return await mutate_storage(self._delete, predicate, None)
 
     async def delete_template(self, user_id: str, template_id: str) -> int:
         predicate = f"user_id = {literal(user_id)} AND template_id = {literal(template_id)}"
-        return await asyncio.to_thread(self._delete, predicate, None)
+        return await mutate_storage(self._delete, predicate, None)
 
     async def count_template(self, user_id: str, template_id: str) -> int:
         predicate = f"user_id = {literal(user_id)} AND template_id = {literal(template_id)}"

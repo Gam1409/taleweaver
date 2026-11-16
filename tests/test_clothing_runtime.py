@@ -296,7 +296,7 @@ class ClothingRoles(TurnRoles):
 
 
 @pytest.mark.asyncio
-async def test_real_turn_updates_narrator_and_next_turn_without_extra_llm_calls(monkeypatch):
+async def test_real_turn_updates_narrator_and_next_turn_with_item_reconciliation(monkeypatch):
     roles = ClothingRoles()
     install_roles(monkeypatch, roles)
     async with TestSessionLocal() as db:
@@ -327,12 +327,12 @@ async def test_real_turn_updates_narrator_and_next_turn_without_extra_llm_calls(
         assert "Current visible coat" in str(roles.prompts[-1])
         assert "HIDDEN_UNDERLAYER" not in str(roles.prompts[-1])
         assert "OLD_BIO_OUTFIT" not in str(roles.prompts[-1])
-        assert len(roles.calls) == 2
+        assert len(roles.calls) == 3
         roles.change = False
         second = [chunk async for chunk in manager.process_turn("Tell me about the town.")]
         assert not any(chunk.startswith("event: error") for chunk in second), "".join(second)
         assert "Blue coat" in str(roles.prompts[-1])
-        assert len(roles.calls) == 4
+        assert len(roles.calls) == 6
         context = build_clothing_context(manager, [], [])
         assert context["actors"][0]["visual_profile"]["worn"][0]["item_id"] == "coat"
 

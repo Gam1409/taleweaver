@@ -99,7 +99,11 @@ async def invalidate_memory(db: Any, session_id: str) -> None:
 
 
 async def export_summaries(db: Any, session_id: str) -> list[dict]:
-    rows = await db.scalars(select(MemorySummary).where(MemorySummary.session_id == session_id))
+    rows = await db.scalars(
+        select(MemorySummary)
+        .where(MemorySummary.session_id == session_id)
+        .execution_options(populate_existing=True)
+    )
     return [
         {
             "layer": row.layer,
@@ -108,6 +112,7 @@ async def export_summaries(db: Any, session_id: str) -> list[dict]:
             "text": row.text,
             "source_message_ids": row.source_message_ids,
             "source_hash": row.source_hash,
+            "source_keys": row.source_keys,
         }
         for row in rows
     ]
@@ -143,6 +148,17 @@ async def import_summaries(
         available = {mid for doc in sources for mid in doc.source_message_ids}
         if not set(ids) <= available:
             continue
+        raw_keys = row.get("source_keys")
+        if raw_keys is not None and (
+            not isinstance(raw_keys, list)
+            or not raw_keys
+            or any(not isinstance(key, str) for key in raw_keys)
+        ):
+            continue
+        keys = _remap_source_keys(raw_keys, message_ids)
+        fingerprint = sources_hash(sources, ids, keys)
+        if not fingerprint:
+            continue
         db.add(
             MemorySummary(
                 session_id=state.session_id,
@@ -152,6 +168,17 @@ async def import_summaries(
                 scene_id=row.get("scene_id"),
                 text=str(row["text"])[:6000],
                 source_message_ids=ids,
-                source_hash=sources_hash(sources, ids),
+                source_hash=fingerprint,
+                source_keys=keys,
             )
         )
+
+
+def _remap_source_keys(keys: list[str] | None, message_ids: dict[str, str]) -> list[str] | None:
+    if keys is None:
+        return None
+    remapped = []
+    for key in keys:
+        prefix, separator, suffix = key.partition(":")
+        remapped.append(message_ids.get(prefix, prefix) + separator + suffix)
+    return remapped

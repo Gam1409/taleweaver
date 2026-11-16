@@ -22,13 +22,17 @@ export function useGameSessionLifecycle(options: UseGameSessionLifecycleOptions)
     disconnect,
     closePanels,
   } = options
+  let generation = 0
+  let disposed = false
 
   const connectWithRouteFallback = async (id: string) => {
+    const request = ++generation
+    const ownsRoute = () => !disposed && request === generation && routeId.value === id
     await connect(id)
-    if (status.value !== 'error') return
+    if (!ownsRoute() || status.value !== 'error') return
 
     const resolvedGameId = await gameViewService.ensureGameIdForRouteId(id)
-    if (!resolvedGameId || resolvedGameId === id) return
+    if (!ownsRoute() || !resolvedGameId || resolvedGameId === id) return
 
     await router.replace({ name: 'game', params: { id: resolvedGameId } })
   }
@@ -42,7 +46,7 @@ export function useGameSessionLifecycle(options: UseGameSessionLifecycleOptions)
   onMounted(() => {
     void (async () => {
       const settings = await gameViewService.fetchGameSettings()
-      if (settings) {
+      if (settings && !disposed) {
         gameSettings.value = settings
       }
     })()
@@ -55,13 +59,16 @@ export function useGameSessionLifecycle(options: UseGameSessionLifecycleOptions)
   })
 
   watch(() => routeId.value, (newId) => {
+    generation++
     disconnect()
     if (newId) {
       void connectWithRouteFallback(newId)
     }
-  })
+  }, { flush: 'sync' })
 
   onBeforeUnmount(() => {
+    disposed = true
+    generation++
     disconnect()
     window.removeEventListener('keydown', handleGlobalKeydown)
   })

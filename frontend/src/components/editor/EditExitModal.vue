@@ -141,8 +141,8 @@ function submit() {
 <template>
   <Teleport to="body">
     <Transition name="modal">
-      <div v-if="show" class="fixed inset-0 z-[190] flex items-center justify-center p-6 backdrop-blur-xl bg-slate-950/60">
-        <div class="w-full max-w-2xl bg-slate-900 border border-white/10 rounded-[2.5rem] shadow-2xl overflow-hidden max-h-[92vh] flex flex-col">
+      <div v-if="show" class="authoring-modal-overlay fixed inset-0 z-[190] flex items-center justify-center p-6 backdrop-blur-xl bg-slate-950/60">
+        <div class="authoring-dialog w-full max-w-2xl bg-slate-900 border border-white/10 rounded-[2.5rem] shadow-2xl overflow-hidden max-h-[92vh] flex flex-col">
           <!-- Fixed Header -->
           <div class="px-6 py-5 flex justify-between items-center border-b border-white/10 text-slate-200">
             <div class="space-y-1">

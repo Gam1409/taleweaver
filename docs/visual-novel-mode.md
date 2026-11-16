@@ -73,6 +73,21 @@ simulation of autonomous lives. Timeout or invalid output preserves valid state
 and falls back to conservative narration. Model accuracy still matters: validation
 cannot prove that every interpretation of a literary passage is correct.
 
+## Emotion palette and character thoughts
+
+**Палитра эмоций** and **Мысли персонажей** are independent session display options.
+They work with **NPC Personality** off, in observation mode or in live mode.
+The same narrator reply supplies a dominant emotion and its intensity, and/or a
+short fictional thought; there is no additional model request. When personality
+appraisals are available, the narrator must respect them.
+
+The palette colors the portrait by the NPC's overall state, not their attitude
+toward the player. With thoughts enabled, hovering or focusing a portrait shows
+the thought, and clicking opens the character card. Neither option rewrites older
+replies. Missing, malformed or unassessed model output stays blank; the engine
+does not infer a feeling from relationship scores or invent a thought. A rewritten
+reply receives only its own valid assessment.
+
 ## Illustrations
 
 Use **Illustrate this moment** on the latest completed narrator reply. Generation

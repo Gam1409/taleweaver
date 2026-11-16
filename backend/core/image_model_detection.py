@@ -3,7 +3,8 @@
 import re
 
 PATTERNS = (
-    ("anima", r"(?:^|[._ -])anima(?:[._ -]|$)|prefectanima|novaanimeam(?:[._ -]|$)"),
+    ("nova_anime_am", r"novaanimeam(?:[._ -]|$)"),
+    ("anima", r"(?:^|[._ -])anima(?:[._ -]|$)|prefectanima"),
     ("animagine4", r"animagine[^/]*?(?:xl[^/]*?)?4(?:[._ -]|$)"),
     ("pony6", r"pony[^/]*?(?:v6|6xl|6_xl)"),
     ("illustrious", r"illustrious"),
@@ -33,7 +34,7 @@ def detect_preset_template(graph: dict, reference_graph: dict | None = None) -> 
 
 
 def detect_template(graph: dict) -> dict:
-    names = []
+    names: list[str] = []
     for node in graph.values():
         node_type = str(node.get("class_type", "")).lower()
         if not any(kind in node_type for kind in ("checkpoint", "unet", "diffusionmodel")):

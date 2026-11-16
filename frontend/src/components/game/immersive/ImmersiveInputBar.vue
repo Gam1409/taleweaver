@@ -5,19 +5,20 @@
  * Includes text input, command auto-completion popup, push-to-talk voice recording,
  * TAB shortcut to insert /say, input history navigation, and send actions.
  */
-import { ref, computed, watch, nextTick, toRef } from 'vue'
+import { ref, computed, watch, nextTick, toRef, onMounted, onBeforeUnmount } from 'vue'
 import CommandPopup from '@/components/game/CommandPopup.vue'
 import { getFilteredCommands } from '@/utils/commands'
 import { useVoiceInput } from '@/composables/useVoiceInput'
 import { Mic, SendHorizontal, AlertTriangle, RotateCcw } from 'lucide-vue-next'
 
 const props = defineProps<{
+  sessionId?: string
   canSendInput?: boolean
   isEvaluating?: boolean
   statusText?: string
   agentActive?: boolean
   debugMode?: boolean
-  turnError?: { message: string; action: string } | null
+  turnError?: { message: string; action: string; draft?: string } | null
 }>()
 
 const emit = defineEmits<{
@@ -27,7 +28,27 @@ const emit = defineEmits<{
 }>()
 
 const inputText = ref('')
-const inputEl = ref<HTMLInputElement | null>(null)
+const inputEl = ref<HTMLTextAreaElement | null>(null)
+let resizeObserver: ResizeObserver | undefined
+function resizeInput() {
+  const element = inputEl.value
+  if (!element) return
+  element.style.height = 'auto'
+  element.style.height = `${Math.min(element.scrollHeight + 4, 192)}px`
+  element.style.overflowY = element.scrollHeight + 4 > 192 ? 'auto' : 'hidden'
+}
+onMounted(() => {
+  resizeInput()
+  if (typeof ResizeObserver === 'undefined') return
+  let width = 0
+  resizeObserver = new ResizeObserver(entries => {
+    if (entries[0].contentRect.width === width) return
+    width = entries[0].contentRect.width
+    resizeInput()
+  })
+  if (inputEl.value?.parentElement) resizeObserver.observe(inputEl.value.parentElement)
+})
+onBeforeUnmount(() => resizeObserver?.disconnect())
 const history = ref<string[]>(JSON.parse(sessionStorage.getItem('tw_chat_history') || '[]'))
 const historyIndex = ref(-1)
 
@@ -88,7 +109,8 @@ const filteredCommands = computed(() => {
 })
 
 watch(inputText, (newVal) => {
-  if (newVal.startsWith('/')) {
+  resizeInput()
+  if (newVal.startsWith('/') && !newVal.includes('\n')) {
     showCommandPopup.value = true
     if (commandPopupIndex.value >= filteredCommands.value.length) {
       commandPopupIndex.value = 0
@@ -96,7 +118,7 @@ watch(inputText, (newVal) => {
   } else {
     showCommandPopup.value = false
   }
-})
+}, { flush: 'post' })
 
 function selectCommand(cmdId: string) {
   inputText.value = cmdId + ' '
@@ -108,14 +130,16 @@ function selectCommand(cmdId: string) {
 const {
   isRecording,
   isTranscribing,
-  handleMicButtonMousedown,
+  handleMicButtonPointerDown,
 } = useVoiceInput({
+  sessionId: toRef(props, 'sessionId'),
   canSendInput: toRef(props, 'canSendInput'),
   inputText,
   onSend: handleSend,
 })
 
 function handleKeydown(e: KeyboardEvent) {
+  if (e.isComposing || e.keyCode === 229 || (e.key === 'Enter' && e.shiftKey)) return
   // TAB key: Insert /say command
   if (e.key === 'Tab' || e.code === 'Tab' || e.keyCode === 9) {
     e.preventDefault()
@@ -149,12 +173,13 @@ function handleKeydown(e: KeyboardEvent) {
     }
   }
 
-  if (e.key === 'ArrowUp') {
+  const multiline = inputText.value.includes('\n') || (inputEl.value?.scrollHeight || 0) > 56
+  if (e.key === 'ArrowUp' && (!multiline || e.altKey)) {
     e.preventDefault()
     navigateHistory('up')
     return
   }
-  if (e.key === 'ArrowDown') {
+  if (e.key === 'ArrowDown' && (!multiline || e.altKey)) {
     e.preventDefault()
     navigateHistory('down')
     return
@@ -200,7 +225,7 @@ defineExpose({
 </script>
 
 <template>
-  <div class="p-3 sm:p-4">
+  <div class="p-2 sm:p-4">
     <!-- Turn Error / Retry Banner -->
     <div
       v-if="props.turnError"
@@ -212,7 +237,11 @@ defineExpose({
         </div>
         <div class="flex flex-col min-w-0">
           <span class="font-black text-red-300 uppercase tracking-wider text-[10px]">Action Failed</span>
-          <span class="truncate font-medium text-slate-200">{{ props.turnError.message }}</span>
+          <span class="break-words font-medium text-slate-200">{{ props.turnError.message }}</span>
+          <details v-if="props.turnError.draft" class="mt-2 text-slate-300">
+            <summary class="cursor-pointer text-amber-200">Draft answer — not applied to the story</summary>
+            <p class="mt-2 max-h-48 overflow-y-auto whitespace-pre-wrap break-words">{{ props.turnError.draft }}</p>
+          </details>
         </div>
       </div>
       <div class="flex items-center gap-2 self-end sm:self-auto shrink-0">
@@ -248,12 +277,12 @@ defineExpose({
         <span>{{ isRecording ? 'PTT Active: Recording Voice...' : 'Transcribing Speech...' }}</span>
       </div>
       <span class="text-[10px] uppercase font-mono text-slate-400">
-        {{ isRecording ? "Release key or mouse to finish" : "Please wait..." }}
+        {{ isRecording ? "Release to finish" : "Please wait..." }}
       </span>
     </div>
 
     <!-- Input Box & Actions -->
-    <div class="relative flex items-center gap-2">
+    <div class="relative flex items-end gap-2">
       <!-- Command auto-completion popup -->
       <CommandPopup
         v-if="showCommandPopup && filteredCommands.length"
@@ -268,22 +297,26 @@ defineExpose({
       <button
         type="button"
         :disabled="!props.canSendInput"
-        @mousedown="handleMicButtonMousedown"
-        class="flex items-center justify-center w-11 h-11 rounded-xl bg-slate-900 border border-slate-700/80 hover:border-amber-400/60 hover:bg-amber-500/10 text-slate-300 hover:text-amber-300 transition-all shadow-md active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed shrink-0 cursor-pointer"
+        @pointerdown="handleMicButtonPointerDown"
+        class="touch-none select-none flex items-center justify-center w-11 h-11 rounded-xl bg-slate-900 border border-slate-700/80 hover:border-amber-400/60 hover:bg-amber-500/10 text-slate-300 hover:text-amber-300 transition-all shadow-md active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed shrink-0 cursor-pointer"
         title="Push-To-Talk (Hold to speak)"
       >
         <Mic class="w-5 h-5" :class="{ 'text-red-400 animate-pulse': isRecording }" />
       </button>
 
       <!-- Main Input Field -->
-      <div class="relative flex-1">
-        <input
+      <div class="relative flex-1 min-w-0">
+        <textarea
           ref="inputEl"
           v-model="inputText"
-          type="text"
+          rows="1"
+          wrap="soft"
+          aria-label="Your next action"
+          title="Enter to send; Shift+Enter for a new line; Alt+Up/Down for history; TAB for /say"
           :disabled="!props.canSendInput"
-          :placeholder="props.isEvaluating ? (props.statusText || 'GM is deciding...') : (props.agentActive ? 'Play-Agent is active. Use the Play-Agent panel to stop it.' : 'What do you do next? (TAB for /say, / for commands)')"
-          class="w-full bg-slate-900/90 border-2 border-slate-700/70 focus:border-amber-400/80 focus:ring-2 focus:ring-amber-400/20 rounded-xl py-2.5 pl-4 pr-10 text-sm sm:text-base text-slate-100 placeholder-slate-500 outline-none transition-all disabled:opacity-50 font-medium"
+          :placeholder="props.isEvaluating ? (props.statusText || 'GM is deciding...') : (props.agentActive ? 'Play-Agent is active. Use the Play-Agent panel to stop it.' : 'What do you do next?')"
+          class="block min-h-12 max-h-48 w-full resize-none overflow-x-hidden whitespace-pre-wrap [overflow-wrap:anywhere] bg-slate-900/90 border-2 border-slate-700/70 focus:border-amber-400/80 focus:ring-2 focus:ring-amber-400/20 rounded-xl py-2.5 pl-4 pr-12 text-base leading-6 text-slate-100 placeholder-slate-500 outline-none transition-colors disabled:opacity-50 font-medium"
+          @input="resizeInput"
           @keydown.tab.prevent.stop="insertSayCommand"
           @keydown="handleKeydown"
         />
@@ -293,13 +326,14 @@ defineExpose({
           type="button"
           :disabled="!props.canSendInput || !inputText.trim()"
           @click="handleSend"
-          class="absolute right-1.5 top-1/2 -translate-y-1/2 p-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-md active:scale-90 cursor-pointer"
+          class="absolute right-1.5 bottom-1.5 p-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-md active:scale-90 cursor-pointer"
           title="Send Action (Enter)"
         >
           <SendHorizontal class="w-4 h-4" />
         </button>
       </div>
     </div>
+    <p class="mt-1 text-right text-[10px] text-slate-500">Enter to send · Shift+Enter for a new line</p>
   </div>
 </template>
 

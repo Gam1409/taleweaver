@@ -1,3 +1,6 @@
+import type { WorldBrief } from './worldBrief'
+import type { PortraitPreferences, PortraitState } from '@/utils/npcPresentation'
+
 export type RuleMode = 'rpg' | 'story' | 'chat' | 'vn'
 
 export interface ModeCapabilities {
@@ -14,6 +17,8 @@ export interface ChatMessage {
   role: 'user' | 'assistant' | 'system' | 'thought' | 'license_info'
   content: string
   timestamp: Date
+  portrait_state?: PortraitState | null
+  is_debug?: boolean
   itemIds?: string[]
   /** Scene/sequence the message belongs to; the story feed shows one page per scene/sequence. */
   scene_id?: string | null
@@ -22,6 +27,8 @@ export interface ChatMessage {
 
 /** Player-owned appearance and worn clothing projected by the server. */
 export interface PlayerClothing {
+  layout?: { form: 'humanoid' | 'non_humanoid' | 'unknown'; silhouette: 'male' | 'female' | 'neutral' }
+  attachments?: Array<{ id: string; name: string; image_url?: string | null; slot: string }>
   appearance: {
     age_years: number | null
     hair: string
@@ -36,12 +43,16 @@ export interface PlayerClothing {
     layer: number
     visible: boolean
     underwear: boolean
+    image_url?: string | null
+    slots?: string[]
+    uncovered_regions?: string[]
   }>
   detail_limited?: boolean
 }
 
 /** Character sheet snapshot pushed by the server after every action. */
 export interface CharacterSheet {
+  portrait_preferences?: PortraitPreferences
   mode_capabilities?: ModeCapabilities
   clothing?: PlayerClothing | null
   name: string
@@ -52,6 +63,8 @@ export interface CharacterSheet {
   license?: string | null
   license_url?: string | null
   adventure_id?: string | null
+  gender?: string | null
+  age_years?: number | null
   role?: string | null
   description?: string | null
   profile_image?: string | null
@@ -78,6 +91,7 @@ export interface CharacterSheet {
   time_config?: Record<string, any> | null
   time_per_turn?: number
   max_time_per_turn?: number | null
+  current_scene_id?: string | null
   current_scene?: string | null
   scene_id?: string | null
   rule_enforcement_mode?: 'rpg' | 'story' | 'chat' | 'vn'
@@ -292,8 +306,9 @@ export interface WorldMapData {
 /** Summary of a game session returned by GET /api/adventures. */
 export interface GameSession {
   game_id: string
-  template_id?: string
-  adventure_id: string
+  template_id?: string | null
+  adventure_id: string | null
+  creator?: string | null
   avatar_id: string
   profile_image?: string | null
   adventure_title: string
@@ -302,6 +317,7 @@ export interface GameSession {
   scene_id: string
   current_scene_name?: string | null
   in_game_time: number
+  playtime_seconds?: number
   is_paused: boolean
   is_ready: boolean
   creation_status?: string | null
@@ -333,10 +349,13 @@ export interface WorldMemory {
 }
 
 export interface SessionCheckpoint {
+  turn_number?: number | null
+  input_preview?: string | null
+  pinned?: boolean
   id: string
   session_id: string
   message_index: number
-  trigger_reason: 'SCENE_CHANGE' | 'QUEST_UPDATE' | 'AWARD_GRANTED'
+  trigger_reason: string
   title: string
   created_at: string
 }
@@ -345,6 +364,7 @@ export interface RestoreCheckpointResult {
   status: 'restored'
   checkpoint_id: string
   deleted_messages: number
+  warnings?: string[]
 }
 
 export interface AdventureTemplateSummary {
@@ -382,8 +402,11 @@ export interface AdventureTemplateSummary {
 
 /** Payload for creating a new adventure. */
 export interface CreateAdventurePayload {
+  world_brief?: WorldBrief
   show_npc_state?: boolean
   detailed_clothing?: boolean
+  nsfw_enabled?: boolean
+  nsfw_level?: 'soft' | 'medium' | 'hard'
   id?: string
   title: string
   context?: string
@@ -463,6 +486,7 @@ export interface GeneratorSurprisePresetPayload {
 }
 
 export interface GeneratorSurprisePresetResponse {
+  generation_strictness?: 'strict' | 'creative'
   title: string
   story_idea: string
   selected_tone?: string | null

@@ -37,6 +37,15 @@ TestSessionLocal = async_sessionmaker(
 )
 
 
+@pytest.fixture(autouse=True)
+def isolate_inference_registry(tmp_path, monkeypatch):
+    """Keep mocked transports away from the running application's durable queue."""
+    from backend.core.inference import admission
+    from backend.core.inference.registry import Registry
+
+    monkeypatch.setattr(admission, "_registry", Registry(tmp_path / "inference-reservations.json"))
+
+
 async def override_get_db():
     """FastAPI dependency override that yields a test DB session."""
     async with TestSessionLocal() as session:
@@ -44,16 +53,28 @@ async def override_get_db():
 
 
 @pytest_asyncio.fixture(scope="function", autouse=True)
-async def setup_test_db():
+async def setup_test_db(monkeypatch):
     """Creates all tables before each test and drops them afterwards."""
     original_session_local = core_database.AsyncSessionLocal
+    from backend.api.routes.adventures import regeneration
+    from backend.engine.memory_rag import chronicle, scheduling, summaries, worker
+    from backend.engine.npc_journal import worker as journal_worker
+
+    # Each test owns a new event loop; production uses one application loop.
+    scheduler = scheduling.IdleScheduler()
+    for module in (scheduling, summaries, chronicle, worker, journal_worker, regeneration):
+        monkeypatch.setattr(module, "scheduler", scheduler)
     core_database.AsyncSessionLocal = TestSessionLocal
     async with test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    yield
-    async with test_engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
-    core_database.AsyncSessionLocal = original_session_local
+    try:
+        yield
+    finally:
+        await journal_worker.shutdown()
+        await worker.shutdown()
+        async with test_engine.begin() as conn:
+            await conn.run_sync(Base.metadata.drop_all)
+        core_database.AsyncSessionLocal = original_session_local
 
 
 @pytest.fixture(autouse=True)
@@ -69,6 +90,8 @@ def stub_world_generator(monkeypatch):
     ``monkeypatch.setattr`` *inside* the test body – monkeypatch patches
     applied within a test override this fixture's patch.
     """
+    from backend.core.adventure_format import CURRENT_VERSION
+    from backend.core.game_modes import is_vn
     from backend.models.adventure_template import AdventureTemplate
     from backend.models.world_entity import WorldScene
 
@@ -92,9 +115,18 @@ def stub_world_generator(monkeypatch):
                 )
             )
 
-        # Mark template as ready.
+        # Match the real generator's current-format output before marking it ready.
         adv = await db.get(AdventureTemplate, adv_id)
         if adv:
+            if not is_vn(adv) and not adv.sequences:
+                adv.sequences = [
+                    {"id": "TEST_SEQUENCE", "title": "Test chapter", "order": 1, "exp_reward": 0}
+                ]
+            adv.original_manifest = {
+                **(adv.original_manifest or {}),
+                "format_version": CURRENT_VERSION,
+                "sequences": list(adv.sequences or []),
+            }
             adv.is_ready = True
             adv.creation_status = "Ready"
 

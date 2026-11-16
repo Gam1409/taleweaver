@@ -1,23 +1,27 @@
-import io
-import json
 import logging
 import os
-import zipfile
+from copy import deepcopy
 from typing import Any
 
-from fastapi.encoders import jsonable_encoder
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.adventure_format import CURRENT_VERSION
 from backend.core.config import settings
+from backend.core.manifest_extensions import preserve_extensions
+from backend.engine.adventure_export_assets import (
+    normalize_exported_equipment,
+    serialize_world_location,
+)
 from backend.engine.adventure_identity import stable_origin_id
 from backend.engine.clothing.settings import clothing_settings
+from backend.engine.export_archives import pack_export_adz
+from backend.engine.narrator.settings import manifest_settings as narrator_settings
 from backend.engine.npc_cards.settings import manifest_card_settings
+from backend.engine.template_avatar import avatar_from_manifest, get_template_avatar
 from backend.models.adventure_template import AdventureTemplate
-from backend.models.avatar import Avatar
 from backend.models.world_entity import WorldEntity, WorldExit, WorldScene
-from backend.utils.path_security import data_url_to_local_path
+from backend.utils.async_files import run_file_operation
 
 logger = logging.getLogger(__name__)
 
@@ -95,6 +99,8 @@ _NPC_ENTITY_KEYS = {
     "notes",
     "goal",
     "character",
+    "gender",
+    "age_years",
     "visual_profile",
     "hp",
     "max_hp",
@@ -322,6 +328,11 @@ def _serialize_world_entity(entity: WorldEntity) -> dict[str, Any]:
         _normalize_exported_object_metadata(filtered)
     elif entity_type == "NPC":
         _normalize_exported_npc_metadata(filtered)
+        metadata = raw.get("metadata_json") or {}
+        if "agent_runtime" in metadata:
+            filtered.setdefault("metadata_json", {})["agent_runtime"] = deepcopy(
+                metadata["agent_runtime"]
+            )
 
     return filtered
 
@@ -339,97 +350,35 @@ class AdventureExporter:
 
         # 1. Fetch World State
         scene_res = await db.execute(
-            select(WorldScene).where(WorldScene.template_id == template_id)
+            select(WorldScene).where(
+                WorldScene.template_id == template_id, WorldScene.session_id.is_(None)
+            )
         )
         scenes = scene_res.scalars().all()
 
-        exit_res = await db.execute(select(WorldExit).where(WorldExit.template_id == template_id))
+        exit_res = await db.execute(
+            select(WorldExit).where(
+                WorldExit.template_id == template_id, WorldExit.session_id.is_(None)
+            )
+        )
         exits = exit_res.scalars().all()
 
         entity_res = await db.execute(
-            select(WorldEntity).where(WorldEntity.template_id == template_id)
+            select(WorldEntity).where(
+                WorldEntity.template_id == template_id, WorldEntity.session_id.is_(None)
+            )
         )
         entities = entity_res.scalars().all()
 
-        avatar_res = await db.execute(
-            select(Avatar)
-            .where(Avatar.template_id == template_id)
-            .order_by(Avatar.created_at.asc(), Avatar.id.asc())
-            .limit(1)
+        avatar = await get_template_avatar(db, template_id)
+        if avatar is None:
+            avatar = avatar_from_manifest(
+                adv.original_manifest, user_id=adv.owner_id, template_id=template_id
+            )
+
+        local_final_inventory, local_final_equipment = normalize_exported_equipment(
+            avatar, entities
         )
-        avatar = avatar_res.scalars().first()
-
-        # Normalize legacy avatar inventory/equipment to ID references for the manifest.
-        # NOTE: This must NOT mutate the database — exporting is a read-only operation.
-        # Mutating during export causes "database is locked" errors on SQLite when
-        # background tasks (e.g. world generation) hold a write lock. We compute
-        # the cleaned values locally and use them when building the manifest below.
-        local_final_inventory: list[str] = []
-        local_final_equipment: dict[str, str] = {}
-        if avatar:
-
-            def _normalize_item(item: Any) -> str | None:
-                if isinstance(item, dict):
-                    return item.get("id")
-                return item
-
-            cleaned_inventory: list[str] = []
-            for item in avatar.inventory or []:
-                item_id = _normalize_item(item)
-                if item_id:
-                    cleaned_inventory.append(item_id)
-
-            cleaned_equipment: dict[str, str] = {}
-            for slot, item in (avatar.equipment or {}).items():
-                item_id = _normalize_item(item)
-                if item_id:
-                    cleaned_equipment[slot] = item_id
-
-            # Priority deduplication: Scene > Inventory > Equipped
-            items_in_scene = set()
-            for ent in entities:
-                if (
-                    ent.entity_type == "OBJECT"
-                    and ent.current_scene_id
-                    and ent.current_scene_id != "INVENTORY"
-                ):
-                    items_in_scene.add(ent.id)
-
-            for item_id in cleaned_inventory:
-                if item_id in items_in_scene:
-                    continue
-                if item_id not in local_final_inventory:
-                    local_final_inventory.append(item_id)
-
-            for slot, item_id in cleaned_equipment.items():
-                if item_id in items_in_scene:
-                    continue
-                if item_id in local_final_inventory:
-                    continue
-                if item_id in local_final_equipment.values():
-                    continue
-                local_final_equipment[slot] = item_id
-
-        def to_dict(obj):
-            if not obj:
-                return None
-            data = {
-                c.name: getattr(obj, c.name)
-                for c in obj.__table__.columns
-                if c.name not in _SYSTEM_ENTITY_KEYS
-            }
-            if isinstance(obj, WorldScene):
-                decor = data.get("decorative_objects")
-                if not isinstance(decor, list):
-                    decor = []
-                data["decorative_objects"] = [
-                    str(d) for d in decor if isinstance(d, (str, int, float))
-                ]
-            if isinstance(obj, WorldExit):
-                exit_type = str(getattr(obj, "exit_type", "one_way") or "one_way").strip().lower()
-                data["exit_type"] = exit_type
-                data["is_bidirectional"] = exit_type == "bidirectional"
-            return data
 
         # Build standard manifest structure according to docs/specs/adventure_format.md
         manifest = {
@@ -438,6 +387,8 @@ class AdventureExporter:
             "adventure": {
                 "origin_id": stable_origin_id(adv),
                 "title": adv.title,
+                "living_world_settings": adv.living_world_settings,
+                "npc_personality_settings": adv.npc_personality_settings,
                 "teaser": adv.teaser,
                 "version": adv.version,
                 "creator": adv.creator,
@@ -503,6 +454,8 @@ class AdventureExporter:
                 "description": avatar.description if avatar else "",
                 "goal": avatar.goal if avatar else "",
                 "character": avatar.character if avatar else "",
+                "gender": avatar.gender if avatar else None,
+                "age_years": avatar.age_years if avatar else None,
                 "visual_profile": avatar.visual_profile if avatar else None,
                 "profile_image": avatar.profile_image if avatar else None,
                 "hp": avatar.hp if avatar else 200,
@@ -523,8 +476,8 @@ class AdventureExporter:
                 "starting_inventory": list(local_final_inventory) if avatar else [],
                 "starting_equipment": dict(local_final_equipment) if avatar else {},
             },
-            "scenes": [to_dict(s) for s in scenes],
-            "exits": [to_dict(e) for e in exits],
+            "scenes": [serialize_world_location(s) for s in scenes],
+            "exits": [serialize_world_location(e) for e in exits],
             "npcs": [_serialize_world_entity(ent) for ent in entities if ent.entity_type == "NPC"],
             "objects": [
                 _serialize_world_entity(ent) for ent in entities if ent.entity_type == "OBJECT"
@@ -535,11 +488,17 @@ class AdventureExporter:
             "scripts": (adv.original_manifest or {}).get("scripts", []),
             "init_script": getattr(adv, "init_script", None),
             "visual_presets": (adv.original_manifest or {}).get("visual_presets", {}),
+            "visual_preset_source": (adv.original_manifest or {}).get(
+                "visual_preset_source", "saved"
+            ),
             "npc_card_settings": manifest_card_settings(adv.original_manifest),
             "clothing_settings": clothing_settings(adv.original_manifest),
+            "narrator_settings": narrator_settings(adv.original_manifest).model_dump(),
+            "world_brief": (adv.original_manifest or {}).get("world_brief"),
+            "world_brief_sources": (adv.original_manifest or {}).get("world_brief_sources"),
         }
 
-        return manifest
+        return preserve_extensions(manifest, adv.original_manifest)
 
     @staticmethod
     async def export_adz(db: AsyncSession, template_id: str) -> bytes:
@@ -548,65 +507,4 @@ class AdventureExporter:
         """
         manifest = await AdventureExporter.build_full_manifest(db, template_id)
 
-        # Gather local assets
-        adventure_dir = _safe_data_path("adventures", "library", template_id)
-        if not os.path.exists(adventure_dir):
-            # Legacy fallback for pre-migration adventures.
-            adventure_dir = _safe_data_path("adventures", template_id)
-        asset_mapping = {}  # local_path -> zip_path
-
-        def localize_path(path):
-            if not path or not path.startswith("/data/"):
-                return path
-
-            local_full = data_url_to_local_path(path)
-            if not local_full:
-                logger.warning("Skipping unsafe asset path during ADZ export: %s", path)
-                return path
-
-            if os.path.exists(local_full):
-                fname = _safe_zip_asset_name(local_full)
-                zip_rel = f"assets/{fname}"
-                asset_mapping[local_full] = zip_rel
-                return zip_rel
-
-            # Fallback: search in adventure_dir if not found directly
-            # (handles cases where path might be different but file exists there)
-            fname = _safe_zip_asset_name(path)
-            for root, _dirs, files in os.walk(adventure_dir):
-                if fname in files:
-                    local_full = _ensure_within_data_dir(os.path.join(root, fname))
-                    zip_rel = f"assets/{fname}"
-                    asset_mapping[local_full] = zip_rel
-                    return zip_rel
-
-            return path
-
-        # Localize all image fields
-        manifest["adventure"]["image_url"] = localize_path(manifest["adventure"].get("image_url"))
-        if manifest["protagonist"]:
-            manifest["protagonist"]["profile_image"] = localize_path(
-                manifest["protagonist"].get("profile_image")
-            )
-        for s in manifest["scenes"]:
-            s["image_url"] = localize_path(s.get("image_url"))
-        for n in manifest["npcs"]:
-            n["image_url"] = localize_path(n.get("image_url"))
-        for o in manifest["objects"]:
-            o["image_url"] = localize_path(o.get("image_url"))
-
-        # Create the ZIP
-        zip_buffer = io.BytesIO()
-        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
-            # 1. Add Manifest
-            # Use jsonable_encoder to handle datetime and other non-serializable objects
-            encoded_manifest = jsonable_encoder(manifest)
-            zip_file.writestr("adventure.adv", json.dumps(encoded_manifest, indent=2))
-
-            # 2. Add Assets
-            for local_full, zip_rel in asset_mapping.items():
-                if os.path.exists(local_full):
-                    safe_local_full = _ensure_within_data_dir(local_full)
-                    zip_file.write(safe_local_full, zip_rel)
-
-        return zip_buffer.getvalue()
+        return await run_file_operation(pack_export_adz, manifest, template_id)

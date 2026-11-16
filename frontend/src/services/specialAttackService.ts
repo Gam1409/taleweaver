@@ -1,4 +1,4 @@
-import { API_BASE, authHeaders } from '@/services/http'
+import { authHeaders, apiFetch } from '@/services/http'
 import type { SpecialAttack } from '@/types'
 
 export type SpecialAttackOwner = 'protagonist' | 'npc'
@@ -28,7 +28,7 @@ export interface NpcCombatSettings {
 
 export const specialAttackService = {
   async saveNpcCombat(adventureId: string, npcId: string, settings: NpcCombatSettings): Promise<NpcCombatSettings> {
-    const res = await fetch(`${API_BASE}/adventures/${adventureId}/editor/npc-combat`, {
+    const res = await apiFetch(`/adventures/${adventureId}/editor/npc-combat`, { timeoutMs: 60_000,
       method: 'PUT',
       headers: authHeaders(true),
       body: JSON.stringify({ npc_id: npcId, ...settings }),
@@ -46,7 +46,7 @@ export const specialAttackService = {
     targetId: string,
     specialActions: SpecialAttack[],
   ): Promise<SpecialAttack[]> {
-    const res = await fetch(`${API_BASE}/adventures/${adventureId}/editor/special-actions`, {
+    const res = await apiFetch(`/adventures/${adventureId}/editor/special-actions`, { timeoutMs: 60_000,
       method: 'PUT',
       headers: authHeaders(true),
       body: JSON.stringify({ target_type: targetType, target_id: targetId, special_actions: specialActions }),

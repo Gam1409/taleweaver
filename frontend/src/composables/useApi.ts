@@ -22,6 +22,7 @@ import { authState } from '@/store/auth'
 import { configState } from '@/store/config'
 import { apiFetch, buildApiUrl } from '@/services/http'
 import type { ApiFetchInit } from '@/services/http'
+import { SESSION_TRANSFER_TIMEOUT_MS, withSessionTransferDeadline } from '@/services/sessionTransfer'
 
 export interface PasswordPolicy {
   min_length: number
@@ -90,37 +91,6 @@ interface SettingsResponse {
   tts_settings: Record<string, unknown>
 }
 
-export interface GeneratorSurprisePresetPayload {
-  available_tones?: string[]
-  available_styles?: string[]
-  language?: string
-}
-
-export interface GeneratorSurprisePresetResponse {
-  title: string
-  story_idea: string
-  selected_tone?: string | null
-  selected_style?: string | null
-  rule_enforcement_mode: 'rpg' | 'story' | 'chat' | 'vn'
-  generate_scene_images: boolean
-  generate_npc_images: boolean
-  generate_item_images: boolean
-  clock_enabled: boolean
-  time_system: 'calendar' | 'units'
-  day_label: string
-  initial_day: number
-  start_time: string
-  time_format: '24h' | '12h'
-  pacing_minutes: number
-  unit_name: string
-  initial_units: number
-  units_per_turn: number
-  min_scenes?: number | null
-  max_scenes?: number | null
-  min_quests?: number | null
-  max_quests?: number | null
-}
-
 // Use absolute backend URL during local development to avoid proxy/cache timing
 // issues (Vite already proxies `/api` to the backend, but in some dev setups
 // the relative proxy can lead to empty responses on initial load). In
@@ -180,6 +150,7 @@ async function request<T>(path: string, init?: ApiFetchInit): Promise<T> {
     if (res.status === 204) return undefined as T
     return res.json() as Promise<T>
   } catch (err: any) {
+    if (init?.signal?.aborted) throw err
     // If it's not already an API error (thrown above), it's likely a network error
     if (!(err instanceof ApiError)) {
       configState.isBackendReachable = false
@@ -200,7 +171,7 @@ async function requestBlob(path: string, init?: ApiFetchInit): Promise<Blob> {
     const res = await apiFetch(path, {
       ...init,
       headers,
-      timeoutMs: init?.timeoutMs ?? 20000,
+      timeoutMs: init?.timeoutMs === undefined ? 20000 : init.timeoutMs,
     })
     
     configState.isBackendReachable = true
@@ -232,8 +203,9 @@ async function requestBlob(path: string, init?: ApiFetchInit): Promise<Blob> {
 
       throw new ApiError(res.status, detail, parsed)
     }
-    return res.blob()
+    return await res.blob()
   } catch (err: any) {
+    if (init?.signal?.aborted) throw err
     if (!(err instanceof ApiError)) {
       configState.isBackendReachable = false
       configState.lastErrorMessage = err.message || 'Network Error'
@@ -647,13 +619,13 @@ export const api = {
   },
 
   /** Retrieves the generation status and potential errors for an adventure. */
-  getAdventureStatus(adventureId: string): Promise<{ status: string; is_ready: boolean; error?: string; stats?: any; can_resume?: boolean; completed_stages?: number }> {
-    return request(`/adventures/${adventureId}/status`)
+  getAdventureStatus(adventureId: string, signal?: AbortSignal): Promise<{ status: string; is_ready: boolean; error?: string; stats?: any; can_resume?: boolean; completed_stages?: number }> {
+    return request(`/adventures/${encodeURIComponent(adventureId)}/status`, { signal })
   },
 
   /** Retrieves the live detailed generation logs (history) for an adventure template. */
-  getAdventureGenerationLogs(adventureId: string): Promise<{ logs: any[] }> {
-    return request(`/adventures/${adventureId}/generation-logs`)
+  getAdventureGenerationLogs(adventureId: string, signal?: AbortSignal): Promise<{ logs: any[] }> {
+    return request(`/adventures/${encodeURIComponent(adventureId)}/generation-logs`, { signal })
   },
 
   async getAdventureGenerationSayings(): Promise<string[]> {
@@ -885,27 +857,32 @@ export const api = {
   },
 
   /** Downloads the session as ADS (ZIP) bundle. */
-  downloadSessionAds(gameId: string): Promise<Blob> {
-    return requestBlob(`/adventures/sessions/${gameId}/export`)
+  downloadSessionAds(gameId: string, signal?: AbortSignal): Promise<Blob> {
+    return withSessionTransferDeadline(
+      transferSignal => requestBlob(`/adventures/sessions/${gameId}/export`, { timeoutMs: null, signal: transferSignal }),
+      signal,
+    )
   },
 
   /** Imports a session from ADS ZIP file. */
-  async importSession(file: File): Promise<{ status: string; game_id: string; message: string }> {
+  async importSession(file: File, signal?: AbortSignal): Promise<{ status: string; game_id: string; message: string }> {
     const formData = new FormData()
     formData.append('file', file)
     return request('/adventures/sessions/import', {
       method: 'POST',
       body: formData,
-      timeoutMs: 60000,
+      signal,
+      timeoutMs: SESSION_TRANSFER_TIMEOUT_MS,
     })
   },
 
-  transcribeAudio(fileBlob: Blob): Promise<{ text: string }> {
+  transcribeAudio(fileBlob: Blob, signal?: AbortSignal): Promise<{ text: string }> {
     const formData = new FormData()
     formData.append('file', fileBlob, 'audio.wav')
     return request('/stt/transcribe', {
       method: 'POST',
       body: formData,
+      signal,
       timeoutMs: 60000,
     })
   },

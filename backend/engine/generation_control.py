@@ -2,9 +2,10 @@
 
 import asyncio
 from contextvars import ContextVar
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import or_, update
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.adventure_template import AdventureTemplate, GenerationCancelled
@@ -59,5 +60,5 @@ async def guard_generation_write(
             .values(**(values or {"generation_run_id": expected}))
             .execution_options(synchronize_session=False)
         )
-    if result.rowcount != 1:
+    if cast(CursorResult[Any], result).rowcount != 1:
         raise GenerationCancelled("Generation was cancelled or replaced by a newer attempt.")

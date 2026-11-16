@@ -3,9 +3,12 @@
 import hashlib
 import unicodedata
 from copy import deepcopy
-from typing import Any
+from typing import Any, get_args
 
-from backend.engine.npc_journal.schema import CharacterObservation, Observation
+from backend.engine.npc_journal.archive import compact, expanded
+from backend.engine.npc_journal.clock import clock_fields
+from backend.engine.npc_journal.reading import entries as journal_entries
+from backend.engine.npc_journal.schema import CharacterObservation, Observation, Significance
 
 JOURNAL_KEY = "npc_journal"
 _PHYSICAL_CATEGORIES = {"appearance", "equipment", "belongings"}
@@ -19,10 +22,12 @@ def supported_quote(quote: str | None, narration: str) -> bool:
     return bool(quote and len(quote.strip()) >= 3 and normalized(quote) in normalized(narration))
 
 
-def journal_of(npc: Any) -> dict:
+def journal_of(npc: Any, *, full: bool = False) -> dict:
     meta = getattr(npc, "metadata_json", None) or {}
     value = meta.get(JOURNAL_KEY)
-    return deepcopy(value) if isinstance(value, dict) else {}
+    if not isinstance(value, dict):
+        return {}
+    return expanded(value) if full else deepcopy(value)
 
 
 def is_significant(observation: Observation) -> bool:
@@ -65,14 +70,15 @@ def _repeats_known_fact(entries: list[dict], record: dict, message_id: str) -> b
         return True
     # A -> B -> A is a meaningful reversal for a specific topic. Legacy "general"
     # mixes unrelated facts, so an intervening unrelated entry is not a reversal.
-    candidates = matching if record["topic"] == "general" else matching[-1:]
+    broad_topic = record["topic"] in ("general", *get_args(Significance))
+    candidates = matching if broad_topic else matching[-1:]
     return any(
         normalized(entry.get("text", "")) == normalized(record["text"]) for entry in candidates
     )
 
 
 def append_observations(npc: Any, extraction: CharacterObservation, message: Any) -> None:
-    journal = journal_of(npc)
+    journal = journal_of(npc, full=True)
     entries = list(journal.get("entries") or [])
     existing = {entry.get("id") for entry in entries}
     for observation in extraction.observations:
@@ -91,6 +97,7 @@ def append_observations(npc: Any, extraction: CharacterObservation, message: Any
                 "message_id": message.id,
                 "scene_id": message.scene_id,
                 "recorded_at": message.created_at.isoformat(),
+                **clock_fields(getattr(message, "npc_journal", None)),
                 **record,
             }
         )
@@ -103,14 +110,34 @@ def append_observations(npc: Any, extraction: CharacterObservation, message: Any
             sources[alias] = message.id
     entries.sort(key=lambda e: (e.get("recorded_at", ""), e.get("message_id", "")))
     journal.update(version=1, entries=entries, aliases=aliases[:20], alias_sources=sources)
-    npc.metadata_json = {**(npc.metadata_json or {}), JOURNAL_KEY: journal}
+    npc.metadata_json = {**(npc.metadata_json or {}), JOURNAL_KEY: compact(journal)}
+
+
+def fact_topic(entry: dict) -> str:
+    """Broad legacy labels are not identities: preserve their distinct facts."""
+    topic = str(entry.get("topic") or "general")
+    if topic == "general" or topic in get_args(Significance):
+        return (
+            "fact_"
+            + hashlib.sha256(normalized(str(entry.get("text", ""))).encode()).hexdigest()[:16]
+        )
+    return topic
 
 
 def memory_context(npc: Any, limit: int = 1600, *, visual_only: bool = False) -> str:
     """Keep the full journal in storage, but cap material repeated in model prompts."""
-    journal = journal_of(npc)
-    latest: dict[str, dict] = {}
-    for entry in journal.get("entries") or []:
+    if limit <= 0:
+        return ""
+    prefix = " Last learned information (may be outdated; live state takes precedence): "
+    if visual_only:
+        prefix = (
+            " Last observed physical information (overrides older appearance; depict only "
+            "explicitly visible/worn items, never stored, given-away, dropped or consumed items): "
+        )
+    seen: set[str] = set()
+    facts: list[str] = []
+    length = len(prefix)
+    for entry in journal_entries(npc, reverse=True):
         if visual_only and entry.get("source") != "observed":
             continue
         category = entry.get("category", "event")
@@ -121,17 +148,13 @@ def memory_context(npc: Any, limit: int = 1600, *, visual_only: bool = False) ->
         group = (
             "physical" if category in _PHYSICAL_CATEGORIES and subject != "general" else category
         )
-        topic = f"{group}/{subject}"
-        latest.pop(topic, None)
-        latest[topic] = entry
-    facts = [
-        f"{category} ({e.get('source', 'observed')}): {e.get('text', '')}"
-        for category, e in reversed(list(latest.items()))
-    ]
-    prefix = " Last learned information (may be outdated; live state takes precedence): "
-    if visual_only:
-        prefix = (
-            " Last observed physical information (overrides older appearance; depict only "
-            "explicitly visible/worn items, never stored, given-away, dropped or consumed items): "
-        )
+        topic = f"{group}/{fact_topic(entry)}"
+        if topic in seen:
+            continue
+        seen.add(topic)
+        fact = f"{entry.get('category', 'event')} ({entry.get('source', 'observed')}): {entry.get('text', '')}"
+        facts.append(fact)
+        length += len(fact) + (2 if len(facts) > 1 else 0)
+        if length >= limit:
+            break
     return (prefix + "; ".join(facts))[:limit] if facts else ""

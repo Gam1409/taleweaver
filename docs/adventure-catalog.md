@@ -4,6 +4,12 @@ The portal's **Catalog** opens the community adventure catalog. Select a story,
 review its description and install it into your Library. Existing Library actions,
 including Resume, saved sessions and memory controls, remain available.
 
+Search by title, description or author, and filter by language. Selection and
+installation are independent of the current filter: **Select all adventures in
+catalog** includes entries hidden by a search. Installed/current adventures cannot
+be selected for an accidental downgrade. A failed request offers retry; a cached
+offline catalog is marked explicitly.
+
 ## Installing an adventure
 
 Downloads pass through a compatibility adapter and the fork's normal importer.
@@ -78,9 +84,22 @@ preparation CLI do not upload or push anything online.
 ## Format baseline
 
 The compatibility adapter targets the upstream format at commit `2e042ef2`.
+Its opaque extension handling additionally follows upstream `47fc1292`.
 Both projects currently label their adventure format `1.3`; a matching format
 number alone does not imply identical features. Conversion checks capabilities
 and supported fields, rather than simply replacing a version number.
 
 This integration adapts the catalog originally developed by **jschm42 and the
 TaleWeaver contributors**. Original story attribution and licenses are retained.
+
+## Maintenance boundaries
+
+Remote index models, cache/index coordination, transport limits and installation
+are separate modules in `backend/services/adventure_library/`. Routes coordinate
+these services. Frontend requests, async selection/install state, search filters
+and dialog/card rendering are separate service, composable and component files.
+
+The [portable agent runtime contract](specs/agent_runtime.md) adds static
+capability configuration and NPC seeds to the existing extension envelope.
+Imports keep that JSON but do not run its engines or resolve remote RAG resources.
+The corpus adapter port is separate from the adventure catalog's `library.json`.

@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any, Optional
 
 from backend.core import prompts
+from backend.engine.character_identity import describe_character
 from backend.engine.image_profiles import image_timeout
 from backend.engine.image_prompt_adapter import asset_source
 from backend.engine.manifest_apply.assets import find_duplicate_image_url, needs_image
@@ -21,6 +22,7 @@ from backend.models.world_entity import WorldEntity
 # NPC settings that may appear at the top level (generated manifests) or inside
 # `metadata_json` (exported manifests). The top-level value wins.
 _METADATA_FIELDS = (
+    "personality_profile",
     "equipped_weapon_id",
     "equipped_armor_id",
     "special_actions",
@@ -91,7 +93,7 @@ async def _generate_portrait(
         ctx.manifest.get("objects") or [],
         detailed=clothing_settings(ctx.manifest)["detailed"],
     )
-    description = portrait_description(visual) if visual is not None else npc["description"]
+    description = portrait_description(visual) if visual is not None else describe_character(npc)
     prompt = prompts.NPC_IMAGE_PROMPT_TEMPLATE.format(name=npc["name"], description=description)
     user_config, api_keys = t2i_config(ctx)
     prompt = asset_source(
@@ -156,6 +158,8 @@ def _npc_entity(
         description=npc["description"],
         goal=npc.get("goal"),
         character=npc.get("character"),
+        gender=npc.get("gender"),
+        age_years=npc.get("age_years"),
         visual_profile=npc.get("visual_profile"),
         current_scene_id=npc.get("start_scene_id")
         or npc.get("current_scene_id")
@@ -199,5 +203,5 @@ async def persist_npcs(
             image_cache[npc["id"]] = image_url
         processed.append(npc)
         ctx.db.add(_npc_entity(ctx, npc, image_url, default_scene_id))
-        await ctx.commit_and_refresh()
+        await ctx.guard_write()
     return {npc["id"]: npc_inventory_ids(npc) for npc in npcs}

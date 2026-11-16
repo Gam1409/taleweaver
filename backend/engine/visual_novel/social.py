@@ -7,8 +7,13 @@ from typing import Any
 
 from sqlalchemy import select
 
+from backend.core.llm_deadlines import role_timeout
 from backend.core.llm_router import GameMasterLLM
+from backend.engine.chpm.state import controls
 from backend.engine.memory_rag.prompts import recall_block
+from backend.engine.npc_presence import physically_present
+from backend.engine.personality.profile import personality_context
+from backend.engine.visual_novel.character_context import remembered_direction
 from backend.engine.visual_novel.prompts import FALLBACK_CONTEXT, SYSTEM_PROMPT, narrator_context
 from backend.engine.visual_novel.schema import (
     MAX_ACTIVE,
@@ -29,7 +34,6 @@ from backend.models.chat import ChatMessage
 from backend.models.world_entity import WorldEntity
 
 logger = logging.getLogger(__name__)
-PLANNING_TIMEOUT = 45
 MAX_ACTION_CHARS = 4000
 MAX_SCENE_CHARS = 4000
 
@@ -41,7 +45,12 @@ def _visible(npc: Any, state: Any) -> bool:
     scene = overrides.get("current_scene_id", npc.current_scene_id)
     hidden = overrides.get("is_hidden", npc.is_hidden)
     defeated = overrides.get("is_defeated", getattr(npc, "is_defeated", False))
-    return scene == state.current_scene_id and not hidden and not defeated
+    return (
+        scene == state.current_scene_id
+        and not hidden
+        and not defeated
+        and physically_present(npc, state)
+    )
 
 
 async def _present_npcs(manager: Any, social: SocialState, user_msg: str) -> list[Any]:
@@ -52,7 +61,11 @@ async def _present_npcs(manager: Any, social: SocialState, user_msg: str) -> lis
             WorldEntity.is_in_inventory.is_(False),
         )
     )
-    present = [npc for npc in rows.all() if _visible(npc, manager.state)]
+    present = [
+        npc
+        for npc in rows.all()
+        if _visible(npc, manager.state) and not controls(manager.state, npc.id)
+    ]
 
     def priority(npc: Any) -> tuple[bool, bool, str]:
         known = social.characters.get(npc.id)
@@ -69,6 +82,7 @@ async def _scene_evidence(manager: Any) -> tuple[str, str]:
         .where(
             ChatMessage.session_id == manager.state.session_id,
             ChatMessage.role == "assistant",
+            ChatMessage.is_debug.is_(False),
         )
         .order_by(ChatMessage.created_at.desc(), ChatMessage.id.desc())
         .limit(1)
@@ -78,14 +92,13 @@ async def _scene_evidence(manager: Any) -> tuple[str, str]:
     return str(message.id), str(message.content or "")[-MAX_SCENE_CHARS:]
 
 
-def _character_context(character: CharacterState) -> dict[str, Any]:
+def _character_context(character: CharacterState, source_message_id: str = "") -> dict[str, Any]:
     # Persistence hashes and full ledgers are never useful model context.
     return {
         "core": character.core[:700],
         "goals": [goal[:700] for goal in character.goals],
         "relationship": character.relationship.model_dump(),
-        "emotion": character.emotion,
-        "next_intention": character.next_intention,
+        "remembered_direction": remembered_direction(character, source_message_id),
         "recent_memories_for_orientation_only": [
             {"event": memory.kind, "evidence": memory.evidence[:200]}
             for memory in character.memories[-3:]
@@ -100,13 +113,15 @@ def _payload(
     scene_context: str,
     history: list[dict],
     historical_recall: str = "",
+    source_message_id: str = "",
 ) -> str:
     cast = [
         {
             "npc_id": npc.id,
             "name": npc.name,
             "authored_description": str(getattr(npc, "description", "") or "")[:700],
-            "character": _character_context(social.characters[npc.id]),
+            "character": _character_context(social.characters[npc.id], source_message_id),
+            "personality_tendencies": personality_context(npc),
         }
         for npc in npcs
         if npc.id in social.characters
@@ -162,7 +177,7 @@ def apply_plan(
             apply_event(social, character, proposal, source_message_id)
             # A witnessed emotion need not earn points or pass the positive-event
             # cooldown. It remains separate from scores, promotion and memories.
-            _set_direction(character, proposal)
+            _set_direction(character, proposal, source_message_id)
         social.reviewed_scene_message_ids = (
             social.reviewed_scene_message_ids + [source_message_id]
         )[-MAX_PROCESSED:]
@@ -176,10 +191,17 @@ def apply_plan(
     return directed
 
 
-def _set_direction(character: CharacterState, proposal: SocialProposal) -> None:
-    character.emotion = proposal.emotion
-    character.emotion_cause = proposal.evidence
-    character.next_intention = proposal.intention
+def _set_direction(
+    character: CharacterState, proposal: SocialProposal, source_message_id: str = ""
+) -> None:
+    # A relationship observation need not establish a new emotion or intention.
+    # Schema defaults are not evidence that an earlier feeling has ended.
+    if "emotion" in proposal.model_fields_set:
+        character.emotion = proposal.emotion
+        character.emotion_cause = proposal.evidence
+        character.emotion_source_message_id = source_message_id
+    if "intention" in proposal.model_fields_set:
+        character.next_intention = proposal.intention
 
 
 async def plan_interaction(
@@ -222,6 +244,7 @@ async def _plan(
                 scene_context,
                 history,
                 recall_block(manager, "vn_social", {str(npc.id) for npc in npcs}),
+                source_message_id=source_id,
             ),
             InteractionPlan,
             llm.model,
@@ -230,10 +253,10 @@ async def _plan(
             phase="reaction_plan",
             metadata={"message_id": message_id},
         ),
-        timeout=PLANNING_TIMEOUT,
+        timeout=role_timeout(manager.user, "small"),
     )
     plan = InteractionPlan.model_validate(result)
     mark_processed(social, message_id)
     directed = apply_plan(social, plan, npcs, user_msg, scene_context, source_id)
     save_state(manager.state, social)
-    return narrator_context(directed, npcs)
+    return narrator_context(social, npcs, source_message_id=source_id, directed=directed)

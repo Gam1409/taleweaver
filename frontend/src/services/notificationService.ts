@@ -1,9 +1,11 @@
 import { ref, computed } from 'vue'
 
+export type NotificationType = 'error' | 'success' | 'info'
+
 export interface Notification {
   id: number
   message: string
-  type: 'error' | 'success' | 'info'
+  type: NotificationType
 }
 
 /**
@@ -13,27 +15,33 @@ class NotificationService {
   private notifications = ref<Notification[]>([])
   private nextId = 0
   private readonly DURATION_MS = 5000
+  private timers = new Map<number, ReturnType<typeof setTimeout>>()
 
   get all() {
     return computed(() => this.notifications.value)
   }
 
-  add(message: string, type: 'error' | 'success' | 'info' = 'info'): number {
+  add(message: string, type: NotificationType = 'info', durationMs = this.DURATION_MS): number {
     const id = this.nextId++
     this.notifications.value.push({ id, message, type })
 
-    setTimeout(() => {
+    const timer = setTimeout(() => {
       this.remove(id)
-    }, this.DURATION_MS)
+    }, durationMs)
+    this.timers.set(id, timer)
 
     return id
   }
 
   remove(id: number): void {
+    clearTimeout(this.timers.get(id))
+    this.timers.delete(id)
     this.notifications.value = this.notifications.value.filter(n => n.id !== id)
   }
 
   clear(): void {
+    this.timers.forEach(timer => clearTimeout(timer))
+    this.timers.clear()
     this.notifications.value = []
   }
 

@@ -1,5 +1,7 @@
+import { apiFetch } from '@/services/http'
 import { onScopeDispose, ref, watch, type Ref } from 'vue'
 import { authState } from '@/store/auth'
+import type { NpcCurrentState } from '@/types/npcCurrentState'
 
 export type NpcAttitude = 'unknown' | 'love' | 'trust' | 'friendly' | 'neutral' | 'suspicion' | 'hostility' | 'fear' | 'mixed'
 
@@ -20,10 +22,13 @@ export interface NpcJournalEntry {
   source: 'observed' | 'claimed'
   scene_id?: string
   recorded_at?: string
+  game_minute?: number | null
   player_attitude?: NpcAttitude | null
 }
 
 export interface NpcInsights {
+  source_created_at?: string | null
+  newer_responses?: number
   available: boolean
   relationship: { trust: number; affinity: number; respect: number; tension: number } | null
   emotion: string | null
@@ -34,6 +39,8 @@ export interface NpcInsights {
 export type NpcHistoryKind = 'all' | 'general' | 'shared'
 
 export interface NpcCard {
+  gender?: string | null
+  age_years?: number | null
   narrative_role?: 'supporting' | 'major'
   id: string
   name: string
@@ -53,9 +60,16 @@ export interface NpcCard {
   history_kind?: NpcHistoryKind
   state_visible?: boolean
   insights?: NpcInsights | null
+  current_state?: NpcCurrentState
+}
+
+export interface LearningProgress {
+  phase: 'queued' | 'preparing' | 'extracting' | 'waiting_to_save' | 'saving' | 'recovering' | 'retry_pending' | 'up_to_date'
+  elapsed_seconds: number
 }
 
 interface NpcJournalController {
+  learning: Ref<LearningProgress | null>
   characters: Ref<NpcCard[]>
   details: Ref<NpcCard | null>
   loading: Ref<boolean>
@@ -67,6 +81,7 @@ interface NpcJournalController {
 }
 
 export function useNpcJournal(sessionId: Ref<string>, npcId: Ref<string | undefined>, showState?: Readonly<Ref<boolean>>, history?: Ref<NpcHistoryKind>): NpcJournalController {
+  const learning = ref<LearningProgress | null>(null)
   const characters = ref<NpcCard[]>([])
   const details = ref<NpcCard | null>(null)
   const loading = ref(false)
@@ -82,7 +97,7 @@ export function useNpcJournal(sessionId: Ref<string>, npcId: Ref<string | undefi
   }
 
   async function request(path: string, signal: AbortSignal, method = 'GET'): Promise<unknown> {
-    const response = await fetch(`/api/adventures/${encodeURIComponent(sessionId.value)}/${path}`, {
+    const response = await apiFetch(`/adventures/${encodeURIComponent(sessionId.value)}/${path}`, { timeoutMs: null,
       method, headers: { Authorization: `Bearer ${authState.token}` }, signal,
     })
     if (!response.ok) throw new Error(response.status === 404
@@ -106,11 +121,12 @@ export function useNpcJournal(sessionId: Ref<string>, npcId: Ref<string | undefi
         if (token !== revision) return
         details.value = visibleCard({ ...data, entries: more ? [...(details.value?.entries || []), ...(data.entries || [])] : data.entries })
       } else {
-        const data = await request('npcs', controller.signal) as { characters: NpcCard[]; pending: number; failed: number }
+        const data = await request('npcs', controller.signal) as { characters: NpcCard[]; pending: number; failed: number; learning?: LearningProgress }
         if (token !== revision) return
         characters.value = data.characters.map(visibleCard)
         pending.value = data.pending
         failed.value = data.failed
+        learning.value = data.learning ?? null
       }
     } catch (cause) {
       if (token === revision) error.value = cause instanceof Error && cause.name !== 'AbortError'
@@ -154,6 +170,9 @@ export function useNpcJournal(sessionId: Ref<string>, npcId: Ref<string | undefi
     if (current[0] !== previous?.[0] || current[1] !== previous?.[1]) {
       details.value = null
       characters.value = []
+      learning.value = null
+      pending.value = 0
+      failed.value = 0
     } else if (details.value && current[2] !== previous?.[2]) {
       // Keep the profile visible while replacing only this tab's history page.
       details.value = { ...details.value, entries: [], has_more: false, history_kind: history?.value }
@@ -167,5 +186,5 @@ export function useNpcJournal(sessionId: Ref<string>, npcId: Ref<string | undefi
     } else void load()
   })
   onScopeDispose(stop)
-  return { characters, details, loading, error, pending, failed, load, retryLearning }
+  return { learning, characters, details, loading, error, pending, failed, load, retryLearning }
 }

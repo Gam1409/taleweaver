@@ -1,8 +1,19 @@
 <script setup lang="ts">
+import AuthoringFieldGroup from './AuthoringFieldGroup.vue'
+import CharacterIdentityFields from './CharacterIdentityFields.vue'
+import CharacterOutfitGenerator from './CharacterOutfitGenerator.vue'
+import type { CharacterOutfitDraft } from '@/services/characterOutfits'
 import { computed, nextTick, ref, watch } from 'vue'
+import ClothingItemFields from '@/components/editor/ClothingItemFields.vue'
+import type { ClothingDraft } from '@/services/clothingAuthoring'
+import NpcPersonalityDetails from '@/components/editor/NpcPersonalityDetails.vue'
+import ItemDraftGenerator from '@/components/editor/ItemDraftGenerator.vue'
+import { generateItemDescription, type ItemDraft } from '@/services/itemGeneration'
+import { itemDraftFields } from '@/services/itemDraftFields'
 import EntityReferenceCombobox from '@/components/editor/EntityReferenceCombobox.vue'
 import ReferenceTextarea from '@/components/editor/ReferenceTextarea.vue'
 import ScriptEditor from '@/components/editor/ScriptEditor.vue'
+import { entityFormErrors } from '@/components/editor/entityFormValidation'
 import NpcCombatSettings from '@/components/editor/NpcCombatSettings.vue'
 import { Plus, Trash2, Key, FileText, Lock, Code2, Sparkles, ToggleLeft, ChevronDown, ChevronRight, Edit3 } from 'lucide-vue-next'
 
@@ -18,6 +29,10 @@ const props = defineProps<{
     mana: number
     goal: string
     character: string
+    gender?: string | null
+    age_years?: number | null
+    personality_profile?: Record<string, string>
+    outfit_completion?: CharacterOutfitDraft | null
     is_killable: boolean
     item_type: string
     is_portable: boolean
@@ -29,6 +44,7 @@ const props = defineProps<{
     text_log_format: string
     entity_id: string
     wearable_slots_input: string[]
+    clothing?: ClothingDraft | null
     combination_ingredients_input: string[]
     reveal_rule: string
     is_hidden: boolean
@@ -79,6 +95,14 @@ const emit = defineEmits<{
   (e: 'combat-saved'): void
 }>()
 
+const itemDraftBusy = ref(false)
+const itemDraftContextVersion = ref(0)
+const clothingBusy = ref(false)
+const itemDescriptionError = ref('')
+function applyItemDraft(draft: ItemDraft) {
+  Object.assign(localForm.value, itemDraftFields(draft))
+}
+
 const activeTab = ref<'simple' | 'advanced'>('simple')
 const editingTransitionIndex = ref<number | null>(null)
 const showTransitionGuards = ref<boolean>(false)
@@ -106,49 +130,53 @@ function hasActiveScripts(t: any): boolean {
   )
 }
 
-const localForm = ref({
-  is_hidden: false,
-  reveal_rule: '',
-  moveable: false,
-  allowed_scenes_input: [] as string[],
-  notes: '',
-  pickup_trigger_mode: 'silent',
-  pickup_trigger_cue: '',
-  attack_mode: 'PASSIVE',
-  unlock_expression: '',
-  on_unlock_success_script: '',
-  on_unlock_success_text: '',
-  on_unlock_failure_script: '',
-  on_unlock_failure_text: '',
-  craft_guard_expression: '',
-  on_craft_success_script: '',
-  on_craft_success_text: '',
-  on_craft_failure_script: '',
-  on_craft_failure_text: '',
-  on_read_script: '',
-  on_read_text: '',
-  on_leave_scene_script: '',
-  on_leave_scene_text: '',
-  on_pickup_script: '',
-  on_pickup_text: '',
-  on_drop_script: '',
-  on_drop_text: '',
-  on_equip_script: '',
-  on_equip_text: '',
-  on_unequip_script: '',
-  on_unequip_text: '',
-  on_enter_scene_script: '',
-  on_enter_scene_text: '',
-  on_open_exit_script: '',
-  on_open_exit_text: '',
-  on_defeat_script: '',
-  on_defeat_text: '',
-  on_protagonist_enters_scene_script: '',
-  on_protagonist_enters_scene_text: '',
-  on_success_script: '',
-  on_failure_script: '',
-  ...props.initialForm
-})
+function makeLocalForm(form: typeof props.initialForm) {
+  return {
+    gender: null as string | null,
+    age_years: null as number | null,
+    personality_profile: {} as Record<string, string>,
+    moveable: false,
+    allowed_scenes_input: [] as string[],
+    notes: '',
+    pickup_trigger_mode: 'silent',
+    pickup_trigger_cue: '',
+    attack_mode: 'PASSIVE',
+    unlock_expression: '',
+    on_unlock_success_script: '',
+    on_unlock_success_text: '',
+    on_unlock_failure_script: '',
+    on_unlock_failure_text: '',
+    craft_guard_expression: '',
+    on_craft_success_script: '',
+    on_craft_success_text: '',
+    on_craft_failure_script: '',
+    on_craft_failure_text: '',
+    on_read_script: '',
+    on_read_text: '',
+    on_leave_scene_script: '',
+    on_leave_scene_text: '',
+    on_pickup_script: '',
+    on_pickup_text: '',
+    on_drop_script: '',
+    on_drop_text: '',
+    on_equip_script: '',
+    on_equip_text: '',
+    on_unequip_script: '',
+    on_unequip_text: '',
+    on_enter_scene_script: '',
+    on_enter_scene_text: '',
+    on_open_exit_script: '',
+    on_open_exit_text: '',
+    on_defeat_script: '',
+    on_defeat_text: '',
+    on_protagonist_enters_scene_script: '',
+    on_protagonist_enters_scene_text: '',
+    on_success_script: '',
+    on_failure_script: '',
+    ...form
+  }
+}
+const localForm = ref(makeLocalForm(props.initialForm))
 const switchStates = ref<string[]>([])
 const switchTransitions = ref<any[]>([])
 
@@ -177,7 +205,7 @@ function syncFromForm() {
   } catch {
     transitions = []
   }
-  
+
   switchTransitions.value = transitions.map((t: any) => ({
     from: String(t.from || t.from_state || '').toUpperCase(),
     to: String(t.to || t.to_state || '').toUpperCase(),
@@ -220,11 +248,11 @@ function addState() {
 function removeState(index: number) {
   const removed = switchStates.value[index]
   switchStates.value.splice(index, 1)
-  
+
   if (localForm.value.switch_initial_state === removed) {
     localForm.value.switch_initial_state = switchStates.value[0] || ''
   }
-  
+
   switchTransitions.value = switchTransitions.value.filter(
     t => t.from !== removed && t.to !== removed
   )
@@ -238,11 +266,11 @@ function updateStateValue(index: number, val: string) {
   const oldVal = switchStates.value[index]
   const cleanVal = val.toUpperCase().replace(/[^A-Z0-9_]/g, '')
   switchStates.value[index] = cleanVal
-  
+
   if (localForm.value.switch_initial_state === oldVal) {
     localForm.value.switch_initial_state = cleanVal
   }
-  
+
   switchTransitions.value.forEach(t => {
     if (t.from === oldVal) t.from = cleanVal
     if (t.to === oldVal) t.to = cleanVal
@@ -339,100 +367,29 @@ const entityIdError = computed(() => {
   return ''
 })
 
-const isFormInvalid = computed(() => {
-  const nameInvalid = !(localForm.value.name || '').trim() ||
-         (localForm.value.name || '').length > 50
-  const descInvalid = !(localForm.value.description || '').trim() ||
-         (localForm.value.description || '').length > 1000
-  const personaInvalid = (localForm.value.goal || '').length > 200 ||
-         (localForm.value.character || '').length > 200
-  const teaserInvalid = (localForm.value.teaser || '').length > 300
-  const hasEditableId = props.isCreateEntityMode || (props.context && ['npc', 'object', 'scene'].includes(props.context.type))
-  const maxIdLen = props.context?.type === 'scene' ? 50 : 30
-  const idInvalid = hasEditableId
-    ? (!(localForm.value.entity_id || '').trim() || (localForm.value.entity_id || '').length > maxIdLen || !!entityIdError.value)
-    : false
-  // Combinable items now only require at least one ingredient to be useful.
-  // Saving zero is allowed (acts as a placeholder combinable the GM can fill in later).
-  const ingredientsCount = Array.isArray(localForm.value.combination_ingredients_input)
-    ? localForm.value.combination_ingredients_input.filter((s: string) => Boolean(s)).length
-    : 0
-  const combinationInvalid =
-    (currentItemType.value === 'COMBINABLE' && ingredientsCount !== 0 && ingredientsCount < 1) ||
-    (currentItemType.value === 'CONSTRUCTABLE' && ingredientsCount < 2)
-  const uniqueStates = new Set(switchStates.value.map(s => s.trim().toUpperCase()))
-  const switchInvalid = currentItemType.value === 'SWITCH' && (
-    switchStates.value.length < 2 ||
-    uniqueStates.size !== switchStates.value.length ||
-    switchStates.value.some(s => !s.trim()) ||
-    !(localForm.value.switch_initial_state || '').trim() ||
-    !uniqueStates.has(String(localForm.value.switch_initial_state).trim().toUpperCase()) ||
-    switchTransitions.value.some(t => !t.to || !uniqueStates.has(t.to) || (t.from && !uniqueStates.has(t.from)))
-  )
-  return nameInvalid || descInvalid || personaInvalid || teaserInvalid || idInvalid || combinationInvalid || switchInvalid
-})
+const validationErrors = computed(() => entityFormErrors(localForm.value, {
+  hasEditableId: Boolean(props.isCreateEntityMode || (props.context && ['npc', 'object', 'scene'].includes(props.context.type))),
+  maxIdLength: props.context?.type === 'scene' ? 50 : 30,
+  entityIdError: entityIdError.value,
+  switchStates: switchStates.value,
+  switchTransitions: switchTransitions.value,
+}))
+const isFormInvalid = computed(() => validationErrors.value.length > 0)
 
 watch(() => props.initialForm, (newVal) => {
-  localForm.value = {
-    is_hidden: false,
-    reveal_rule: '',
-    moveable: false,
-    allowed_scenes_input: [],
-    notes: '',
-    pickup_trigger_mode: 'silent',
-    pickup_trigger_cue: '',
-    attack_mode: 'PASSIVE',
-    on_pickup_script: '',
-    on_pickup_text: '',
-    on_drop_script: '',
-    on_drop_text: '',
-    on_equip_script: '',
-    on_equip_text: '',
-    on_unequip_script: '',
-    on_unequip_text: '',
-    on_enter_scene_script: '',
-    on_enter_scene_text: '',
-    on_open_exit_script: '',
-    on_open_exit_text: '',
-    on_defeat_script: '',
-    on_defeat_text: '',
-    on_protagonist_enters_scene_script: '',
-    on_protagonist_enters_scene_text: '',
-    ...newVal
-  }
+  itemDraftContextVersion.value++
+  itemDraftBusy.value = false
+  itemDescriptionError.value = ''
+  localForm.value = makeLocalForm(newVal)
   syncFromForm()
 }, { deep: true })
 
 watch(() => props.show, (newVal) => {
+  itemDraftContextVersion.value++
+  itemDraftBusy.value = false
   if (newVal) {
     activeTab.value = 'simple'
-    localForm.value = {
-      is_hidden: false,
-      reveal_rule: '',
-      moveable: false,
-      allowed_scenes_input: [],
-      notes: '',
-      pickup_trigger_mode: 'silent',
-      pickup_trigger_cue: '',
-      attack_mode: 'PASSIVE',
-      on_pickup_script: '',
-      on_pickup_text: '',
-      on_drop_script: '',
-      on_drop_text: '',
-      on_equip_script: '',
-      on_equip_text: '',
-      on_unequip_script: '',
-      on_unequip_text: '',
-      on_enter_scene_script: '',
-      on_enter_scene_text: '',
-      on_open_exit_script: '',
-      on_open_exit_text: '',
-      on_defeat_script: '',
-      on_defeat_text: '',
-      on_protagonist_enters_scene_script: '',
-      on_protagonist_enters_scene_text: '',
-      ...props.initialForm
-    }
+    localForm.value = makeLocalForm(props.initialForm)
     syncFromForm()
   }
 })
@@ -495,7 +452,7 @@ watch(() => localForm.value.item_type, (newType) => {
 })
 
 function handleSave() {
-  if (!(localForm.value.name || '').trim() || !(localForm.value.description || '').trim()) {
+  if (props.isSaving || itemDraftBusy.value || clothingBusy.value || isFormInvalid.value) {
     return
   }
 
@@ -678,15 +635,21 @@ async function handleGenerateBiography() {
 
 async function handleGenerateDescription() {
   if (!props.adventureId || !localForm.value.name) return
+  const sourceForm = localForm.value
   isGenerating.value['description'] = true
+  itemDescriptionError.value = ''
   try {
-    const result = await entityService.generateSceneDescription(
+    const result = await generateItemDescription(
       props.adventureId,
-      localForm.value.name
+      localForm.value.name,
+      localForm.value.description,
+      localForm.value.item_type
     )
-    localForm.value.description = result.description
+    if (localForm.value === sourceForm && props.show) sourceForm.description = result.description
   } catch (error) {
-    console.error('Failed to generate description:', error)
+    if (localForm.value === sourceForm && props.show) {
+      itemDescriptionError.value = error instanceof Error ? error.message : 'Item description generation failed.'
+    }
   } finally {
     isGenerating.value['description'] = false
   }
@@ -728,12 +691,12 @@ const textLogPreviewClass = computed(() => {
 <template>
   <Teleport to="body">
     <Transition name="modal">
-      <div v-if="show && context" class="fixed inset-0 z-[200] flex items-center justify-center p-6 backdrop-blur-xl bg-slate-950/60">
-        <div class="modal-content w-full max-w-4xl bg-slate-900 border border-white/10 rounded-[2.5rem] shadow-2xl overflow-hidden max-h-[92vh] flex flex-col">
+      <div v-if="show && context" class="authoring-modal-overlay fixed inset-0 z-[200] flex items-center justify-center p-6 backdrop-blur-xl bg-slate-950/60">
+        <div class="authoring-dialog entity-editor-dialog modal-content w-full max-w-4xl bg-slate-900 border border-white/10 rounded-[2.5rem] shadow-2xl overflow-hidden max-h-[92vh] flex flex-col">
           <!-- Fixed Header -->
           <div class="px-8 py-5 flex justify-between items-center border-b border-white/5">
             <div class="space-y-1">
-              <h3 class="text-xs font-black text-emerald-500 uppercase tracking-widest">{{ isCreateEntityMode ? ('Create ' + (context.type === 'npc' ? 'NPC' : context.type.toUpperCase())) : ('Editing ' + context.type) }}</h3>
+              <h3 class="text-xs font-black text-emerald-500 uppercase tracking-widest">{{ isCreateEntityMode ? 'Create' : 'Edit' }} {{ context.type === 'npc' ? 'NPC' : context.type === 'object' ? 'item' : context.type }}</h3>
               <p class="text-slate-500 text-xs uppercase font-bold tracking-tighter">{{ isCreateEntityMode ? 'New Entity' : 'ID: ' + context.id }}</p>
             </div>
             <button @click="emit('close')" class="text-slate-500 hover:text-white transition-colors">
@@ -747,21 +710,80 @@ const textLogPreviewClass = computed(() => {
               @click="activeTab = 'simple'"
               :class="['pb-3 pt-4 text-xs font-black uppercase tracking-widest transition-colors border-b-2', activeTab === 'simple' ? 'text-emerald-500 border-emerald-500' : 'text-slate-500 border-transparent hover:text-white']"
             >
-              General
+              Details
             </button>
             <button
               @click="activeTab = 'advanced'"
               :class="['pb-3 pt-4 text-xs font-black uppercase tracking-widest transition-colors border-b-2', activeTab === 'advanced' ? 'text-emerald-500 border-emerald-500' : 'text-slate-500 border-transparent hover:text-white']"
             >
-              Advanced
+              Rules &amp; scripts
             </button>
           </div>
 
           <!-- Scrollable Content -->
           <div class="px-8 py-6 space-y-6 overflow-y-auto flex-1">
             <div v-show="activeTab === 'simple'" class="space-y-6">
-              <!-- Editable ID (create mode or scene/npc/object edit mode) -->
-              <div v-if="isCreateEntityMode || ['npc', 'object', 'scene'].includes(context.type)" class="space-y-3">
+<ItemDraftGenerator v-if="isCreateEntityMode && context.type === 'object' && adventureId"
+                :context-version="itemDraftContextVersion" :adventure-id="adventureId" :item-type="localForm.item_type"
+                :fixed-slots="localForm.is_wearable_slots_fixed ? localForm.wearable_slots_input : []"
+                :disabled="isSaving || clothingBusy" @draft="applyItemDraft" @busy="itemDraftBusy = $event" />
+
+<AuthoringFieldGroup title="Identity & description" icon="identity" :collapsible="false">
+
+<div class="space-y-3">
+                <div class="flex justify-between items-center">
+                  <label class="block text-xs font-black text-slate-500 uppercase tracking-widest">Entity Name <span class="text-red-400">*</span></label>
+                  <span :class="['text-xs font-bold tracking-widest', (localForm.name || '').length > 50 ? 'text-red-500' : 'text-emerald-500/50']">
+                    {{ (localForm.name || '').length }} / 50
+                  </span>
+                </div>
+                <input aria-label="Entity name" v-model="localForm.name" maxlength="50" class="w-full bg-black/40 border border-white/5 rounded-2xl px-4 py-3 text-xl font-bold text-white focus:border-emerald-500 outline-none transition-all shadow-inner" />
+
+              <!-- Stats Inputs -->
+
+              </div>
+<div class="space-y-3">
+                <div class="flex justify-between items-center">
+                  <label class="block text-xs font-black text-slate-500 uppercase tracking-widest">Description / Biography <span class="text-red-400">*</span></label>
+
+                  <span :class="['text-xs font-bold tracking-widest', (localForm.description || '').length > 1000 ? 'text-red-500' : 'text-emerald-500/50']">
+                    {{ (localForm.description || '').length }} / 1000
+                  </span>
+                </div>
+                <ReferenceTextarea
+                  v-model="localForm.description"
+                  :maxlength="1000"
+                  :rows="context.type === 'object' ? 3 : 4"
+                  :options="props.referenceOptions || []"
+                  :class-name="['w-full bg-black/40 border border-white/5 rounded-2xl px-4 py-3 text-slate-300 resize-none focus:border-emerald-500 outline-none transition-all leading-relaxed shadow-inner', context.type === 'object' ? 'text-sm' : 'text-base'].join(' ')"
+                />
+                <button
+                  v-if="['npc', 'protagonist'].includes(context.type) && localForm.name && localForm.goal && localForm.character"
+                  type="button"
+                  @click="handleGenerateBiography"
+                  :disabled="isGenerating['biography']"
+                  class="w-full py-2 bg-emerald-500/5 border border-emerald-500/10 hover:bg-emerald-500/10 hover:border-emerald-500/30 rounded-xl text-[10px] font-black text-emerald-500 uppercase tracking-widest flex items-center justify-center gap-2 transition-all disabled:opacity-50 mt-2"
+                >
+                  <i class="ra ra-crystals" :class="{ 'animate-spin': isGenerating['biography'] }"></i>
+                  <span>Quick-Gen Biography</span>
+                </button>
+                <button
+                  v-if="context.type === 'object' && localForm.name"
+                  type="button"
+                  @click="handleGenerateDescription"
+                  :disabled="isGenerating['description']"
+                  class="w-full py-2 bg-emerald-500/5 border border-emerald-500/10 hover:bg-emerald-500/10 hover:border-emerald-500/30 rounded-xl text-[10px] font-black text-emerald-500 uppercase tracking-widest flex items-center justify-center gap-2 transition-all disabled:opacity-50 mt-2"
+                >
+                  <i class="ra ra-crystals" :class="{ 'animate-spin': isGenerating['description'] }"></i>
+                  <span>Quick-Gen Description</span>
+                </button>
+                <p v-if="itemDescriptionError" role="alert" class="text-sm text-red-300">{{ itemDescriptionError }}</p>
+              </div>
+<CharacterIdentityFields v-if="['npc', 'protagonist'].includes(context.type)"
+                v-model:gender="localForm.gender" v-model:age-years="localForm.age_years" />
+<details v-if="isCreateEntityMode || ['npc', 'object', 'scene'].includes(context.type)" :open="isCreateEntityMode" class="entity-identifier">
+<summary>Technical identifier</summary>
+<div v-if="isCreateEntityMode || ['npc', 'object', 'scene'].includes(context.type)" class="space-y-3">
                 <div class="flex justify-between items-center">
                   <label class="block text-xs font-black text-slate-500 uppercase tracking-widest">
                     {{ context.type === 'scene' ? 'Scene ID' : 'Entity ID' }} <span class="text-red-400">*</span>
@@ -771,7 +793,7 @@ const textLogPreviewClass = computed(() => {
                   </span>
                 </div>
                 <input
-                  v-model="localForm.entity_id"
+                  aria-label="Entity identifier" v-model="localForm.entity_id"
                   :maxlength="context.type === 'scene' ? 50 : 30"
                   class="w-full bg-black/40 border rounded-2xl px-4 py-3 text-lg font-mono font-bold text-amber-300 focus:border-amber-500 outline-none transition-all shadow-inner uppercase"
                   :class="entityIdError ? 'border-red-500 focus:ring-red-500/50' : 'border-white/5'"
@@ -780,74 +802,30 @@ const textLogPreviewClass = computed(() => {
                 <p v-if="entityIdError" class="text-xs font-bold text-red-400">{{ entityIdError }}</p>
                 <p v-else class="text-[10px] text-slate-500 uppercase tracking-wider">Unique identifier. Only uppercase letters, numbers, and underscores.</p>
               </div>
+</details>
+</AuthoringFieldGroup>
 
-              <div class="space-y-3">
-                <div class="flex justify-between items-center">
-                  <label class="block text-xs font-black text-slate-500 uppercase tracking-widest">Entity Name <span class="text-red-400">*</span></label>
-                  <span :class="['text-xs font-bold tracking-widest', (localForm.name || '').length > 50 ? 'text-red-500' : 'text-emerald-500/50']">
-                    {{ (localForm.name || '').length }} / 50
-                  </span>
-                </div>
-                <input v-model="localForm.name" maxlength="50" class="w-full bg-black/40 border border-white/5 rounded-2xl px-4 py-3 text-xl font-bold text-white focus:border-emerald-500 outline-none transition-all shadow-inner" />
-              
-              <!-- Stats Inputs -->
-              <div v-if="['protagonist', 'npc'].includes(context.type) && ruleEnforcementMode !== 'chat'" class="grid grid-cols-3 gap-4">
-                <div class="space-y-2">
-                  <label class="block text-xs font-black text-slate-500 uppercase tracking-widest">Health (HP)</label>
-                  <input 
-                    v-model.number="localForm.hp" 
-                    type="number" 
-                    min="0"
-                    max="999"
-                    class="w-full bg-black/40 border border-white/5 rounded-xl px-4 py-2 text-white font-bold focus:border-red-500/50 outline-none transition-all"
-                    :class="{ 'border-red-500 text-red-500': localForm.hp < 0 || localForm.hp > 999 }"
-                  />
-                </div>
-                <div class="space-y-2">
-                  <label class="block text-xs font-black text-slate-500 uppercase tracking-widest">Stamina (STM)</label>
-                  <input 
-                    v-model.number="localForm.stamina" 
-                    type="number" 
-                    min="0"
-                    max="999"
-                    class="w-full bg-black/40 border border-white/5 rounded-xl px-4 py-2 text-white font-bold focus:border-emerald-500/50 outline-none transition-all"
-                    :class="{ 'border-red-500 text-red-500': localForm.stamina < 0 || localForm.stamina > 999 }"
-                  />
-                </div>
-                <div v-if="ruleEnforcementMode === 'rpg'" class="space-y-2">
-                  <label class="block text-xs font-black text-slate-500 uppercase tracking-widest">Mana (MAN)</label>
-                  <input 
-                    v-model.number="localForm.mana" 
-                    type="number" 
-                    min="0"
-                    max="999"
-                    class="w-full bg-black/40 border border-white/5 rounded-xl px-4 py-2 text-white font-bold focus:border-blue-500/50 outline-none transition-all"
-                    :class="{ 'border-red-500 text-red-500': localForm.mana < 0 || localForm.mana > 999 }"
-                  />
-                </div>
-              </div>
-              </div>
-              
-              <!-- Protagonist Motivation & Traits -->
-              <div v-if="context.type === 'protagonist'" class="grid grid-cols-1 md:grid-cols-2 gap-6">
+<AuthoringFieldGroup title="Character & goals" icon="story" v-if="['npc', 'protagonist'].includes(context.type)" initially-open>
+<div v-if="context.type === 'protagonist'" class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div class="space-y-3">
                   <div class="flex justify-between items-center">
                     <label class="block text-xs font-black text-slate-500 uppercase tracking-widest">Motivation / Goal</label>
-                    <span :class="['text-xs font-bold tracking-widest', (localForm.goal || '').length > 200 ? 'text-red-500' : 'text-emerald-500/50']">
-                      {{ (localForm.goal || '').length }} / 200
+                    <span :class="['text-xs font-bold tracking-widest', (localForm.goal || '').length > 300 ? 'text-red-500' : 'text-emerald-500/50']">
+                      {{ (localForm.goal || '').length }} / 300
                     </span>
                   </div>
                   <ReferenceTextarea
                     v-model="localForm.goal"
-                    :maxlength="200"
+                    auto-grow
+                    :maxlength="300"
                     :rows="2"
                     :options="props.referenceOptions || []"
                     class-name="w-full bg-black/40 border border-white/5 rounded-2xl px-4 py-3 text-sm text-slate-300 resize-none focus:border-emerald-500 outline-none transition-all leading-relaxed shadow-inner"
                     placeholder="What drives the protagonist? (e.g. 'Seeks revenge for family's death')"
                   />
-                  <button 
+                  <button
                     v-if="localForm.description"
-                    @click="handleGenerateTraits('goal')" 
+                    @click="handleGenerateTraits('goal')"
                     :disabled="isGenerating['goal']"
                     class="w-full py-2 bg-emerald-500/5 border border-emerald-500/10 hover:bg-emerald-500/10 hover:border-emerald-500/30 rounded-xl text-[10px] font-black text-emerald-500 uppercase tracking-widest flex items-center justify-center gap-2 transition-all disabled:opacity-50"
                   >
@@ -858,21 +836,22 @@ const textLogPreviewClass = computed(() => {
                 <div class="space-y-3">
                   <div class="flex justify-between items-center">
                     <label class="block text-xs font-black text-slate-500 uppercase tracking-widest">Personality / Traits</label>
-                    <span :class="['text-xs font-bold tracking-widest', (localForm.character || '').length > 200 ? 'text-red-500' : 'text-emerald-500/50']">
-                      {{ (localForm.character || '').length }} / 200
+                    <span :class="['text-xs font-bold tracking-widest', (localForm.character || '').length > 300 ? 'text-red-500' : 'text-emerald-500/50']">
+                      {{ (localForm.character || '').length }} / 300
                     </span>
                   </div>
                   <ReferenceTextarea
                     v-model="localForm.character"
-                    :maxlength="200"
+                    auto-grow
+                    :maxlength="300"
                     :rows="2"
                     :options="props.referenceOptions || []"
                     class-name="w-full bg-black/40 border border-white/5 rounded-2xl px-4 py-3 text-sm text-slate-300 resize-none focus:border-emerald-500 outline-none transition-all leading-relaxed shadow-inner"
                     placeholder="How does the protagonist behave? (e.g. 'Sarcastic but loyal, prone to rash decisions')"
                   />
-                  <button 
+                  <button
                     v-if="localForm.description"
-                    @click="handleGenerateTraits('character')" 
+                    @click="handleGenerateTraits('character')"
                     :disabled="isGenerating['character']"
                     class="w-full py-2 bg-emerald-500/5 border border-emerald-500/10 hover:bg-emerald-500/10 hover:border-emerald-500/30 rounded-xl text-[10px] font-black text-emerald-500 uppercase tracking-widest flex items-center justify-center gap-2 transition-all disabled:opacity-50"
                   >
@@ -881,26 +860,26 @@ const textLogPreviewClass = computed(() => {
                   </button>
                 </div>
               </div>
-              
-              <div v-if="context.type === 'npc'" class="grid grid-cols-1 md:grid-cols-2 gap-6">
+<div v-if="context.type === 'npc'" class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div class="space-y-3">
                   <div class="flex justify-between items-center">
                     <label class="block text-xs font-black text-slate-500 uppercase tracking-widest">NPC Goal / Motivation</label>
-                    <span :class="['text-xs font-bold tracking-widest', (localForm.goal || '').length > 200 ? 'text-red-500' : 'text-emerald-500/50']">
-                      {{ (localForm.goal || '').length }} / 200
+                    <span :class="['text-xs font-bold tracking-widest', (localForm.goal || '').length > 300 ? 'text-red-500' : 'text-emerald-500/50']">
+                      {{ (localForm.goal || '').length }} / 300
                     </span>
                   </div>
                   <ReferenceTextarea
                     v-model="localForm.goal"
-                    :maxlength="200"
+                    auto-grow
+                    :maxlength="300"
                     :rows="2"
                     :options="props.referenceOptions || []"
                     class-name="w-full bg-black/40 border border-white/5 rounded-2xl px-4 py-3 text-sm text-slate-300 resize-none focus:border-emerald-500 outline-none transition-all leading-relaxed shadow-inner"
                     placeholder="What does this NPC want? (e.g. 'Wants to steal the player's gold')"
                   />
-                  <button 
+                  <button
                     v-if="localForm.description"
-                    @click="handleGenerateTraits('goal')" 
+                    @click="handleGenerateTraits('goal')"
                     :disabled="isGenerating['goal']"
                     class="w-full py-2 bg-emerald-500/5 border border-emerald-500/10 hover:bg-emerald-500/10 hover:border-emerald-500/30 rounded-xl text-[10px] font-black text-emerald-500 uppercase tracking-widest flex items-center justify-center gap-2 transition-all disabled:opacity-50"
                   >
@@ -911,21 +890,22 @@ const textLogPreviewClass = computed(() => {
                 <div class="space-y-3">
                   <div class="flex justify-between items-center">
                     <label class="block text-xs font-black text-slate-500 uppercase tracking-widest">NPC Character / Traits</label>
-                    <span :class="['text-xs font-bold tracking-widest', (localForm.character || '').length > 200 ? 'text-red-500' : 'text-emerald-500/50']">
-                      {{ (localForm.character || '').length }} / 200
+                    <span :class="['text-xs font-bold tracking-widest', (localForm.character || '').length > 300 ? 'text-red-500' : 'text-emerald-500/50']">
+                      {{ (localForm.character || '').length }} / 300
                     </span>
                   </div>
                   <ReferenceTextarea
                     v-model="localForm.character"
-                    :maxlength="200"
+                    auto-grow
+                    :maxlength="300"
                     :rows="2"
                     :options="props.referenceOptions || []"
                     class-name="w-full bg-black/40 border border-white/5 rounded-2xl px-4 py-3 text-sm text-slate-300 resize-none focus:border-emerald-500 outline-none transition-all leading-relaxed shadow-inner"
                     placeholder="How does this NPC behave? (e.g. 'Grumpy and stubborn')"
                   />
-                  <button 
+                  <button
                     v-if="localForm.description"
-                    @click="handleGenerateTraits('character')" 
+                    @click="handleGenerateTraits('character')"
                     :disabled="isGenerating['character']"
                     class="w-full py-2 bg-emerald-500/5 border border-emerald-500/10 hover:bg-emerald-500/10 hover:border-emerald-500/30 rounded-xl text-[10px] font-black text-emerald-500 uppercase tracking-widest flex items-center justify-center gap-2 transition-all disabled:opacity-50"
                   >
@@ -934,8 +914,48 @@ const textLogPreviewClass = computed(() => {
                   </button>
                 </div>
               </div>
+<NpcPersonalityDetails v-if="context.type === 'npc'" v-model="localForm.personality_profile"
+                    :adventure-id="adventureId" :name="localForm.name" :description="localForm.description"
+                    :goal="localForm.goal" :character="localForm.character" />
+</AuthoringFieldGroup>
 
-              <div v-if="context.type === 'npc'" class="p-4 bg-black/30 border border-white/10 rounded-2xl">
+<AuthoringFieldGroup title="State & behaviour" icon="state" v-if="['npc', 'protagonist'].includes(context.type)">
+<div v-if="['protagonist', 'npc'].includes(context.type) && ruleEnforcementMode !== 'chat'" class="grid grid-cols-3 gap-4">
+                <div class="space-y-2">
+                  <label class="block text-xs font-black text-slate-500 uppercase tracking-widest">Health (HP)</label>
+                  <input
+                    v-model.number="localForm.hp"
+                    type="number"
+                    min="0"
+                    max="999"
+                    class="w-full bg-black/40 border border-white/5 rounded-xl px-4 py-2 text-white font-bold focus:border-red-500/50 outline-none transition-all"
+                    :class="{ 'border-red-500 text-red-500': localForm.hp < 0 || localForm.hp > 999 }"
+                  />
+                </div>
+                <div class="space-y-2">
+                  <label class="block text-xs font-black text-slate-500 uppercase tracking-widest">Stamina (STM)</label>
+                  <input
+                    v-model.number="localForm.stamina"
+                    type="number"
+                    min="0"
+                    max="999"
+                    class="w-full bg-black/40 border border-white/5 rounded-xl px-4 py-2 text-white font-bold focus:border-emerald-500/50 outline-none transition-all"
+                    :class="{ 'border-red-500 text-red-500': localForm.stamina < 0 || localForm.stamina > 999 }"
+                  />
+                </div>
+                <div v-if="ruleEnforcementMode === 'rpg'" class="space-y-2">
+                  <label class="block text-xs font-black text-slate-500 uppercase tracking-widest">Mana (MAN)</label>
+                  <input
+                    v-model.number="localForm.mana"
+                    type="number"
+                    min="0"
+                    max="999"
+                    class="w-full bg-black/40 border border-white/5 rounded-xl px-4 py-2 text-white font-bold focus:border-blue-500/50 outline-none transition-all"
+                    :class="{ 'border-red-500 text-red-500': localForm.mana < 0 || localForm.mana > 999 }"
+                  />
+                </div>
+              </div>
+<div v-if="context.type === 'npc'" class="p-4 bg-black/30 border border-white/10 rounded-2xl">
                 <div class="flex items-center justify-between">
                   <div class="space-y-1 pr-4">
                     <p class="text-xs font-black text-slate-200 uppercase tracking-widest">NPC Can Be Killed</p>
@@ -950,9 +970,7 @@ const textLogPreviewClass = computed(() => {
                   </button>
                 </div>
               </div>
-
-              <!-- NPC Movement Configuration (Moveable & Allowed Scenes) -->
-              <div v-if="context.type === 'npc'" class="p-4 bg-black/30 border border-white/10 rounded-2xl space-y-4">
+<div v-if="context.type === 'npc'" class="p-4 bg-black/30 border border-white/10 rounded-2xl space-y-4">
                 <div class="flex items-center justify-between">
                   <div class="space-y-1 pr-4">
                     <p class="text-xs font-black text-slate-200 uppercase tracking-widest flex items-center gap-1.5">
@@ -1003,9 +1021,7 @@ const textLogPreviewClass = computed(() => {
                   <p v-else class="text-[10px] text-slate-500 italic">No scenes found in this adventure.</p>
                 </div>
               </div>
-
-              <!-- GM Status Notes / Condition -->
-              <div v-if="context.type === 'npc'" class="p-4 bg-black/30 border border-white/10 rounded-2xl space-y-2">
+<div v-if="context.type === 'npc'" class="p-4 bg-black/30 border border-white/10 rounded-2xl space-y-2">
                 <div class="flex items-center justify-between">
                   <p class="text-xs font-black text-slate-200 uppercase tracking-widest flex items-center gap-1.5">
                     <i class="ra ra-quill-ink text-amber-400"></i> GM Status Notes / Condition
@@ -1022,9 +1038,10 @@ const textLogPreviewClass = computed(() => {
                   class="w-full bg-slate-950/80 border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-amber-500 resize-none font-mono"
                 ></textarea>
               </div>
+</AuthoringFieldGroup>
 
-              <!-- NPC Loot / Inventory -->
-              <div v-if="context.type === 'npc'" class="p-4 bg-black/30 border border-white/10 rounded-2xl space-y-3">
+<AuthoringFieldGroup title="Belongings & clothing" icon="belongings" v-if="['npc', 'protagonist'].includes(context.type)">
+<div v-if="context.type === 'npc'" class="p-4 bg-black/30 border border-white/10 rounded-2xl space-y-3">
                 <div class="flex items-center gap-2">
                   <i class="ra ra-gem text-amber-400 text-sm"></i>
                   <p class="text-xs font-black text-slate-200 uppercase tracking-widest">Loot / Inventory</p>
@@ -1034,7 +1051,7 @@ const textLogPreviewClass = computed(() => {
                 </p>
                 <div class="space-y-2">
                   <div
-                    v-for="(item, idx) in localForm.inventory_input"
+                    v-for="(_item, idx) in localForm.inventory_input"
                     :key="idx"
                     class="flex items-center gap-2"
                   >
@@ -1064,9 +1081,16 @@ const textLogPreviewClass = computed(() => {
                   No loot configured. The NPC drops nothing on defeat.
                 </p>
               </div>
+<CharacterOutfitGenerator v-if="adventureId && !isCreateEntityMode && ['npc', 'protagonist'].includes(context.type)"
+                :key="context.type + ':' + context.id" :adventure-id="adventureId" :target-type="context.type" :target-id="context.id"
+                :name="localForm.name" :description="localForm.description" :character="localForm.character" :goal="localForm.goal"
+                :context-version="JSON.stringify([localForm.age_years, localForm.gender, localForm.inventory_input])"
+                :inventory-ids="localForm.inventory_input"
+                :disabled="isSaving" @update:model-value="localForm.outfit_completion = $event" @busy="clothingBusy = $event" />
+</AuthoringFieldGroup>
 
-              <!-- NPC Hidden State & Reveal Condition -->
-              <div v-if="context.type === 'npc'" class="p-4 bg-black/30 border border-white/10 rounded-2xl space-y-4">
+<AuthoringFieldGroup title="Placement & discovery" icon="visibility" v-if="context.type === 'npc'">
+<div v-if="context.type === 'npc'" class="p-4 bg-black/30 border border-white/10 rounded-2xl space-y-4">
                 <div class="flex items-center justify-between">
                   <div class="space-y-1 pr-4">
                     <p class="text-xs font-black text-slate-200 uppercase tracking-widest">Start Hidden</p>
@@ -1115,9 +1139,11 @@ const textLogPreviewClass = computed(() => {
                   </div>
                 </div>
               </div>
+</AuthoringFieldGroup>
 
-              <div v-if="context.type === 'object'" class="p-4 bg-black/30 border border-white/10 rounded-2xl space-y-5">
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+<div v-if="context.type === 'object'" class="space-y-5">
+<AuthoringFieldGroup title="Type & portability" icon="belongings" :collapsible="false">
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div class="space-y-2">
                     <label class="block text-xs font-black text-slate-500 uppercase tracking-widest">Item Type</label>
                     <select
@@ -1159,67 +1185,9 @@ const textLogPreviewClass = computed(() => {
                     </div>
                   </div>
                 </div>
-
-
-
-                <!-- Hidden state & Reveal rule for Objects -->
-                <div v-if="currentItemType !== 'CONSTRUCTABLE'" class="space-y-4 border-t border-white/5 pt-4">
-                  <div class="flex items-center justify-between">
-                    <div class="space-y-1 pr-4">
-                      <p class="text-xs font-black text-slate-200 uppercase tracking-widest">Start Hidden</p>
-                      <p class="text-[10px] text-slate-500 uppercase tracking-tighter">When enabled, the player must explicitly search the scene or fulfill a condition before discovering this item.</p>
-                    </div>
-                    <button
-                      type="button"
-                      @click="localForm.is_hidden = !localForm.is_hidden"
-                      :class="['w-14 h-8 rounded-full transition-all relative flex items-center px-1', localForm.is_hidden ? 'bg-emerald-600' : 'bg-slate-700']"
-                    >
-                      <div :class="['w-6 h-6 bg-white rounded-full shadow-lg transition-transform duration-300', localForm.is_hidden ? 'translate-x-6' : 'translate-x-0']"></div>
-                    </button>
-                  </div>
-
-                  <div v-if="localForm.is_hidden" class="space-y-3 pt-2">
-                    <div class="space-y-2">
-                      <label class="block text-xs font-black text-slate-500 uppercase tracking-widest">Spatial Position</label>
-                      <input
-                        v-model="localForm.spatial_position"
-                        type="text"
-                        maxlength="255"
-                        placeholder="e.g. Under the couch cushions, inside the locked desk drawer"
-                        class="w-full bg-black/40 border border-white/5 rounded-xl px-4 py-2.5 text-sm text-slate-200 focus:border-emerald-500 outline-none transition-all shadow-inner"
-                      />
-                      <span class="block text-[10px] text-slate-500 leading-normal">
-                        Free-text location hint used by the GM when describing the room.
-                      </span>
-                    </div>
-
-                    <div class="space-y-2">
-                      <div class="flex justify-between items-center">
-                        <label class="block text-xs font-black text-slate-500 uppercase tracking-widest">Reveal Rule</label>
-                        <span class="text-[10px] font-mono text-slate-500 tracking-widest">{{ (localForm.reveal_rule || '').length }} / 500</span>
-                      </div>
-                      <ReferenceTextarea
-                        v-model="localForm.reveal_rule"
-                        :options="referenceOptions || []"
-                        :rows="2"
-                        :maxlength="500"
-                        placeholder="e.g. player inspects the couch, player opens the junk drawer"
-                        class-name="w-full bg-black/40 border border-white/5 rounded-xl px-4 py-2.5 text-sm text-slate-200 focus:border-emerald-500 outline-none transition-all resize-none shadow-inner"
-                      />
-                      <span class="block text-[10px] text-slate-500 leading-normal">
-                        Specific action or event that triggers this item to reveal in the room. Leave empty for default search reveal.
-                      </span>
-                    </div>
-                  </div>
-                </div>
-                <div v-else class="p-3 bg-violet-500/10 border border-violet-500/20 rounded-xl">
-                  <p class="text-xs text-violet-300 font-bold leading-relaxed">
-                    CONSTRUCTABLE items always start hidden and automatically materialize when all required combination ingredients are combined.
-                  </p>
-                </div>
-
-                <!-- WEAPON / WEARABLE: Wearable Slots -->
-                <div v-if="['WEAPON', 'WEARABLE'].includes(currentItemType)" class="space-y-2">
+</AuthoringFieldGroup>
+<AuthoringFieldGroup title="Item properties" icon="story" v-if="currentItemType !== 'DEFAULT'" initially-open>
+<div v-if="['WEAPON', 'WEARABLE'].includes(currentItemType)" class="space-y-2">
                   <label class="block text-xs font-black text-slate-500 uppercase tracking-widest">Wearable Slots</label>
                   <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
                     <label
@@ -1256,9 +1224,11 @@ const textLogPreviewClass = computed(() => {
                     </label>
                   </div>
                 </div>
-
-                <!-- CONSUMABLE: Effects -->
-                <div v-if="currentItemType === 'CONSUMABLE'" class="space-y-4">
+<ClothingItemFields v-if="currentItemType === 'WEARABLE'" :key="context.id"
+                  v-model="localForm.clothing" :adventure-id="adventureId" :name="localForm.name"
+                  :description="localForm.description" :slots="localForm.wearable_slots_input"
+                  :disabled="isSaving || itemDraftBusy" @busy="clothingBusy = $event" />
+<div v-if="currentItemType === 'CONSUMABLE'" class="space-y-4">
                   <label class="block text-xs font-black text-slate-500 uppercase tracking-widest">Stat Effects When Consumed</label>
                   <div class="grid grid-cols-3 gap-4">
                     <div class="space-y-2">
@@ -1294,9 +1264,7 @@ const textLogPreviewClass = computed(() => {
                   </div>
                   <p class="text-[10px] text-slate-500 uppercase tracking-wider">Positive values restore stats, negative values drain them.</p>
                 </div>
-
-                <!-- COMBINABLE / CONSTRUCTABLE: Ingredients -->
-                <div v-if="currentItemType === 'COMBINABLE' || currentItemType === 'CONSTRUCTABLE'" class="space-y-3">
+<div v-if="currentItemType === 'COMBINABLE' || currentItemType === 'CONSTRUCTABLE'" class="space-y-3">
                   <label class="block text-xs font-black text-slate-500 uppercase tracking-widest">
                     {{ currentItemType === 'CONSTRUCTABLE' ? 'Construction Ingredients' : 'Combination Ingredients' }}
                   </label>
@@ -1306,7 +1274,7 @@ const textLogPreviewClass = computed(() => {
                   </div>
                   <div class="space-y-2">
                     <div
-                      v-for="(ing, idx) in localForm.combination_ingredients_input"
+                      v-for="(_ing, idx) in localForm.combination_ingredients_input"
                       :key="idx"
                       class="flex items-center gap-2"
                     >
@@ -1338,9 +1306,7 @@ const textLogPreviewClass = computed(() => {
                       : 'Pick at least one item to combine. Saving with zero ingredients is allowed — leaves the combinable in a placeholder state.' }}
                   </p>
                 </div>
-
-                <!-- CONSTRUCTABLE Panels: Deterministic Guard & Transition Rules -->
-                <div v-if="currentItemType === 'CONSTRUCTABLE'" class="space-y-4 pt-2">
+<div v-if="currentItemType === 'CONSTRUCTABLE'" class="space-y-4 pt-2">
                   <!-- Collapsible Panel 1: Script Guard (Default Collapsed) -->
                   <div class="border border-white/10 rounded-xl overflow-hidden bg-black/30">
                     <button
@@ -1431,9 +1397,7 @@ const textLogPreviewClass = computed(() => {
                     </div>
                   </div>
                 </div>
-
-                <!-- COMBINABLE: spatial / hidden / reveal-rule / reveals-item -->
-                <div v-if="currentItemType === 'COMBINABLE'" class="space-y-5 pt-4 border-t border-violet-500/20">
+<div v-if="currentItemType === 'COMBINABLE'" class="space-y-5 pt-4 border-t border-violet-500/20">
                   <div class="space-y-2">
                     <div class="flex justify-between items-center">
                       <label class="block text-xs font-black text-slate-500 uppercase tracking-widest">Reveal Rule</label>
@@ -1511,9 +1475,7 @@ const textLogPreviewClass = computed(() => {
                     </p>
                   </div>
                 </div>
-
-                <!-- SWITCH: Visual Configurator -->
-                <div v-if="currentItemType === 'SWITCH'" class="space-y-6">
+<div v-if="currentItemType === 'SWITCH'" class="space-y-6">
                   <!-- Section Header -->
                   <div class="flex items-center gap-2 pb-2 border-b border-white/5">
                     <ToggleLeft class="w-4 h-4 text-lime-400" />
@@ -1526,10 +1488,10 @@ const textLogPreviewClass = computed(() => {
                       <label class="block text-xs font-black text-slate-400 uppercase tracking-widest">Switch States</label>
                       <span class="text-[10px] text-slate-500 font-bold uppercase tracking-wider">At least 2 required</span>
                     </div>
-                    
+
                     <div class="space-y-2">
                       <div
-                        v-for="(state, idx) in switchStates"
+                        v-for="(_state, idx) in switchStates"
                         :key="idx"
                         class="flex items-center gap-2"
                       >
@@ -1549,7 +1511,7 @@ const textLogPreviewClass = computed(() => {
                           <Trash2 class="w-4 h-4" />
                         </button>
                       </div>
-                      
+
                       <button
                         type="button"
                         @click="addState"
@@ -1604,7 +1566,7 @@ const textLogPreviewClass = computed(() => {
                         <!-- Route & Badges -->
                         <div class="flex flex-wrap items-center gap-2 min-w-0">
                           <span class="text-[10px] font-mono font-bold text-slate-500">#{{ idx + 1 }}</span>
-                          
+
                           <div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-900 border border-white/10 text-xs font-mono font-bold text-white">
                             <span :class="t.from ? 'text-amber-300' : 'text-slate-400'">{{ t.from || 'ANY' }}</span>
                             <span class="text-lime-400">→</span>
@@ -1856,9 +1818,7 @@ const textLogPreviewClass = computed(() => {
                     </div>
                   </div>
                 </div>
-
-                <!-- CONTAINER -->
-                <div v-if="currentItemType === 'CONTAINER'" class="p-3 bg-black/20 border border-white/10 rounded-xl">
+<div v-if="currentItemType === 'CONTAINER'" class="p-3 bg-black/20 border border-white/10 rounded-xl">
                   <div class="flex items-center justify-between">
                     <div class="space-y-1 pr-4">
                       <p class="text-xs font-black text-slate-200 uppercase tracking-widest">Locked State</p>
@@ -1873,8 +1833,7 @@ const textLogPreviewClass = computed(() => {
                     </button>
                   </div>
                 </div>
-
-                <div v-if="currentItemType === 'CONTAINER'" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+<div v-if="currentItemType === 'CONTAINER'" class="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div class="space-y-2">
                     <label class="block text-xs font-black text-slate-500 uppercase tracking-widest">Code To Unlock</label>
                     <input
@@ -1894,12 +1853,11 @@ const textLogPreviewClass = computed(() => {
                     />
                   </div>
                 </div>
-
-                <div v-if="currentItemType === 'CONTAINER'" class="space-y-3">
+<div v-if="currentItemType === 'CONTAINER'" class="space-y-3">
                   <label class="block text-xs font-black text-slate-500 uppercase tracking-widest">Contained Items</label>
                   <div class="space-y-2">
                     <div
-                      v-for="(item, idx) in localForm.inventory_input"
+                      v-for="(_item, idx) in localForm.inventory_input"
                       :key="idx"
                       class="flex items-center gap-2"
                     >
@@ -1927,9 +1885,7 @@ const textLogPreviewClass = computed(() => {
                   </div>
                   <p class="text-[10px] text-slate-500 uppercase tracking-wider">Select items contained inside this container.</p>
                 </div>
-
-                <!-- CONTAINER Panels: Deterministic Guard & Unlocking Transition Rules -->
-                <div v-if="currentItemType === 'CONTAINER'" class="space-y-4 pt-2">
+<div v-if="currentItemType === 'CONTAINER'" class="space-y-4 pt-2">
                   <!-- Collapsible Panel 1: Deterministic Guard (Default Collapsed) -->
                   <div class="border border-white/10 rounded-xl overflow-hidden bg-black/30">
                     <button
@@ -2020,9 +1976,7 @@ const textLogPreviewClass = computed(() => {
                     </div>
                   </div>
                 </div>
-
-                <!-- READABLE -->
-                <div v-if="currentItemType === 'READABLE'" class="space-y-2">
+<div v-if="currentItemType === 'READABLE'" class="space-y-2">
                   <div class="space-y-2">
                     <label class="block text-xs font-black text-slate-500 uppercase tracking-widest">Text Log Format</label>
                     <select v-model="localForm.text_log_format" class="w-full bg-black/40 border border-white/5 rounded-xl px-4 py-2 text-white font-bold focus:border-cyan-500/50 outline-none transition-all">
@@ -2056,44 +2010,65 @@ const textLogPreviewClass = computed(() => {
                     <span>Quick-Gen Text Log</span>
                   </button>
                 </div>
-              </div>
+</AuthoringFieldGroup>
+<AuthoringFieldGroup title="Placement & discovery" icon="visibility" >
+<div v-if="currentItemType !== 'CONSTRUCTABLE'" class="space-y-4 border-t border-white/5 pt-4">
+                  <div class="flex items-center justify-between">
+                    <div class="space-y-1 pr-4">
+                      <p class="text-xs font-black text-slate-200 uppercase tracking-widest">Start Hidden</p>
+                      <p class="text-[10px] text-slate-500 uppercase tracking-tighter">When enabled, the player must explicitly search the scene or fulfill a condition before discovering this item.</p>
+                    </div>
+                    <button
+                      type="button"
+                      @click="localForm.is_hidden = !localForm.is_hidden"
+                      :class="['w-14 h-8 rounded-full transition-all relative flex items-center px-1', localForm.is_hidden ? 'bg-emerald-600' : 'bg-slate-700']"
+                    >
+                      <div :class="['w-6 h-6 bg-white rounded-full shadow-lg transition-transform duration-300', localForm.is_hidden ? 'translate-x-6' : 'translate-x-0']"></div>
+                    </button>
+                  </div>
 
-              <div class="space-y-3">
-                <div class="flex justify-between items-center">
-                  <label class="block text-xs font-black text-slate-500 uppercase tracking-widest">Description / Biography <span class="text-red-400">*</span></label>
-                  <span :class="['text-xs font-bold tracking-widest', (localForm.description || '').length > 1000 ? 'text-red-500' : 'text-emerald-500/50']">
-                    {{ (localForm.description || '').length }} / 1000
-                  </span>
+                  <div v-if="localForm.is_hidden" class="space-y-3 pt-2">
+                    <div class="space-y-2">
+                      <label class="block text-xs font-black text-slate-500 uppercase tracking-widest">Spatial Position</label>
+                      <input
+                        v-model="localForm.spatial_position"
+                        type="text"
+                        maxlength="255"
+                        placeholder="e.g. Under the couch cushions, inside the locked desk drawer"
+                        class="w-full bg-black/40 border border-white/5 rounded-xl px-4 py-2.5 text-sm text-slate-200 focus:border-emerald-500 outline-none transition-all shadow-inner"
+                      />
+                      <span class="block text-[10px] text-slate-500 leading-normal">
+                        Free-text location hint used by the GM when describing the room.
+                      </span>
+                    </div>
+
+                    <div class="space-y-2">
+                      <div class="flex justify-between items-center">
+                        <label class="block text-xs font-black text-slate-500 uppercase tracking-widest">Reveal Rule</label>
+                        <span class="text-[10px] font-mono text-slate-500 tracking-widest">{{ (localForm.reveal_rule || '').length }} / 500</span>
+                      </div>
+                      <ReferenceTextarea
+                        v-model="localForm.reveal_rule"
+                        :options="referenceOptions || []"
+                        :rows="2"
+                        :maxlength="500"
+                        placeholder="e.g. player inspects the couch, player opens the junk drawer"
+                        class-name="w-full bg-black/40 border border-white/5 rounded-xl px-4 py-2.5 text-sm text-slate-200 focus:border-emerald-500 outline-none transition-all resize-none shadow-inner"
+                      />
+                      <span class="block text-[10px] text-slate-500 leading-normal">
+                        Specific action or event that triggers this item to reveal in the room. Leave empty for default search reveal.
+                      </span>
+                    </div>
+                  </div>
                 </div>
-                <ReferenceTextarea
-                  v-model="localForm.description"
-                  :maxlength="1000"
-                  :rows="context.type === 'object' ? 3 : 4"
-                  :options="props.referenceOptions || []"
-                  :class-name="['w-full bg-black/40 border border-white/5 rounded-2xl px-4 py-3 text-slate-300 resize-none focus:border-emerald-500 outline-none transition-all leading-relaxed shadow-inner', context.type === 'object' ? 'text-sm' : 'text-base'].join(' ')"
-                />
-                <button 
-                  v-if="['npc', 'protagonist'].includes(context.type) && localForm.name && localForm.goal && localForm.character"
-                  type="button"
-                  @click="handleGenerateBiography" 
-                  :disabled="isGenerating['biography']"
-                  class="w-full py-2 bg-emerald-500/5 border border-emerald-500/10 hover:bg-emerald-500/10 hover:border-emerald-500/30 rounded-xl text-[10px] font-black text-emerald-500 uppercase tracking-widest flex items-center justify-center gap-2 transition-all disabled:opacity-50 mt-2"
-                >
-                  <i class="ra ra-crystals" :class="{ 'animate-spin': isGenerating['biography'] }"></i>
-                  <span>Quick-Gen Biography</span>
-                </button>
-                <button 
-                  v-if="context.type === 'object' && localForm.name"
-                  type="button"
-                  @click="handleGenerateDescription" 
-                  :disabled="isGenerating['description']"
-                  class="w-full py-2 bg-emerald-500/5 border border-emerald-500/10 hover:bg-emerald-500/10 hover:border-emerald-500/30 rounded-xl text-[10px] font-black text-emerald-500 uppercase tracking-widest flex items-center justify-center gap-2 transition-all disabled:opacity-50 mt-2"
-                >
-                  <i class="ra ra-crystals" :class="{ 'animate-spin': isGenerating['description'] }"></i>
-                  <span>Quick-Gen Description</span>
-                </button>
-              </div>
-            </div> <!-- End simple tab -->
+<div v-else class="p-3 bg-violet-500/10 border border-violet-500/20 rounded-xl">
+                  <p class="text-xs text-violet-300 font-bold leading-relaxed">
+                    CONSTRUCTABLE items always start hidden and automatically materialize when all required combination ingredients are combined.
+                  </p>
+                </div>
+</AuthoringFieldGroup>
+</div>
+</div> <!-- End simple tab -->
 
             <div v-show="activeTab === 'advanced'" class="space-y-6">
               <div class="space-y-2">
@@ -2378,12 +2353,20 @@ const textLogPreviewClass = computed(() => {
 
             </div>
           </div>
-          <div class="px-8 py-5 border-t border-white/5 flex justify-end gap-4 bg-slate-900/55 rounded-b-[2.5rem]">
+          <div class="px-8 py-5 border-t border-white/5 bg-slate-900/55 rounded-b-[2.5rem]">
+            <div v-if="validationErrors.length" id="entity-validation-errors" role="status" class="mb-4 text-sm text-amber-200">
+              <p class="font-bold">Cannot save yet. Check these fields in Details / Rules &amp; scripts:</p>
+              <ul class="mt-1 max-h-28 overflow-y-auto list-disc pl-5">
+                <li v-for="error in validationErrors" :key="error">{{ error }}</li>
+              </ul>
+            </div>
+            <div class="flex justify-end gap-4">
             <button @click="emit('close')" class="px-6 py-2.5 text-slate-400 hover:text-white font-black uppercase text-xs tracking-widest transition-colors">Discard</button>
-            <button @click="handleSave" :disabled="isSaving || isFormInvalid" class="px-8 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black uppercase text-xs tracking-widest rounded-xl shadow-lg shadow-emerald-900/20 disabled:opacity-50 flex items-center gap-3">
+            <button @click="handleSave" :disabled="isSaving || itemDraftBusy || clothingBusy || isFormInvalid" :aria-describedby="isFormInvalid ? 'entity-validation-errors' : undefined" class="px-8 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black uppercase text-xs tracking-widest rounded-xl shadow-lg shadow-emerald-900/20 disabled:opacity-50 flex items-center gap-3">
               <i v-if="isSaving" class="ra ra-cycle animate-spin"></i>
               <span>{{ isSaving ? 'Saving...' : (isCreateEntityMode ? ('Create ' + (context.type === 'npc' ? 'NPC' : context.type.toUpperCase())) : 'Apply Changes') }}</span>
             </button>
+            </div>
           </div>
         </div>
       </div>

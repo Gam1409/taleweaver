@@ -5,8 +5,9 @@ STATUS_MODIFIERS = {
     "Weakened": {"strength": -2},
     "Poisoned": {"constitution": -1, "strength": -1},
     "Enraged": {"strength": +3, "intelligence": -2},
-    "Blessed": {"intelligence": +2, "dexterity": +1}
+    "Blessed": {"intelligence": +2, "dexterity": +1},
 }
+
 
 def calculate_total_stats(avatar: Avatar) -> dict:
     """
@@ -20,19 +21,25 @@ def calculate_total_stats(avatar: Avatar) -> dict:
         "intelligence": avatar.intelligence,
         "wisdom": avatar.wisdom,
         "charisma": avatar.charisma,
-        "armor_class": avatar.armor_class
+        "armor_class": avatar.armor_class,
     }
 
     # If avatar.stats contains additional/override values, apply them
     if avatar.stats:
         # Standardize core stat names to ensure they overwrite the baseline columns
         norm_map = {
-            "str": "strength", "strength": "strength",
-            "dex": "dexterity", "dexterity": "dexterity",
-            "int": "intelligence", "intelligence": "intelligence",
-            "wis": "wisdom", "wisdom": "wisdom",
-            "cha": "charisma", "charisma": "charisma",
-            "ac": "armor_class", "armor_class": "armor_class"
+            "str": "strength",
+            "strength": "strength",
+            "dex": "dexterity",
+            "dexterity": "dexterity",
+            "int": "intelligence",
+            "intelligence": "intelligence",
+            "wis": "wisdom",
+            "wisdom": "wisdom",
+            "cha": "charisma",
+            "charisma": "charisma",
+            "ac": "armor_class",
+            "armor_class": "armor_class",
         }
         for k, v in avatar.stats.items():
             low_k = k.lower()
@@ -41,23 +48,8 @@ def calculate_total_stats(avatar: Avatar) -> dict:
             else:
                 total_stats[k] = v
 
-    # 1. Add Equipment modifiers
-    equipment = avatar.equipment or {}
-    for slot, item in equipment.items():
-        if not item or not isinstance(item, dict):
-            continue
-            
-        # Handle legacy 'stat_modifiers' dict
-        if "stat_modifiers" in item:
-            for stat, value in item["stat_modifiers"].items():
-                total_stats[stat] = total_stats.get(stat, 0) + value
-        
-        # Handle flat fields (stat_modifier_strength, etc.)
-        for stat_key in total_stats.keys():
-            mod_key = f"stat_modifier_{stat_key}"
-            if mod_key in item and item[mod_key] is not None:
-                total_stats[stat_key] += item[mod_key]
-                
+    _add_equipment_modifiers(total_stats, avatar.equipment or {})
+
     # 2. Add Status Effect modifiers
     status_effects = avatar.status_effects or []
     for status in status_effects:
@@ -67,3 +59,20 @@ def calculate_total_stats(avatar: Avatar) -> dict:
 
     return total_stats
 
+
+def _add_equipment_modifiers(total_stats: dict, equipment: dict) -> None:
+    """Apply legacy modifier dictionaries before flat equipment fields."""
+    for item in equipment.values():
+        if not item or not isinstance(item, dict):
+            continue
+
+        # Handle legacy 'stat_modifiers' dict
+        if "stat_modifiers" in item:
+            for stat, value in item["stat_modifiers"].items():
+                total_stats[stat] = total_stats.get(stat, 0) + value
+
+        # Handle flat fields (stat_modifier_strength, etc.)
+        for stat_key in total_stats:
+            mod_key = f"stat_modifier_{stat_key}"
+            if mod_key in item and item[mod_key] is not None:
+                total_stats[stat_key] += item[mod_key]

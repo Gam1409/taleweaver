@@ -8,6 +8,9 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
+from backend.core.custom_openai_roles import ROLE_DEFAULTS as CUSTOM_OPENAI_ROLE_DEFAULTS
+from backend.core.llm_parallel import ParallelSettings
+from backend.core.llm_sampling import SamplingSettings
 from backend.core.ollama_role_config import OLLAMA_ROLE_DEFAULTS, preserve_explicit_ollama_models
 from backend.core.tts_voices import GOOGLE_TTS_VOICE_CATALOG, GOOGLE_TTS_VOICE_LIST
 
@@ -32,6 +35,7 @@ PLAY_AGENT_PERSONALITIES = ("casual", "bureaucrat", "powerplayer", "custom")
 _LEGACY_PERSONALITIES = {"bürokrat": "bureaucrat", "buerokrat": "bureaucrat"}
 
 _LLM_ENDPOINT_DEFAULTS: dict[str, Any] = {
+    **CUSTOM_OPENAI_ROLE_DEFAULTS,
     **OLLAMA_ROLE_DEFAULTS,
     "ollama_api_mode": "generate",
     "custom_openai_url": "",
@@ -219,9 +223,19 @@ def _apply_openrouter_models(normalized: dict[str, Any], prefixes: tuple[str, ..
 def normalize_llm_settings(llm_settings: Optional[dict]) -> dict:
     """Return LLM settings with separate providers, tokens and thinking modes."""
     if not llm_settings:
-        return dict(_LLM_FALLBACK)
+        return {
+            **_LLM_FALLBACK,
+            "sampling": SamplingSettings().model_dump(),
+            "parallel_requests": ParallelSettings().model_dump(),
+        }
 
     normalized = {**_LLM_ENDPOINT_DEFAULTS, **llm_settings}
+    normalized["parallel_requests"] = ParallelSettings.model_validate(
+        normalized.get("parallel_requests") or {}
+    ).model_dump()
+    normalized["sampling"] = SamplingSettings.model_validate(
+        normalized.get("sampling") or {}
+    ).model_dump()
     _apply_derived_defaults(normalized, _LLM_DERIVED_DEFAULTS)
     _apply_model_fallbacks(normalized)
     _apply_play_agent_options(normalized)
@@ -317,6 +331,7 @@ _T2I_FALLBACK: dict[str, Any] = {
     "simple_min_long_edge": None,
     "advanced_min_long_edge": None,
     "seed": None,
+    "show_generation_progress": False,
     "image_format": "jpeg",
     "image_quality": 85,
     "negative_prompt": None,
@@ -334,6 +349,7 @@ _T2I_DERIVED_DEFAULTS: tuple[tuple[str, tuple[str, ...], Any], ...] = (
 
 # Keys filled with their fallback value when missing from stored settings.
 _T2I_STATIC_DEFAULT_KEYS = (
+    "show_generation_progress",
     "comfyui_url",
     "comfyui_timeout",
     "comfyui_profiles",
@@ -359,14 +375,14 @@ _T2I_STATIC_DEFAULT_KEYS = (
 
 def normalize_t2i_settings(t2i_settings: Optional[dict]) -> dict:
     """Return T2I settings with separate providers."""
+    from backend.core.comfyui_presets import normalize_comfy_presets
+
     if not t2i_settings:
-        return dict(_T2I_FALLBACK)
+        return normalize_comfy_presets(dict(_T2I_FALLBACK))
 
     normalized = dict(t2i_settings)
     _apply_derived_defaults(normalized, _T2I_DERIVED_DEFAULTS)
     for key in _T2I_STATIC_DEFAULT_KEYS:
         normalized.setdefault(key, _T2I_FALLBACK[key])
     _apply_openrouter_models(normalized, ("simple", "advanced"))
-    from backend.core.comfyui_presets import normalize_comfy_presets
-
     return normalize_comfy_presets(normalized)

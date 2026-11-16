@@ -1,0 +1,448 @@
+import { test } from 'node:test'
+import assert from 'node:assert/strict'
+import { corrections } from './correctionModule.mjs'
+import { initial, action, snapshot, saved, frame, tick, deferred, fixture, stream, completed } from './sessionHarness.mjs'
+
+test('reload restores retry and the unfinished draft without repeating the action', async t => {
+  const f = await fixture(t)
+  const pending = { action, message: 'The previous turn did not finish.', user_message_id: 'user-1', draft: 'Unfinished visible answer' }
+  f.route(async (_url, options) => options.method === 'POST' ? completed() : new Response(JSON.stringify({ ...snapshot([...initial, { id: 'user-1', role: 'user', content: action }]), pending_turn: pending })))
+  await f.game.connect('session-a')
+  assert.equal(f.game.turnError.value.action, action)
+  assert.equal(f.game.turnError.value.draft, pending.draft)
+  assert.equal(f.requests.filter(r => r.options.method === 'POST').length, 0)
+  f.route(async (_url, options) => options.method === 'POST' ? completed() : new Response(JSON.stringify({ ...saved(), pending_turn: null })))
+  await f.game.retryLastAction()
+  assert.equal(f.game.turnError.value, null)
+  assert.equal(f.game.messages.value.filter(message => message.role === 'user').length, 1)
+  const sent = f.requests.filter(r => r.options.method === 'POST')
+  assert.equal(sent.length, 1)
+  assert.equal(JSON.parse(sent[0].options.body).content, action)
+})
+
+test('cancel dismisses the pending action for this visit instead of resurrecting it on polling', async t => {
+  const f = await fixture(t)
+  f.route(async () => new Response(JSON.stringify({ ...snapshot(), pending_turn: { action, message: 'Interrupted' } })))
+  await f.game.refreshSession()
+  assert.ok(f.game.turnError.value)
+  f.game.cancelTurnError()
+  await f.game.refreshSession()
+  assert.equal(f.game.turnError.value, null)
+})
+
+test('an error after commit recovers the saved answer and does not offer a duplicate retry', async t => {
+  const f = await fixture(t)
+  f.route(async (_url, options) => options.method === 'POST'
+    ? new Response(frame('chunk', { content: 'A complete answer.' }) + frame('error', { detail: 'Late transport failure', committed_assistant_id: 'reply-1' }))
+    : new Response(JSON.stringify(saved())))
+  await f.game.sendMessage(action)
+  assert.equal(f.game.turnError.value, null)
+  assert.ok(f.game.messages.value.some(message => message.id === 'reply-1'))
+  assert.equal(f.requests.filter(r => r.options.method === 'POST').length, 1)
+})
+
+test('a committed response receipt prevents duplicate retries when history reload fails', async t => {
+  const f = await fixture(t)
+  f.route(async (_url, options) => options.method === 'POST'
+    ? new Response(frame('chunk', { content: 'Visible answer' }) + frame('error', { detail: 'Late failure', committed_assistant_id: 'reply-1' }))
+    : new Response('{}', { status: 503 }))
+  await f.game.sendMessage(action)
+  assert.equal(f.game.turnError.value, null)
+  assert.ok(f.game.messages.value.some(message => message.content === 'Visible answer'))
+  assert.ok(f.game.messages.value.some(message => message.content.includes('The answer was saved')))
+  await f.game.retryLastAction()
+  assert.equal(f.requests.filter(r => r.options.method === 'POST').length, 1)
+})
+
+test('initial load failures expose a separate retryable error and successful retry clears it', async t => {
+  const f = await fixture(t)
+  f.route(async () => new Response('{}', { status: 503 }))
+  await f.game.connect('session-b')
+  assert.equal(f.game.status.value, 'error')
+  assert.ok(f.game.sessionLoadError.value)
+  assert.equal(f.game.turnError.value, null)
+  f.route(async () => new Response(JSON.stringify(snapshot())))
+  await f.game.connect('session-b')
+  assert.equal(f.game.status.value, 'connected')
+  assert.equal(f.game.sessionLoadError.value, null)
+})
+
+test('initial snapshot deadline covers a response body that never completes', async t => {
+  const f = await fixture(t)
+  t.mock.timers.enable({ apis: ['setTimeout'] })
+  let signal
+  f.route(async (_url, options) => {
+    signal = options.signal
+    return stream(signal).response
+  })
+  const loading = f.game.connect('slow-session')
+  await tick()
+  t.mock.timers.tick(15_001)
+  await tick()
+  assert.ok(signal?.aborted)
+  await loading
+  assert.match(f.game.sessionLoadError.value, /timed out/i)
+})
+
+test('navigation cancels the old initial load and an ignored late response cannot replace the new session', async t => {
+  const f = await fixture(t)
+  const gate = deferred()
+  let oldSignal
+  f.route(async (url, options) => {
+    if (url.includes('/old-session/')) {
+      oldSignal = options.signal
+      return gate.promise
+    }
+    return new Response(JSON.stringify(snapshot([{ id: 'new-message', role: 'assistant', content: 'New session' }])))
+  })
+  const oldLoad = f.game.connect('old-session')
+  await tick()
+  await f.game.connect('new-session')
+  assert.ok(oldSignal.aborted)
+  await oldLoad
+  gate.resolve(new Response(JSON.stringify(snapshot())))
+  await tick()
+  assert.equal(f.game.messages.value[0].id, 'new-message')
+  assert.equal(f.game.sessionLoadError.value, null)
+  assert.equal(f.game.status.value, 'connected')
+})
+
+test('normal turns and full replay carry correction outside the player message', async t => {
+  for (const replay of [false, true]) {
+    const f = await fixture(t)
+    corrections.queueCorrection('session-a', 'Sounds', 'Reduce vocal repetition.')
+    f.route(async (_url, options) => {
+      if (options.method !== 'POST') return new Response(JSON.stringify(saved()))
+      const payload = JSON.parse(options.body)
+      assert.equal(payload.content, action)
+      assert.equal(payload.narration_correction, 'Reduce vocal repetition.')
+      assert.equal(payload.replay_message_id, replay ? 'opening' : undefined)
+      return completed({ narration_correction_applied: true })
+    })
+    await f.game.sendMessage(action, replay, replay ? 'opening' : undefined)
+    assert.equal(corrections.getCorrection('session-a'), null)
+    assert.ok(f.game.messages.value.every(m => !m.content.includes('Reduce vocal repetition.')))
+    f.game.disconnect()
+  }
+})
+
+test('incomplete replies and non-narrative commands retain queued correction', async t => {
+  for (const final of [{ narration_incomplete: true, narration_correction_applied: false }, {}]) {
+    const f = await fixture(t)
+    corrections.queueCorrection('session-a', 'Sounds', 'Reduce vocal repetition.')
+    f.route(async (_url, options) => options.method === 'POST' ? completed(final) : new Response(JSON.stringify(saved())))
+    await f.game.sendMessage(action)
+    assert.equal(corrections.getCorrection('session-a').text, 'Reduce vocal repetition.')
+    f.game.disconnect()
+  }
+})
+
+test('input stays busy through history reload and second send cannot abort first', async t => {
+  const f = await fixture(t), reload = deferred()
+  let signal
+  f.route(async (_url, options) => {
+    if (options.method === 'POST') { signal = options.signal; return completed() }
+    return reload.promise
+  })
+  const pending = f.game.sendMessage(action)
+  await tick()
+  assert.equal(f.game.status.value, 'connecting')
+  await f.game.sendMessage('Second action')
+  assert.equal(f.requests.filter(r => r.options.method === 'POST').length, 1)
+  assert.equal(signal.aborted, false)
+  reload.resolve(new Response(JSON.stringify(saved())))
+  await pending
+  assert.equal(f.game.status.value, 'connected')
+  assert.ok(f.game.messages.value.some(m => m.id === 'user-1'))
+})
+
+test('old request reload and finally cannot replace a newly opened session', async t => {
+  const f = await fixture(t), oldReload = deferred()
+  f.route(async (url, options) => options.method === 'POST' ? completed() : url.includes('session-b') ? new Response(JSON.stringify(snapshot([{ id: 'new-opening', role: 'assistant', content: 'New story' }]))) : oldReload.promise)
+  const pending = f.game.sendMessage(action)
+  await tick()
+  await f.game.connect('session-b')
+  oldReload.resolve(new Response(JSON.stringify(saved())))
+  await pending
+  assert.deepEqual(f.game.messages.value.map(m => m.content), ['New story'])
+  assert.equal(f.game.status.value, 'connected')
+})
+
+test('healthy stream survives 90 seconds and heartbeats reset idle timeout', async t => {
+  const f = await fixture(t)
+  t.mock.timers.enable({ apis: ['setTimeout'] })
+  let live, signal
+  f.route(async (_url, options) => {
+    if (!options.method) return new Response(JSON.stringify(saved()))
+    signal = options.signal; live = stream(signal); return live.response
+  })
+  const pending = f.game.sendMessage(action)
+  await tick()
+  t.mock.timers.tick(100_000)
+  assert.equal(signal.aborted, false)
+  live.send(': keepalive\n\n')
+  await tick()
+  t.mock.timers.tick(100_000)
+  assert.equal(signal.aborted, false)
+  live.send(frame('final', {})); live.end()
+  await pending
+  assert.equal(f.game.turnError.value, null)
+})
+
+test('idle timeout preserves action and gives visible retry feedback', async t => {
+  const f = await fixture(t)
+  t.mock.timers.enable({ apis: ['setTimeout'] })
+  f.route(async (_url, options) => options.method === 'POST' ? stream(options.signal).response : new Response(JSON.stringify(snapshot())))
+  const pending = f.game.sendMessage(action)
+  await tick(); t.mock.timers.tick(180_000); await pending
+  assert.equal(f.game.turnError.value.action, action)
+  assert.match(f.game.turnError.value.message, /inactive/)
+  assert.ok(f.game.messages.value.some(m => m.role === 'user' && m.content === action))
+  assert.equal(f.game.status.value, 'connected')
+})
+
+test('EOF feedback hides technical identifiers while keeping internal diagnostics', async t => {
+  const f = await fixture(t)
+  f.route(async (_url, options) => options.method === 'POST' ? new Response(frame('chunk', { content: 'Unfinished sentence' }), { headers: { 'x-taleweaver-turn-id': 'turn-test' } }) : new Response(JSON.stringify(snapshot())))
+  await f.game.sendMessage(action)
+  assert.equal(f.game.turnError.value.action, action)
+  assert.match(f.game.turnError.value.message, /incomplete/)
+  assert.doesNotMatch(f.game.turnError.value.message, /turn-test|Turn-ID/)
+  assert.ok(f.game.debugLogs.value.some(entry => entry.content.includes('turn-test')))
+  assert.ok(f.notifications.every(([message]) => !message.includes('turn-test')))
+  assert.ok(f.game.messages.value.every(message => !message.content.includes('turn-test')))
+  assert.ok(f.game.messages.value.some(m => m.content === 'Unfinished sentence'))
+})
+
+test('HTTP conflict preserves unsent action with server reason', async t => {
+  const f = await fixture(t)
+  f.route(async () => new Response(JSON.stringify({ detail: 'Session is busy' }), { status: 409 }))
+  await f.game.sendMessage(action)
+  assert.deepEqual(f.game.turnError.value, { message: 'Session is busy', action })
+  assert.ok(f.game.messages.value.some(m => m.role === 'user' && m.content === action))
+})
+
+test('final snapshot missing the newly sent action cannot erase it', async t => {
+  const f = await fixture(t)
+  f.route(async (_url, options) => options.method === 'POST' ? completed() : new Response(JSON.stringify(snapshot())))
+  await f.game.sendMessage(action)
+  assert.equal(f.game.turnError.value.action, action)
+  assert.ok(f.game.messages.value.some(m => m.role === 'user' && m.content === action))
+})
+
+test('committed incomplete narration warns without duplicate-action retry', async t => {
+  const f = await fixture(t)
+  f.route(async (_url, options) => options.method === 'POST' ? completed({ narration_incomplete: true, narration_warning: 'Model output limit reached; the turn was saved.' }) : new Response(JSON.stringify(saved())))
+  await f.game.sendMessage(action)
+  assert.equal(f.game.turnError.value, null)
+  assert.ok(f.notifications.some(([text]) => /output limit/.test(text)))
+  assert.ok(f.game.messages.value.some(m => /output limit/.test(m.content)))
+})
+
+test('earlier poll cannot overwrite a newer active turn', async t => {
+  const f = await fixture(t), reload = deferred()
+  let live
+  f.route(async (_url, options) => {
+    if (options.method === 'POST') { live = stream(options.signal); return live.response }
+    return reload.promise
+  })
+  const refreshing = f.game.refreshSession(), pending = f.game.sendMessage(action)
+  await tick()
+  reload.resolve(new Response(JSON.stringify({ ...snapshot(), sheet: { name: 'STALE' } })))
+  await refreshing
+  assert.equal(f.game.sheet.value, null)
+  assert.equal(f.game.status.value, 'connecting')
+  f.route(async () => new Response(JSON.stringify(snapshot())))
+  live.end(); await pending
+})
+
+
+test('lost final event recovers committed turn instead of offering duplicate-action retry', async t => {
+  const f = await fixture(t)
+  f.route(async (_url, options) => options.method === 'POST' ? new Response(frame('chunk', { content: 'Part of the answer' })) : new Response(JSON.stringify(saved())))
+  await f.game.sendMessage(action)
+  assert.equal(f.game.turnError.value, null)
+  assert.ok(f.game.messages.value.some(m => m.id === 'reply-1' && m.content === 'A complete answer.'))
+  assert.ok(f.notifications.some(([text]) => /saved turn was recovered/.test(text)))
+})
+
+
+for (const command of ['/playagent off', '/debug inventory']) {
+  test(`successful ${command} does not require a persisted user receipt`, async t => {
+    const f = await fixture(t)
+    f.route(async (_url, options) => options.method === 'POST' ? new Response(frame('final', {})) : new Response(JSON.stringify(snapshot())))
+    await f.game.sendMessage(command)
+    assert.equal(f.game.turnError.value, null)
+    assert.equal(f.game.status.value, 'connected')
+  })
+}
+
+
+test('system debug visibility follows snapshots independently of gameplay debug', async t => {
+  const f = await fixture(t)
+  assert.equal(f.game.systemDebugEnabled.value, false)
+  f.route(async () => new Response(JSON.stringify({ ...snapshot(), system_debug_enabled: true, sheet: { debug_mode: false } })))
+  await f.game.refreshSession()
+  assert.equal(f.game.systemDebugEnabled.value, true)
+  f.route(async () => new Response(JSON.stringify({ ...snapshot(), system_debug_enabled: false, sheet: { debug_mode: true } })))
+  await f.game.refreshSession()
+  assert.equal(f.game.systemDebugEnabled.value, false)
+  f.route(async () => new Response(JSON.stringify({ ...snapshot(), system_debug_enabled: true })))
+  await f.game.refreshSession()
+  f.game.disconnect()
+  assert.equal(f.game.systemDebugEnabled.value, false)
+})
+
+test('full replay uses the normal stream and replaces the old exchange without duplicating the player message', async t => {
+  const f = await fixture(t)
+  f.game.messages.value = saved().messages
+  const replacement = snapshot([...initial, { id: 'user-2', role: 'user', content: action }, { id: 'reply-2', role: 'assistant', content: 'New outcome.' }])
+  f.route(async (_url, options) => {
+    if (options.method === 'POST') {
+      assert.equal(JSON.parse(options.body).replay_message_id, 'reply-1')
+      return new Response(frame('replay_history', { messages: initial, content: action }) + frame('chunk', { content: 'New outcome.' }) + frame('final', {}))
+    }
+    return new Response(JSON.stringify(replacement))
+  })
+  await f.game.sendMessage(action, true, 'reply-1')
+  assert.equal(f.game.messages.value.filter(m => m.role === 'user').length, 1)
+  assert.equal(f.game.messages.value.at(-1).id, 'reply-2')
+  assert.equal(f.game.turnError.value, null)
+})
+
+test('failed full replay reloads the restored original and does not offer to repeat it as a fresh action', async t => {
+  const f = await fixture(t)
+  f.game.messages.value = saved().messages
+  f.route(async (_url, options) => options.method === 'POST'
+    ? new Response(frame('replay_history', { messages: initial, content: action }) + frame('chunk', { content: 'Unfinished' }) + frame('replay_history', { messages: saved().messages }) + frame('error', { detail: 'The previous turn was restored.' }))
+    : new Response(JSON.stringify(saved())))
+  await f.game.sendMessage(action, true, 'reply-1')
+  assert.equal(f.game.messages.value.at(-1).id, 'reply-1')
+  assert.equal(f.game.turnError.value, null)
+})
+
+
+test('interrupted full replay never offers a fresh-action retry', async t => {
+  const f = await fixture(t)
+  f.game.messages.value = saved().messages
+  f.route(async (_url, options) => options.method === 'POST'
+    ? new Response(frame('replay_history', { messages: initial, content: action }) + frame('chunk', { content: 'Unfinished' }))
+    : new Response(JSON.stringify(saved())))
+  await f.game.sendMessage(action, true, 'reply-1')
+  assert.equal(f.game.messages.value.at(-1).id, 'reply-1')
+  assert.equal(f.game.turnError.value, null)
+})
+
+for (const manual of [false, true]) {
+  test(`failed attempts keep one player message and one retry banner (manual=${manual})`, async t => {
+    const f = await fixture(t)
+    f.route(async () => new Response(frame('error', { detail: 'Please try again.' })))
+    await f.game.sendMessage(action)
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if (manual) await f.game.sendMessage(action)
+      else await f.game.retryLastAction()
+    }
+    assert.deepEqual(f.game.messages.value.map(m => m.content), ['Opening', action])
+    assert.equal(f.game.turnError.value.message, 'Please try again.')
+    assert.equal(f.requests.filter(r => r.options.method === 'POST').length, 4)
+  })
+}
+
+test('retry removes only failed local output while retaining persisted messages', async t => {
+  const f = await fixture(t)
+  let attempt = 0
+  f.route(async (_url, options) => {
+    if (options.method !== 'POST') return new Response(JSON.stringify(saved()))
+    if (attempt++ === 0) return new Response(
+      frame('system', { id: 'saved-note', content: 'Saved note' }) +
+      frame('chunk', { content: 'Unfinished failed answer' }) +
+      frame('error', { detail: 'Please try again.' })
+    )
+    assert.ok(f.game.messages.value.some(m => m.id === 'saved-note'))
+    assert.ok(!f.game.messages.value.some(m => m.content === 'Unfinished failed answer'))
+    assert.equal(f.game.messages.value.filter(m => m.role === 'user').length, 1)
+    return completed()
+  })
+  await f.game.sendMessage(action)
+  assert.ok(f.game.messages.value.some(m => m.content === 'Unfinished failed answer'))
+  await f.game.retryLastAction()
+  assert.equal(f.game.turnError.value, null)
+  assert.deepEqual(f.game.messages.value.map(m => m.content), ['Opening', action, 'A complete answer.'])
+})
+
+test('a successful turn does not suppress an intentional repeated player message', async t => {
+  const f = await fixture(t)
+  f.route(async (_url, options) => options.method === 'POST' ? completed() : new Response(JSON.stringify(saved())))
+  await f.game.sendMessage(action)
+  f.route(async () => new Response(frame('error', { detail: 'Please try again.' })))
+  await f.game.sendMessage(action)
+  assert.equal(f.game.messages.value.filter(m => m.role === 'user').length, 2)
+  assert.ok(f.game.messages.value.some(m => m.id === 'reply-1'))
+})
+
+for (const final of [true, false]) {
+  test(`retry accepts reused durable input only with a fresh saved reply (final=${final})`, async t => {
+    const f = await fixture(t)
+    f.game.messages.value = [...initial, { id: 'user-1', role: 'user', content: action }]
+    f.route(async (_url, options) => options.method === 'POST'
+      ? new Response(frame('chunk', { content: 'A complete answer.' }) + (final ? frame('final', {}) : ''))
+      : new Response(JSON.stringify(saved())))
+    await f.game.sendMessage(action, true)
+    assert.equal(f.game.turnError.value, null)
+    assert.equal(f.game.messages.value.filter(message => message.role === 'user').length, 1)
+    assert.ok(f.game.messages.value.some(message => message.id === 'reply-1'))
+  })
+}
+
+test('an old completed exchange cannot confirm a new identical action', async t => {
+  const f = await fixture(t)
+  f.game.messages.value = saved().messages
+  f.route(async (_url, options) => options.method === 'POST'
+    ? new Response(frame('final', {}))
+    : new Response(JSON.stringify(saved())))
+  await f.game.sendMessage(action)
+  assert.ok(f.game.turnError.value)
+})
+
+test('normal turn verifies the committed input receipt even when stored text differs', async t => {
+  const f = await fixture(t)
+  f.route(async (_url, options) => options.method === 'POST'
+    ? new Response(frame('chunk', { content: 'Done.' }) + frame('final', { saved_user_message_id: 'committed-user' }))
+    : new Response(JSON.stringify(snapshot([...initial,
+      { id: 'committed-user', role: 'user', content: 'Normalized input.' },
+      { id: 'committed-reply', role: 'assistant', content: 'Done.' }
+    ]))))
+  await f.game.sendMessage(action)
+  assert.equal(f.game.turnError.value, null)
+  assert.equal(f.game.messages.value.at(-1).id, 'committed-reply')
+})
+
+test('a receipt missing from saved history still reports an unconfirmed turn', async t => {
+  const f = await fixture(t)
+  f.route(async (_url, options) => options.method === 'POST'
+    ? new Response(frame('final', { saved_user_message_id: 'missing' }))
+    : new Response(JSON.stringify(snapshot())))
+  await f.game.sendMessage(action)
+  assert.ok(f.game.turnError.value)
+})
+
+test('CRLF event frames stream narration before the response closes', async t => {
+  const f = await fixture(t)
+  let output
+  f.route(async (_url, options) => {
+    if (options.method !== 'POST') return new Response(JSON.stringify(saved()))
+    output = stream(options.signal)
+    return output.response
+  })
+  const pending = f.game.sendMessage(action)
+  await tick()
+  output.send(frame('chunk', { content: 'Живой ответ.' }).replaceAll('\n', '\r\n'))
+  await tick()
+  try {
+    assert.equal(f.game.messages.value.at(-1).content, 'Живой ответ.')
+  } finally {
+    output.send(frame('final', {}).replaceAll('\n', '\r\n'))
+    output.end()
+    await pending
+  }
+})

@@ -39,6 +39,7 @@ For switch outcomes, use container IDs or story_flag effects; the exit schema ha
 no stable exit ID for an unlock_exit effect. Do not invent one.
 Return every requested entry exactly once, no other entries. Use the requested order
 for sequences. Omit unused optional fields rather than filling pages of empty values.
+For NPCs, fill all seven personality_profile choices from schema enums, consistent with accepted facts and biography.
 Keep descriptions focused; avoid repetition and padding. Output only stage JSON.
 """
 
@@ -88,6 +89,7 @@ def _cast_facts(row: dict) -> dict:
         "description",
         "goal",
         "character",
+        "personality_profile",
         "notes",
         "reveal_rule",
         "inventory",

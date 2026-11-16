@@ -2,11 +2,12 @@
 
 import copy
 import json
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from backend.core.image_prompt_rules import ImagePromptRules
+from backend.core.image_purposes import ImagePurpose, PresetAssignment
 from backend.utils.path_security import validate_provider_url
 
 BindingName = Literal["prompt", "negative_prompt", "seed", "width", "height", "image"]
@@ -83,8 +84,13 @@ class ComfyProfile(BaseModel):
 class ComfyPreset(ComfyProfile):
     name: str = Field(min_length=1, max_length=120)
     prompt_rules: ImagePromptRules | None = None
+    reference_prompt_rules: ImagePromptRules | None = None
     auto_prompt_template: bool = False
     mature_themes: bool = False
+    purpose_tags: list[ImagePurpose] = Field(default_factory=list, max_length=8)
+    style_tags: list[Annotated[str, Field(min_length=1, max_length=40)]] = Field(
+        default_factory=list, max_length=16
+    )
 
     @model_validator(mode="after")
     def choose_template(self) -> "ComfyPreset":
@@ -94,12 +100,22 @@ class ComfyPreset(ComfyProfile):
         if self.auto_prompt_template:
             detected = detect_preset_template(
                 self.generate.graph if self.generate else {},
-                self.reference.graph if self.reference else None,
+                self.reference.graph
+                if self.reference and not self.reference_prompt_rules
+                else None,
             )
             self.prompt_rules = (
                 template_rules(detected["template_id"]) if detected["template_id"] else None
             )
         return self
+
+
+class ComfyWorkflowVersion(BaseModel):
+    """A reusable snapshot; presets retain their own pinned workflow copies."""
+
+    model_config = ConfigDict(extra="forbid")
+    revision: int = Field(default=1, ge=1)
+    workflow: ComfyWorkflow
 
 
 class ComfySettings(BaseModel):
@@ -109,7 +125,9 @@ class ComfySettings(BaseModel):
         default_factory=dict
     )
     comfyui_presets: dict[str, ComfyPreset] = Field(default_factory=dict, max_length=32)
-    comfyui_assignments: dict[Literal["simple", "advanced"], str] = Field(default_factory=dict)
+    comfyui_assignments: dict[PresetAssignment, str] = Field(default_factory=dict)
+    comfyui_workflows: dict[str, ComfyWorkflowVersion] = Field(default_factory=dict, max_length=128)
+    comfyui_test_preset: str | None = None
 
     @model_validator(mode="after")
     def validate_presets(self) -> "ComfySettings":
@@ -117,6 +135,15 @@ class ComfySettings(BaseModel):
             raise ValueError("Preset identifiers must contain 1 to 120 characters.")
         if any(key not in self.comfyui_presets for key in self.comfyui_assignments.values()):
             raise ValueError("A selected ComfyUI preset is missing. Select an available preset.")
+        if self.comfyui_test_preset and self.comfyui_test_preset not in self.comfyui_presets:
+            raise ValueError("The test preset is missing. Select an available preset.")
+        if any(not key or len(key) > 120 for key in self.comfyui_workflows):
+            raise ValueError("Workflow identifiers must contain 1 to 120 characters.")
+        library_size = sum(
+            len(p.model_dump_json().encode()) for p in self.comfyui_workflows.values()
+        )
+        if library_size > 4 * 1024 * 1024:
+            raise ValueError("The ComfyUI workflow library exceeds 4 MiB.")
         size = sum(len(p.model_dump_json().encode()) for p in self.comfyui_presets.values())
         if size > 2 * 1024 * 1024:
             raise ValueError("The ComfyUI preset library exceeds 2 MiB.")
@@ -128,7 +155,12 @@ def validate_comfy_settings(data: dict) -> None:
     active = [
         key for key in ("simple", "advanced") if data.get(f"{key}_model_provider") == "comfyui"
     ]
-    if not active:
+    for purpose in settings.comfyui_assignments:
+        if purpose not in {"simple", "advanced"}:
+            select_workflow({**data, "image_purpose": purpose})
+    if not active and not any(
+        key not in {"simple", "advanced"} for key in settings.comfyui_assignments
+    ):
         return
     validate_provider_url(settings.comfyui_url)
     for key in active:
@@ -148,7 +180,10 @@ def validate_comfy_settings(data: dict) -> None:
 def select_profile(options: dict) -> ComfyProfile | ComfyPreset | None:
     settings = ComfySettings.model_validate(options)
     profile_name = options.get("comfyui_profile", "simple")
-    selected = settings.comfyui_assignments.get(profile_name)
+    assignments: dict[str, str] = {
+        key: value for key, value in settings.comfyui_assignments.items()
+    }
+    selected = assignments.get(options.get("image_purpose", "")) or assignments.get(profile_name)
     if selected:
         preset = settings.comfyui_presets[selected]
         if preset.auto_prompt_template and not preset.prompt_rules:
@@ -162,7 +197,7 @@ def select_profile(options: dict) -> ComfyProfile | ComfyPreset | None:
 def select_workflow(options: dict, *, reference: bool = False) -> ComfyWorkflow:
     profile = select_profile(options)
     workflow = getattr(profile, "reference" if reference else "generate", None)
-    if not workflow:
+    if not isinstance(workflow, ComfyWorkflow):
         mode = "image" if reference else "base"
         raise ValueError(
             f"No {mode} ComfyUI workflow configured for {options.get('comfyui_profile', 'simple')}."
@@ -171,4 +206,9 @@ def select_workflow(options: dict, *, reference: bool = False) -> ComfyWorkflow:
 
 
 def prompt_rules(options: dict) -> ImagePromptRules | None:
-    return getattr(select_profile(options), "prompt_rules", None)
+    profile = select_profile(options)
+    if not isinstance(profile, ComfyPreset):
+        return None
+    if options.get("reference_image_url") and profile.reference_prompt_rules is not None:
+        return profile.reference_prompt_rules
+    return profile.prompt_rules

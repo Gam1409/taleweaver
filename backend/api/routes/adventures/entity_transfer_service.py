@@ -10,17 +10,18 @@ from __future__ import annotations
 
 import os
 import re
+from collections.abc import Mapping
 from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
-from sqlalchemy import JSON, Boolean, Column, Integer, String, select
+from sqlalchemy import JSON, Boolean, Integer, String, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
+from sqlalchemy.sql.elements import KeyedColumnElement
 
 from backend.api.routes.adventures.assets import _build_uploaded_visual_path
 from backend.api.routes.adventures.editor import _get_template_avatar
-from backend.api.routes.adventures.logic import AdventureLogic
 from backend.core.config import settings
 from backend.engine.entity_bundle import (
     IMAGE_EXTENSIONS,
@@ -28,6 +29,8 @@ from backend.engine.entity_bundle import (
     EntityBundleError,
     pack_entity_bundle,
 )
+from backend.engine.export_asset_policy import read_archive_image
+from backend.engine.gameplay.world import AdventureLogic
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.avatar import Avatar
 from backend.models.world_entity import WorldEntity, WorldScene
@@ -53,6 +56,8 @@ _AVATAR_FIELDS = (
     "name",
     "role",
     "description",
+    "gender",
+    "age_years",
     "goal",
     "character",
     "hp",
@@ -116,7 +121,7 @@ def export_entity_bundle(adv: AdventureTemplate, entity: WorldEntity) -> bytes:
     for name in _ENTITY_IMPORT_COLUMNS:
         if name != "image_url":
             data[name] = deepcopy(getattr(entity, name))
-    image_bytes, image_ext = _read_local_image(entity.image_url)
+    image_bytes, image_ext = _read_local_image(entity.image_url, adv.id)
     return pack_entity_bundle(
         EntityBundle(kind, data, image_bytes, image_ext, source_title=adv.title)
     )
@@ -124,22 +129,25 @@ def export_entity_bundle(adv: AdventureTemplate, entity: WorldEntity) -> bytes:
 
 def export_protagonist_bundle(adv: AdventureTemplate, avatar: Avatar) -> bytes:
     data = {name: deepcopy(getattr(avatar, name)) for name in _AVATAR_FIELDS}
-    image_bytes, image_ext = _read_local_image(avatar.profile_image)
+    image_bytes, image_ext = _read_local_image(avatar.profile_image, adv.id)
     return pack_entity_bundle(
         EntityBundle("protagonist", data, image_bytes, image_ext, source_title=adv.title)
     )
 
 
-def _read_local_image(url: Optional[str]) -> tuple[Optional[bytes], Optional[str]]:
-    local_path = data_url_to_local_path(url)
-    if not local_path or not os.path.isfile(local_path):
+def _read_local_image(
+    url: Optional[str], template_id: str
+) -> tuple[Optional[bytes], Optional[str]]:
+    try:
+        local_path = data_url_to_local_path(url)
+        if local_path is None:
+            return None, None
+        ext = os.path.splitext(local_path)[1].lstrip(".").lower()
+        if ext not in IMAGE_EXTENSIONS:
+            return None, None
+        return read_archive_image(local_path, template_id), ext
+    except ValueError:
         return None, None
-    safe_path = assert_within_data_dir(local_path)
-    ext = os.path.splitext(safe_path)[1].lstrip(".").lower()
-    if ext not in IMAGE_EXTENSIONS:
-        return None, None
-    with open(safe_path, "rb") as handle:
-        return handle.read(), ext
 
 
 # ---------------------------------------------------------------------------
@@ -327,7 +335,9 @@ def _store_image(template_id: str, bundle: EntityBundle, token: str) -> Optional
 _MISSING = object()
 
 
-def _coerce_values(data: dict[str, Any], columns: dict[str, Column]) -> dict[str, Any]:
+def _coerce_values(
+    data: dict[str, Any], columns: Mapping[str, KeyedColumnElement[Any]]
+) -> dict[str, Any]:
     coerced: dict[str, Any] = {}
     for name, column in columns.items():
         if name not in data:
@@ -338,7 +348,7 @@ def _coerce_values(data: dict[str, Any], columns: dict[str, Column]) -> dict[str
     return coerced
 
 
-def _coerce_column_value(column: Column, value: Any) -> Any:
+def _coerce_column_value(column: KeyedColumnElement[Any], value: Any) -> Any:
     if value is None:
         return None if column.nullable else _MISSING
     column_type = column.type

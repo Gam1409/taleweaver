@@ -5,9 +5,16 @@ import logging
 import time
 
 from backend.core import database
+from backend.core.diagnostic_failures import failure_details, failure_reason
+from backend.core.diagnostic_operations import diagnostic_job
+from backend.core.inference.registry import InferenceQueueError, InferenceUncertainError
+from backend.core.llm_deadlines import role_timeout
+from backend.core.state_rejection_trace import reject
+from backend.engine.memory_rag.persistence import retry_transaction
 from backend.engine.memory_rag.scheduling import scheduler
-from backend.engine.npc_journal import queue
+from backend.engine.npc_journal import progress, queue
 from backend.engine.npc_journal.apply import apply_extraction
+from backend.engine.npc_journal.clock import clock_fields
 from backend.engine.npc_journal.extract import extract, extraction_context
 from backend.engine.npc_journal.portraits import resume_pending, schedule_portrait
 from backend.engine.npc_journal.schema import JournalExtraction
@@ -16,30 +23,34 @@ from backend.models.game_session import GameSession
 from backend.models.user import User
 
 logger = logging.getLogger(__name__)
-EXTRACTION_TIMEOUT = 90
 _tasks: dict[str, asyncio.Task] = {}
 _wakeups: dict[str, str] = {}
 _cooldowns: dict[str, float] = {}
+_timers: dict[str, asyncio.TimerHandle] = {}
 
 
 async def process_message(message_id: str, user_id: str) -> bool:
     """Claim once; retries re-read current NPC rows before applying facts."""
     task = None
+    session = None
+    original_content = None
+    payload = None
+    result = None
     try:
+        prepared = await _prepare(message_id, user_id)
+        if prepared is None:
+            return False
+        user, session, task, original_content = prepared
+        progress.set_phase(session.id, message_id, "preparing")
         async with database.AsyncSessionLocal() as db:
             message = await db.get(ChatMessage, message_id)
-            if message is None or message.role != "assistant":
-                return False
-            session = await db.get(GameSession, message.session_id)
-            user = await db.get(User, user_id)
-            if session is None or session.user_id != user_id or user is None:
-                return False
-            task = await queue.claim(db, message)
-            if task is None:
+            if message is None:
                 return False
             payload, player_name = await extraction_context(db, message, session)
-            original_content = message.content
         result = await _extract_when_idle(user, session, message_id, payload, task)
+        progress.set_phase(
+            session.id, message_id, "waiting_to_save" if scheduler.active_turns else "saving"
+        )
         created = await _save(message_id, original_content, player_name, result, task["token"])
         if created is None:
             return False
@@ -48,26 +59,70 @@ async def process_message(message_id: str, user_id: str) -> bool:
         return True
     except asyncio.CancelledError:
         if task:
-            await _fail(message_id, task, interrupted=True)
+            try:
+                await _fail(message_id, task, interrupted=True)
+            except Exception:
+                logger.exception("Could not release interrupted journal task %s", message_id)
         raise
-    except Exception:
+    except Exception as exc:
         logger.exception("NPC journal extraction failed for message %s", message_id)
         if task:
+            reject(
+                "npc_journal",
+                "npc_journal.extraction_failed",
+                failure_reason(exc, "Character learning failed to update the journal."),
+                session_id=session.id if session is not None else None,
+                message_id=message_id,
+                narration=original_content,
+                context=payload,
+                proposal=result,
+                task=task,
+                error_type=type(exc).__name__,
+                **failure_details(exc),
+            )
             await _fail(message_id, task)
         return False
+    finally:
+        progress.finish(getattr(session, "id", ""), message_id)
+
+
+@retry_transaction
+async def _prepare(message_id: str, user_id: str) -> tuple[User, GameSession, dict, str] | None:
+    async with database.AsyncSessionLocal() as db:
+        message = await db.get(ChatMessage, message_id)
+        if message is None or message.role != "assistant":
+            return None
+        session = await db.get(GameSession, message.session_id)
+        user = await db.get(User, user_id)
+        if session is None or session.user_id != user_id or user is None:
+            return None
+        original_content = message.content
+        task = await queue.claim(
+            db, message, lease_seconds=role_timeout(user, "small") + queue.LEASE_SECONDS
+        )
+        if task is None:
+            return None
+        return user, session, task, original_content
 
 
 async def _extract_when_idle(
-    user: User, session: GameSession, message_id: str, payload: dict, task: dict
+    user: User, session: GameSession, message_id: str, payload: str, task: dict
 ) -> JournalExtraction | None:
     if not scheduler.can_start_background():
         await _defer(message_id, task)
         return None
-    return await asyncio.wait_for(
-        extract(user, session, message_id, payload), timeout=EXTRACTION_TIMEOUT
-    )
+    progress.set_phase(session.id, message_id, "extracting")
+    try:
+        return await asyncio.wait_for(
+            extract(user, session, message_id, payload), timeout=role_timeout(user, "small")
+        )
+    except (InferenceUncertainError, InferenceQueueError):
+        await _defer(message_id, task, delay=queue.RETRY_DELAY)
+        logger.info("NPC journal deferred by inference admission for message %s", message_id)
+        return None
 
 
+@retry_transaction
 async def _save(
     message_id: str,
     original_content: str,
@@ -81,11 +136,13 @@ async def _save(
         message = await db.get(ChatMessage, message_id)
         if message is None or message.content != original_content:
             return None
+        progress.set_phase(message.session_id, message_id, "saving")
         if not await queue.fence(db, message, token):
             return None
         created = await apply_extraction(db, message, result, player_name)
         task = message.npc_journal or {}
         message.npc_journal = {
+            **clock_fields(task),
             "status": "done",
             "attempts": task["attempts"],
             "gaps": task.get("gaps", []),
@@ -104,7 +161,8 @@ async def _save(
         return created
 
 
-async def _defer(message_id: str, task: dict) -> None:
+@retry_transaction
+async def _defer(message_id: str, task: dict, *, delay: float = 0) -> None:
     async with database.AsyncSessionLocal() as db:
         message = await db.get(ChatMessage, message_id)
         if message is None or not await queue.fence(db, message, task["token"]):
@@ -113,16 +171,19 @@ async def _defer(message_id: str, task: dict) -> None:
             **task,
             "status": "pending",
             "attempts": max(0, task["attempts"] - 1),
+            "retry_after": time.time() + delay,
         }
         await db.commit()
 
 
+@retry_transaction
 async def _fail(message_id: str, task: dict, *, interrupted: bool = False) -> None:
     async with database.AsyncSessionLocal() as db:
         message = await db.get(ChatMessage, message_id)
         if message is None or not await queue.fence(db, message, task["token"]):
             return
         message.npc_journal = {
+            **clock_fields(task),
             "status": "failed",
             "attempts": task["attempts"],
             "gaps": task.get("gaps", []),
@@ -134,6 +195,13 @@ async def _fail(message_id: str, task: dict, *, interrupted: bool = False) -> No
         await db.commit()
 
 
+@retry_transaction
+async def _next_message(session_id: str) -> str | None:
+    async with database.AsyncSessionLocal() as db:
+        return await queue.next_message(db, session_id)
+
+
+@diagnostic_job("npc_learning")
 async def _run(session_id: str, user_id: str) -> None:
     if _cooldowns.get(session_id, 0) > time.monotonic():
         return
@@ -142,16 +210,33 @@ async def _run(session_id: str, user_id: str) -> None:
     consecutive_failures = 0
     while True:
         async with scheduler.background():
-            async with database.AsyncSessionLocal() as db:
-                message_id = await queue.next_message(db, session_id)
+            message_id = await _next_message(session_id)
             if message_id is None:
+                await _schedule_retry(session_id, user_id)
                 return
             success = await process_message(message_id, user_id)
             consecutive_failures = 0 if success else consecutive_failures + 1
             if consecutive_failures >= 2:
                 # A failing provider must not consume the backlog on every UI poll.
                 _cooldowns[session_id] = time.monotonic() + queue.RETRY_DELAY
+                _wake_later(session_id, user_id, queue.RETRY_DELAY)
                 return
+
+
+async def _schedule_retry(session_id: str, user_id: str) -> None:
+    async with database.AsyncSessionLocal() as db:
+        when = await queue.next_retry_at(db, session_id)
+    if when is not None:
+        _wake_later(session_id, user_id, max(1, when - time.time()))
+
+
+def _wake_later(session_id: str, user_id: str, delay: float) -> None:
+    previous = _timers.pop(session_id, None)
+    if previous:
+        previous.cancel()
+    _timers[session_id] = asyncio.get_running_loop().call_later(
+        delay, schedule, session_id, user_id
+    )
 
 
 def schedule(session_id: str, user_id: str, *, retry: bool = False) -> None:
@@ -159,6 +244,9 @@ def schedule(session_id: str, user_id: str, *, retry: bool = False) -> None:
         _cooldowns.pop(session_id, None)
     if _cooldowns.get(session_id, 0) > time.monotonic():
         return
+    timer = _timers.pop(session_id, None)
+    if timer:
+        timer.cancel()
     if session_id in _tasks:
         _wakeups[session_id] = user_id
         return
@@ -184,6 +272,9 @@ async def shutdown() -> None:
     from backend.engine.npc_journal.portraits import shutdown as stop_portraits
 
     _wakeups.clear()
+    for timer in _timers.values():
+        timer.cancel()
+    _timers.clear()
     tasks = list(_tasks.values())
     for task in tasks:
         task.cancel()

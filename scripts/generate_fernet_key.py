@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Backward-compatible wrapper for scripts/generate_keys.py --fernet."""
+
 import subprocess
 import sys
 from pathlib import Path
