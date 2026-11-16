@@ -357,6 +357,7 @@ In Docker, `localhost` refers to the container. Use an address reachable from th
 | Explore | Read more |
 | --- | --- |
 | Visual Novel play | [VN mode](docs/visual-novel-mode.md) · [Session language](docs/session-content-language.md) |
+| How a turn works | [Scene, belongings, conditions and emotions, with and without NPC Personality](docs/engineering/turn-lifecycle.md) |
 | NPCs and shared history | [Character introductions and journals](docs/npc-introductions.md) |
 | Optional personality | [Player controls and fallback](docs/chpm-continuation.md) · [Workflows](docs/npc-decision-workflows.md) · [Private notebooks](docs/npc-notebook.md) |
 | World simulation | [Living World and Concordia](docs/living-world-usage.md) |

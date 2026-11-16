@@ -75,8 +75,12 @@ are not established by a successful workflow or a correct state projection.
 
 ## Moment illustrations
 
-VN illustrations use the selected completed reply's hash-checked snapshot, rather
+VN illustrations use the selected saved narrator reply's hash-checked snapshot, rather
 than replacing historical clothing/positions with the current session state.
+Current capture and availability checks require a saved assistant identity and
+matching narration hash; they do not independently require completed narration.
+A retained incomplete or fallback reply can therefore have an available snapshot.
+Snapshot availability confirms source consistency, not narrative completeness.
 There are two preparation paths, selected by the session content setting:
 
 - **Neutral sessions:** saved visual plans are the default. Frozen public facts

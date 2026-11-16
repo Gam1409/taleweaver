@@ -38,6 +38,13 @@ so adding their rows does not give end-to-end user latency. Follow the correlate
 HTTP request and final turn event to measure the complete operation, including
 state application and publication.
 
+The current `gm.turn.pipeline.cycle_total` event is emitted after narration and
+NPC reply review, before shared state reconciliation, persistence and final commit.
+It is not the complete user-to-final-response duration. Likewise, **Preparing NPC
+responses...** is emitted before the optional module's enablement check; the label
+alone does not establish that an NPC model request ran. The
+[complete turn lifecycle](engineering/turn-lifecycle.md) separates those boundaries.
+
 KoboldCpp's `Processed` and `Generated` timings separate reading the prompt from
 generating output. A 131k context setting is a ceiling, not the number of tokens
 used by each request. A generation allowance such as `12288` is also a ceiling,

@@ -17,6 +17,7 @@ contains installation entry points and a feature summary. The
 | Create or exchange worlds | [World blueprints](world-blueprints.md), [staged generation](staged-world-generation.md), [catalog](adventure-catalog.md), [formats](specs/adventure_format.md) |
 | Configure pictures | [ComfyUI](comfyui/README.md), [task templates](comfyui-task-templates.md), [portraits](portrait-regeneration.md) |
 | Diagnose a turn | [Debug controls](in_game_debugging.md), [state consistency](turn-consistency.md), [timing](turn-latency.md), [system diagnostics](engineering/system-diagnostics.md) |
+| Understand a complete turn | [Scene, items, conditions and emotions, with and without NPC Personality](engineering/turn-lifecycle.md) |
 
 ### Which version does a page describe?
 
@@ -171,6 +172,7 @@ Source boundaries, diagrams, maintainer policies and documentation tooling.
 - [game session loop](diagrams/game_session_loop.mermaid)
 - [game session loop activity](diagrams/game_session_loop_activity.mermaid)
 - [Turn services and the API boundary](engineering/engine-boundary.md)
+- [Complete turn lifecycle: scene, state and NPC decisions](engineering/turn-lifecycle.md)
 - [Frontend request and stream contracts](engineering/frontend-transport.md)
 - [Narration flow guidance](engineering/narration-flow.md)
 - [Regenerating the latest narration](engineering/narration-regeneration.md)

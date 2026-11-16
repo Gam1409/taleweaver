@@ -10,6 +10,8 @@ The orchestration owner is
 [activity diagram](../diagrams/game_session_loop_activity.mermaid) for the main
 paths. Commands, combat, terminal reports and narration-only regeneration have
 their own branches.
+The [complete turn walkthrough](../engineering/turn-lifecycle.md) explains scene
+assembly, each state check and both NPC Personality routes in more detail.
 
 ## Mode-dependent resolution
 
@@ -106,11 +108,16 @@ state and exact source evidence. Optional scene staging has its own bounded
 reconciliation. Independent valid facts can survive an unrelated rejected delta;
 unknown or ambiguous evidence does not justify inventing an update.
 
-The completed reply is persisted before its ID can anchor source-bound memories
+The saved reply is persisted before its ID can anchor source-bound memories
 and frozen illustration records. NPC publication, source binding, derived-index
 invalidation and the final turn commit follow their existing owners. Memory
 maintenance, journals and eligible visual work can be scheduled after publication.
 They do not gain permission to advance the foreground turn.
+
+Illustration snapshot eligibility currently checks the saved assistant identity
+and narration hash, without independently requiring completed narration. An
+incomplete retained reply can have a snapshot even when completed-only condition
+and portrait updates were skipped.
 
 Ordinary unbuffered narration sends prose chunks while the model generates them,
 before reconciliation and commit. Live CHPM buffers prose when a turn has
