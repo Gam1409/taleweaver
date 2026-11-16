@@ -238,7 +238,18 @@ def compose(messages: list[dict], tools: list[dict]) -> tuple[str, str]:
         **_catalog(tools),
     }
     instructions = [message["content"] for message in messages if message.get("role") == "system"]
-    return "\n\n".join([INSTRUCTIONS, *instructions]), json.dumps(
+    transport = INSTRUCTIONS
+    if any(item["function"]["name"] == "submit_decision" for item in tools):
+        transport = transport.replace(
+            "At most two requests; [] when ready.",
+            "At most two requests. When ready, call submit_decision alone.",
+        )
+        instructions.append(
+            "Put the complete proposal inside the arguments object of one request named "
+            "submit_decision. Proposal fields are never top-level response fields. "
+            "Do not return a bare proposal or empty requests array."
+        )
+    return "\n\n".join([transport, *instructions]), json.dumps(
         payload, ensure_ascii=False, separators=(",", ":")
     )
 
@@ -288,12 +299,20 @@ def _calls(raw: str) -> tuple[ToolCall, ...]:
         preflight(raw, extra_depth=4, extra_nodes=256, max_transport_bytes=MAX_PLAN_CHARS * 4)
         plan = json_contract.decode(raw)
         requests = plan.get("requests")
-        if (
-            set(plan) - {"purpose", "requests"}
-            or not isinstance(requests, list)
-            or len(requests) > 2
-        ):
-            raise ValueError("The portable function response needs at most two requests.")
+        if not isinstance(requests, list):
+            raise InvalidToolTurnError(
+                "The portable function response needs a requests array.", code="missing_requests"
+            )
+        if set(plan) - {"purpose", "requests"}:
+            raise InvalidToolTurnError(
+                "The portable function response has unexpected top-level fields.",
+                code="unexpected_fields",
+            )
+        if len(requests) > 2:
+            raise InvalidToolTurnError(
+                "The portable function response needs at most two requests.",
+                code="too_many_requests",
+            )
         batch = uuid4().hex
         calls = []
         for index, item in enumerate(requests):
@@ -304,9 +323,12 @@ def _calls(raw: str) -> tuple[ToolCall, ...]:
             encoded.encode("utf-8")
             calls.append(ToolCall(f"json_{batch}_{index}", name, encoded))
         return tuple(calls)
+    except InvalidToolTurnError:
+        raise
     except (ValueError, TypeError, AttributeError, RecursionError, OverflowError) as exc:
         raise InvalidToolTurnError(
-            "The portable function response must be complete, finite JSON with a requests array."
+            "The portable function response must be complete, finite JSON with a requests array.",
+            code="invalid_json",
         ) from exc
 
 
@@ -314,7 +336,8 @@ def _turn(raw: str, completions: list[Completion]) -> ToolTurn:
     record = completions[0] if len(completions) == 1 else None
     if record and record.tool_rejected:
         raise InvalidToolTurnError(
-            "The portable function response has an unsupported finish reason."
+            "The portable function response has an unsupported finish reason.",
+            code="unsupported_finish",
         )
     reason = (record.tool_finish_reason or record.finish_reason) if record else None
     usage = {"completion_tokens": record.completion_tokens} if record else None

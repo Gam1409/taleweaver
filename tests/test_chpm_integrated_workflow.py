@@ -15,7 +15,7 @@ from tests.test_chpm_native_notebook_loop import NativeModel, call, turn
 from tests.test_chpm_semantic_choice import fixture
 
 
-async def deliberate(model, *, steps=2, notebook=None, protocol="native"):
+async def deliberate(model, *, steps=2, notebook=None, protocol="native", max_calls=8):
     value, _, _, _ = fixture()
     value = current(value)
     settings = Settings(
@@ -24,6 +24,7 @@ async def deliberate(model, *, steps=2, notebook=None, protocol="native"):
         agent_steps=steps,
         workflow="integrated",
         tool_protocol=protocol,
+        max_calls_per_turn=max_calls,
     )
     usage = Usage()
     host = SimpleNamespace(game_id="session", _chpm_model_factory=lambda _role: model)

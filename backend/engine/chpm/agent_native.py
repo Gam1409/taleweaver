@@ -7,6 +7,7 @@ from typing import Any
 
 from backend.core.llm_tool_turn import NativeToolsUnsupportedError, ToolCall, ensure_tools_supported
 from backend.engine.chpm import agent_lookup_payload, inference, tool_feedback
+from backend.engine.chpm.agent_limits import MAX_TOOL_ARGUMENT_CHARS
 from backend.engine.chpm.agent_tools import Tools
 from backend.engine.chpm.errors import RecoverableChpmError
 from backend.engine.chpm.host_state import Mind
@@ -71,7 +72,10 @@ def _valid_envelope(calls: tuple[ToolCall, ...], seen_ids: set[str]) -> bool:
         and len(set(identifiers)) == len(identifiers)
         and not set(identifiers).intersection(seen_ids)
         and all(re.fullmatch(r"[A-Za-z0-9_-]{1,128}", value) for value in identifiers)
-        and all(len(call.arguments_raw) <= 32768 and len(call.name) <= 80 for call in calls)
+        and all(
+            len(call.arguments_raw) <= MAX_TOOL_ARGUMENT_CHARS and len(call.name) <= 80
+            for call in calls
+        )
         and all(_utf8(call.name) and _utf8(call.arguments_raw) for call in calls)
     )
 

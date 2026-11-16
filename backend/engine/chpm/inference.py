@@ -30,16 +30,24 @@ class OutputBudgetError(RecoverableChpmError):
     """Do not repeat a cut-off response with the same output budget."""
 
 
+class ToolEnvelopeError(InvalidResponseError):
+    """A completed structural error that the owning workflow may explain once."""
+
+    def __init__(self, message: str, *, code: str = "invalid_structure") -> None:
+        super().__init__(message)
+        self.code = code
+
+
 def check_output_budget(
     records: list[Completion], limit: int, phase: str, *, invalid_json: bool = False
 ) -> None:
     if len(records) != 1:
         return
     record = records[0]
-    explicit = isinstance(record.finish_reason, str) and record.finish_reason in {
-        "length",
-        "max_tokens",
-    }
+    explicit = any(
+        isinstance(reason, str) and reason in {"length", "max_tokens"}
+        for reason in (record.finish_reason, record.tool_finish_reason)
+    )
     inferred = (
         invalid_json
         and record.finish_reason is None
@@ -202,8 +210,13 @@ async def tool_request(
                 timeout=float(llm.request_timeout),
             )
     except InvalidToolTurnError as exc:
-        check_output_budget(completions, llm.max_tokens, phase)
-        raise InvalidResponseError("CHPM received an invalid native tool envelope.") from exc
+        check_output_budget(completions, llm.max_tokens, phase, invalid_json=True)
+        rejected_finish = exc.code == "unsupported_finish" or any(
+            record.tool_rejected for record in completions
+        )
+        if rejected_finish:
+            raise InvalidResponseError("CHPM received an unsupported tool completion.") from exc
+        raise ToolEnvelopeError("CHPM received an invalid tool envelope.", code=exc.code) from exc
     except Exception as exc:
         raise InferenceUnavailableError(
             f"CHPM {phase} failed ({type(exc).__name__}). No tool request was applied."

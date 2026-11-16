@@ -18,6 +18,10 @@ class NativeToolsUnsupportedError(RuntimeError):
 class InvalidToolTurnError(ValueError):
     """A completed response does not contain an unambiguous native assistant message."""
 
+    def __init__(self, message: str, *, code: str = "invalid_structure") -> None:
+        super().__init__(message)
+        self.code = code
+
 
 @dataclass(frozen=True)
 class ToolCall:
@@ -122,7 +126,7 @@ def _choice_finish_reason(choice: dict[str, Any]) -> str | None:
     try:
         return classify_tool_finish(choice)
     except ValueError as exc:
-        raise InvalidToolTurnError(str(exc)) from None
+        raise InvalidToolTurnError(str(exc), code="unsupported_finish") from None
 
 
 def _turn(payload: dict[str, Any]) -> ToolTurn:
@@ -130,6 +134,7 @@ def _turn(payload: dict[str, Any]) -> ToolTurn:
     if not isinstance(choices, list) or len(choices) != 1:
         raise InvalidToolTurnError("A native tool response requires exactly one choice.")
     choice = _mapping(choices[0])
+    reason = _choice_finish_reason(choice)
     message = _mapping(choice.get("message"))
     raw_calls = message.get("tool_calls")
     calls = [] if raw_calls is None else raw_calls
@@ -143,7 +148,7 @@ def _turn(payload: dict[str, Any]) -> ToolTurn:
     return ToolTurn(
         message,
         tuple(_call(call) for call in calls),
-        _choice_finish_reason(choice),
+        reason,
         usage if isinstance(usage, dict) else None,
     )
 

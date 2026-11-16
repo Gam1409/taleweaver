@@ -9,6 +9,7 @@ from backend.engine.chpm import (
     agent_native,
     cognitive_proposal,
     inference,
+    integrated_protocol,
     json_contract,
     parallel_budget,
     proposal_attempt,
@@ -21,7 +22,7 @@ from backend.engine.chpm.native_tool_contracts import tool_definitions
 from backend.engine.chpm.proposal_draft import Draft
 from backend.engine.chpm.schema import Decision, Settings, Usage
 
-FINAL = "submit_decision"
+FINAL = integrated_protocol.FINAL
 INSTRUCTIONS = """
 Memory functions are bound to this observer and session. They cannot execute code,
 read other minds/notebooks or hidden possessions, or complete world actions. Their
@@ -42,6 +43,9 @@ only call in its response. Never combine a decision and a memory operation.
 The host validates the proposal with the same source, motive, continuity and
 world-action boundaries. Submission does not execute a world action. At zero
 remaining_rounds only submit_decision is available. Use no free-form final answer.
+host_protocol_feedback reports a rejected response format, not new story facts.
+Correct the stated format within the remaining rounds. Operations from that rejected
+response did not run; earlier successful operations must not be repeated.
 """
 
 
@@ -164,6 +168,7 @@ async def request(
         raise RecoverableChpmError("Integrated memory tools are unavailable for this model port.")
     history: list[dict] = []
     seen_ids: set[str] = set()
+    recovery = integrated_protocol.Recovery()
     protocol = "json" if getattr(llm, "protocol", "native") == "json" else "native"
     try:
         for index in range(settings.agent_steps + 1):
@@ -172,33 +177,30 @@ async def request(
                 return prepared.cached
             remaining = settings.agent_steps - index
             offered = _definitions(prepared, tools, remaining)
-            turn = await inference.tool_request(
-                manager,
-                settings,
-                usage,
-                _messages(prepared, tools, remaining, history),
-                offered,
-                llm=llm,
-                phase="integrated_decision",
-                output_limit=settings.max_output_tokens,
-            )
-            if not agent_native._valid_envelope(turn.calls, seen_ids):
-                raise RecoverableChpmError(
-                    "Integrated response has an invalid call envelope; no operation ran."
+            try:
+                turn = await integrated_protocol.read(
+                    manager,
+                    settings,
+                    usage,
+                    _messages(prepared, tools, remaining, history),
+                    offered,
+                    seen_ids=seen_ids,
+                    llm=llm,
+                    phase="integrated_decision",
+                    output_limit=settings.max_output_tokens,
                 )
+            except integrated_protocol.ProtocolError as exc:
+                recovery.explain(exc, history, audit, remaining=remaining, protocol=protocol)
+                continue
             finals = [call for call in turn.calls if call.name == FINAL]
-            if finals and len(turn.calls) != 1:
-                raise RecoverableChpmError(
-                    "Submit a decision separately from memory operations; no operation ran."
-                )
             if finals or not turn.calls:
+                usage.format_repairs += int(not turn.calls)
                 return await _submit(
-                    manager, settings, usage, prepared, finals[0].arguments_raw if finals else None
-                )
-            allowed = {item["function"]["name"] for item in offered} - {FINAL}
-            if any(call.name not in allowed for call in turn.calls):
-                raise RecoverableChpmError(
-                    "The integrated response requested an unavailable function; no operation ran."
+                    manager,
+                    settings,
+                    usage,
+                    prepared,
+                    finals[0].arguments_raw if finals else turn.assistant_message.get("content"),
                 )
             seen_ids.update(call.id for call in turn.calls)
             requests, errors = agent_native._parse_batch(turn.calls)
