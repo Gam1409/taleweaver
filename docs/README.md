@@ -172,6 +172,7 @@ Source boundaries, diagrams, maintainer policies and documentation tooling.
 - [game session loop](diagrams/game_session_loop.mermaid)
 - [game session loop activity](diagrams/game_session_loop_activity.mermaid)
 - [Turn services and the API boundary](engineering/engine-boundary.md)
+- [Subsystem responsibilities and contracts](engineering/subsystem-contracts.md)
 - [Complete turn lifecycle: scene, state and NPC decisions](engineering/turn-lifecycle.md)
 - [Frontend request and stream contracts](engineering/frontend-transport.md)
 - [Narration flow guidance](engineering/narration-flow.md)
