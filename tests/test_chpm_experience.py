@@ -1,20 +1,31 @@
 """Temporary experience is sourced, reversible and never a replacement personality."""
 
+import json
+from copy import deepcopy
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
 
-from backend.engine.chpm import appraisal_context, cognition, experience, lifecycle, motivation
+from backend.engine.chpm import (
+    appraisal_context,
+    cognition,
+    experience,
+    lifecycle,
+    motivation,
+    proposal_attempt,
+)
 from backend.engine.chpm.appraisal_contracts import FeltExperience
 from backend.engine.chpm.core.contracts import Advance, Event
 from backend.engine.chpm.core.reducer import apply
 from backend.engine.chpm.core.replay import restore
 from backend.engine.chpm.host_state import Mind, before_messages
+from backend.engine.chpm.proposal_draft import Draft
 from backend.engine.chpm.schema import KernelState, Settings, Usage
 from backend.engine.chpm.state import KEY
 from tests.test_chpm_appraisal import heard
-from tests.test_chpm_kernel import observation
+from tests.test_chpm_kernel import observation, wire_proposal
+from tests.test_chpm_reliability import Replies
 
 
 def proposed(**changes):
@@ -142,6 +153,92 @@ def test_recall_alone_cannot_refresh_and_fork_rebinds_experience_citations():
     assert forked.snapshot.experiences[0].level == "moderate"
     assert forked.snapshot.experiences[0].record_id != changed.snapshot.experiences[0].record_id
     assert forked.genesis.identity == changed.genesis.identity
+
+
+@pytest.mark.parametrize("invalid_index", [0, 1])
+def test_recall_error_identifies_only_the_unsupported_experience_and_valid_entries_remain(
+    invalid_index,
+):
+    value = heard(text="You must obey", message="old")
+    value = heard(value, text="I will leave you space", message="current")
+    window = appraisal_context.build(value, current_message_id="current")
+    aliases = {source.message_id: alias for alias, (_, source, _) in window.sources.items()}
+    stale = proposed(citations=[{"source_id": aliases["old"], "quote": "You must obey"}])
+    valid = proposed(
+        dimension="interest",
+        citations=[
+            {
+                "source_id": aliases["current"],
+                "quote": "I will leave you space",
+            }
+        ],
+    )
+    batch = [valid]
+    batch.insert(invalid_index, stale)
+    before = value.model_dump_json()
+    catalogue = motivation.build(value, [], window)
+    with pytest.raises(ValueError) as caught:
+        experience.accept(value, batch, window, catalogue, message_id="current")
+    feedback = str(caught.value)
+    assert f"experiences[{invalid_index}].citations" in feedback
+    assert "current observed trigger" in feedback
+    assert "optional" in feedback and "unrelated" in feedback
+    assert value.model_dump_json() == before
+    changed, _ = experience.accept(value, [valid], window, catalogue, message_id="current")
+    assert len(changed.snapshot.experiences) == 1
+    assert changed.snapshot.experiences[0].dimension == "interest"
+
+
+async def test_single_repair_can_omit_only_the_unsupported_optional_experience():
+    value = heard(text="You must obey", message="old")
+    value = heard(value, text="I will leave you space", message="current")
+    window = appraisal_context.build(value, current_message_id="current")
+    aliases = {source.message_id: alias for alias, (_, source, _) in window.sources.items()}
+    original = wire_proposal()
+    original["experiences"] = [
+        proposed(citations=[{"source_id": aliases["old"], "quote": "You must obey"}]).model_dump(
+            mode="json"
+        ),
+        proposed(
+            dimension="interest",
+            citations=[
+                {
+                    "source_id": aliases["current"],
+                    "quote": "I will leave you space",
+                }
+            ],
+        ).model_dump(mode="json"),
+    ]
+    corrected = deepcopy(original)
+    corrected["experiences"] = original["experiences"][1:]
+    model = Replies([json.dumps(original), json.dumps(corrected)])
+    host = SimpleNamespace(_chpm_model_factory=lambda _role: model, game_id="fixture")
+    catalogue = motivation.build(value, [], window)
+    usage = Usage()
+
+    def accept_current(draft):
+        raw = draft.materialize(catalogue)
+        changed, _ = experience.accept(
+            value, raw.experiences, window, catalogue, message_id="current"
+        )
+        return changed, draft
+
+    changed, accepted = await proposal_attempt.request(
+        host,
+        Settings(mode="live", actor_ids=["npc"]),
+        usage,
+        "Use the schema.",
+        {"appraisal_context": window.payload},
+        Draft,
+        {},
+        accept_current,
+    )
+    assert len(changed.snapshot.experiences) == 1 and not value.snapshot.experiences
+    assert changed.snapshot.experiences[0].dimension == "interest"
+    assert accepted.choice == Draft.model_validate(original).choice
+    assert accepted.candidates == Draft.model_validate(original).candidates
+    assert "experiences[0].citations" in model.requests[1][2]["proposal_feedback"]["error"]
+    assert usage.calls == 2 and usage.proposal_repairs == 1
 
 
 async def test_recall_cues_exclude_unperceived_player_narration(monkeypatch):

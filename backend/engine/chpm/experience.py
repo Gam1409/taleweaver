@@ -68,12 +68,12 @@ def accept(
     snapshot = mind.snapshot
     accepted = []
     seen: set[tuple[str, str, str | None]] = set()
-    for proposal in proposals:
+    for index, proposal in enumerate(proposals):
         key = (proposal.channel, proposal.dimension, proposal.about_id)
         if key in seen:
             raise ChpmError("CHPM repeats an affect/need dimension in one batch.")
         seen.add(key)
-        body = _resolve(mind, proposal, window, catalogue, message_id)
+        body = _resolve(mind, proposal, window, catalogue, message_id, index=index)
         accepted.append(body.record_id)
         if any(event.event_id == body.record_id for event in events(snapshot)):
             continue
@@ -94,6 +94,8 @@ def _resolve(
     window: Window,
     catalogue: Catalogue,
     message_id: str,
+    *,
+    index: int,
 ) -> Experience:
     if proposal.about_id is not None and proposal.about_id not in window.subjects:
         raise ChpmError("CHPM experience refers to an unavailable subject.")
@@ -123,7 +125,11 @@ def _resolve(
         )
         for source in references
     ):
-        raise ChpmError("CHPM experience needs a current observed trigger, not recall alone.")
+        raise ChpmError(
+            f"experiences[{index}].citations: CHPM experience needs a current observed trigger, "
+            "not recall alone. Remove only this optional experience if none applies, retaining "
+            "other valid entries, or cite a genuine current trigger. Do not add unrelated evidence."
+        )
     citations = tuple(
         Citation(record_id=source[0], quote=citation.quote)
         for source, citation in zip(references, proposal.citations, strict=True)

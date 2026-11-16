@@ -41,13 +41,22 @@ def repair_hint(candidate: dict | None, *, no_previous_intention: bool = False) 
 
 
 def _continuity_hint(choice: dict, no_previous_intention: bool) -> str:
-    if not no_previous_intention or (
-        choice.get("continuity", "new") == "new" and not choice.get("change_basis")
+    if no_previous_intention and (
+        choice.get("continuity", "new") != "new" or choice.get("change_basis")
+    ):
+        return (
+            "previous_intention is null: set choice.continuity='new' and choice.change_basis=[]. "
+            "Keep your grounded preferred intention; current motives are not a change from a prior intention."
+        )
+    if (
+        no_previous_intention
+        or choice.get("continuity") != "maintain"
+        or not choice.get("change_basis")
     ):
         return ""
     return (
-        "previous_intention is null: set choice.continuity='new' and choice.change_basis=[]. "
-        "Keep your grounded preferred intention; current motives are not a change from a prior intention."
+        "choice.continuity='maintain' requires choice.change_basis=[]. Keep the grounded course; "
+        "use 'revise' only for a real change supported by exact new evidence."
     )
 
 

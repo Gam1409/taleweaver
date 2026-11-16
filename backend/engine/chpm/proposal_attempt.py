@@ -108,7 +108,9 @@ async def request(
             else ""
         )
         if hint:
-            feedback = f"{feedback}; {hint}"[:600]
+            hint = hint[:280]
+            # Preserve actionable cross-field advice beside the first reported error.
+            feedback = f"{feedback[: 600 - len(hint) - 2]}; {hint}"
         # This is a two-entry diagnostic window, not canonical story history.
         usage.proposal_feedback = [*usage.proposal_feedback, feedback[:600]][-2:]
         if phase == "proposal_repair" or usage.proposal_repairs:

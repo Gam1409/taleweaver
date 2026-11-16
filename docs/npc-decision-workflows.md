@@ -34,6 +34,14 @@ top-level fields, missing submission, mixed submission/memory calls or unavailab
 functions. No operation from the rejected response executes. Previously successful
 operations remain staged and must not be repeated merely to repair the format.
 
+Semantic correction feedback names a recall-only experience's exact array entry.
+The model may omit that unsupported optional entry while retaining other valid
+entries, or cite a genuine current trigger. Adding unrelated current evidence is
+not a correction. A maintained intention also requires `choice.change_basis=[]`;
+this independent diagnostic is retained beside structural errors within the same
+bounded feedback budget. These hints do not choose the NPC's course, change the
+validation guards or grant another repair request.
+
 An invalid final proposal uses the existing single semantic proposal repair and
 turn-wide reserve. Source, motive and continuity validators still apply after
 every correction. Native plain-text JSON proposals pass through the same final
