@@ -1,5 +1,11 @@
 # Structured output: live validation boundaries
 
+> Historical provider evaluation from 2026-11-10. Recorded failures, repairs,
+> timings and replay results retain their original scope; they are not current CI
+> totals or a new live benchmark. Current [structured-output behavior](../structured-output.md)
+> and [Personality contracts](../chpm-pilot.md) may include later fixes. No live call
+> was repeated for this documentation update.
+
 The probes used KoboldCpp 1.124.2 with Artemis 31B Q6_K and synthetic adult
 characters in an isolated test database. No private stories, server addresses,
 credentials or raw responses are included here. JSON schema mode used the normal

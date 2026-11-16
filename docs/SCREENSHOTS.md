@@ -1,5 +1,10 @@
 # TaleWeaver Screenshot Gallery & Explanations
 
+> Historical screenshot gallery. These bundled images show earlier interface versions;
+> labels, layouts and pictured slot counts are not the current UI contract. Current
+> usage is documented in the project guides. The fork's current branding is shown in
+> the [main README](../README.md); upstream artwork below remains an attributed historical asset.
+
 This document provides concise overviews and explanations for each screenshot located in `docs/screenshots/`. These images highlight key aspects of TaleWeaver, including player gameplay, interactive modals, creator authoring tools, and branding assets.
 
 ---
@@ -12,7 +17,7 @@ This document provides concise overviews and explanations for each screenshot lo
   - [Adventure Gameplay (`gameplay.jpg`)](#adventure-gameplay-gameplayjpg)
   - [Character Sheet & Backpack (`character-sheet.jpg`)](#character-sheet--backpack-character-sheetjpg)
   - [Combat Encounter Dialog (`combat-dialog.jpg`)](#combat-encounter-dialog-combat-dialogjpg)
-  - [Loot & Container Dialog (`loot-dialog.jpg`)](#loot-dialog-loot-dialogjpg)
+  - [Loot & Container Dialog (`loot-dialog.jpg`)](#loot--container-dialog-loot-dialogjpg)
 - [World Editor & Authoring Suite](#world-editor--authoring-suite)
   - [Editor: Scenes Workbench (`editor-scenes.jpg`)](#editor-scenes-workbench-editor-scenesjpg)
   - [Editor: Inhabitants Workbench (`editor-npcs.jpg`)](#editor-inhabitants-workbench-editor-npcsjpg)
@@ -171,7 +176,7 @@ This document provides concise overviews and explanations for each screenshot lo
 * **Filename**: [`docs/screenshots/taleweaver_logo_with_playbutton.jpg`](screenshots/taleweaver_logo_with_playbutton.jpg)
 * **View**: Video Teaser / Gameplay Showcase Graphic
 * **Description**:
-  Promotional artwork featuring the TaleWeaver golden tome and celestial quill logo overlaid with a media play symbol. Used across the project documentation and README to link directly to the YouTube gameplay introduction video.
+  Promotional artwork featuring the TaleWeaver golden tome and celestial quill logo overlaid with a media play symbol. Retained as upstream promotional artwork; it is not the current fork README banner.
 
 ---
 

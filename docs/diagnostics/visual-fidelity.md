@@ -1,5 +1,12 @@
 # Visual prompt fidelity
 
+> Historical investigation and trace reference. The pipeline narrative and test counts
+> below describe successive earlier fixes. Current neutral illustrations use saved
+> visual plans; content-enabled illustrations use the retained source/fidelity route.
+> See the [current preparation guide](../comfyui/README.md#moment-illustrations).
+> Tracing instructions remain diagnostic tools, not a claim that those old call counts
+> or missing features describe current main.
+
 This investigation covers neutral visual continuity: visible cast, clothing, pose,
 position, lighting and the final moment of a completed passage. It does not change
 adult-content prompt text or content policy. It uses the existing Utility model.

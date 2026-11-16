@@ -9,8 +9,9 @@ Providers that omit completion metadata retain the existing nonempty-text check.
 
 The narration role's configured deadline controls the request. OpenAI-compatible
 providers use the same shared provider deadline as normal narration. The browser
-does not impose a second fixed timeout. Normal API requests keep their default
-15-second timeout; explicit cancellation remains supported.
+does not impose a second fixed timeout; explicit cancellation remains supported.
+Ordinary request deadlines depend on the shared transport and service wrapper;
+see [frontend transport](frontend-transport.md).
 
 Regeneration holds the existing session mutation lease and registers foreground
 activity with the memory scheduler. It releases its read transaction before the
@@ -34,10 +35,9 @@ After an actual text change:
   The UI reloads illustration status when the response text changes. Missing
   historical snapshots are not reconstructed from potentially newer appearance.
 
-The playtime heartbeat uses one authorized atomic SQL update. It counts visible
-session time separately from the story clock and discards long offline gaps.
-The merge migration joins the memory-fragment and playtime schema branches; both
-parent upgrade paths are covered by isolated database tests.
+Playtime and story time remain separate clocks. Regenerating prose advances
+neither. Database schema upgrades follow the current Alembic migration head;
+older migration-merge reports are historical implementation evidence.
 
 Validation covers authorization, stale requests, failure preservation, configured
 deadlines, derived memory, illustrations, saved VN settings and both migration

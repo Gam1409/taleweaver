@@ -1,7 +1,7 @@
 # Optional bounded CHPM agent
 
-The existing flow remains the default (`agent_steps=0`). In **Session Memory &
-Settings → NPC Personality → Enabled → Agent tool rounds per active NPC**, select
+The existing flow remains the default (`agent_steps=0`). In **Session settings →
+NPC Personality → Enabled → Agent tool rounds per active NPC**, select
 one, two or three rounds. The setting belongs to the saved game session; adventure
 defaults can seed new sessions without changing existing sessions.
 The existing Small/Complex role routes these calls; no separate endpoint is required.
@@ -14,13 +14,18 @@ Both options default to off; old saves acquire no new model calls.
 
 ## Execution
 
-Perception → reconcile this observer's sources → optional lookup rounds → existing
-source-grounded proposal and intent selection → narration → review/repair → commit.
+In the default **Staged** workflow: perception → reconcile this observer's sources
+→ optional lookup rounds → source-grounded proposal and intent selection →
+narration → review/repair → commit. The experimental **Integrated** workflow can
+submit a complete decision instead of a separate lookup readiness response;
+see [workflow contracts and comparison](npc-decision-workflows.md).
 Each round asks the model for zero to two allowlisted tool requests. An empty list
 ends investigation early. The next round can refine a search or read a returned
 source. At the step limit, the decision uses the evidence actually obtained;
 missing information remains unknown. There is no open-ended planning loop, browser,
-shell, arbitrary SQL, world-state edit tool, or automatic retry of malformed agent JSON.
+shell, arbitrary SQL or world-state edit tool. The legacy JSON planner skips a
+malformed completed batch; native/notebook correction feedback can use a remaining
+configured round, never an unbounded retry loop.
 
 Available tools:
 
@@ -29,10 +34,19 @@ Available tools:
 | `search_memory` | concrete query, up to 160 characters | Existing RAG ranker over this NPC's reconciled speech/world observations from prior turns, including archived sources; at most two hits |
 | `read_memory` | ID returned earlier in this investigation | Original observed excerpt, at most 2,000 characters; never the entire original chat message |
 | `inspect_self` | empty argument | Current host frame: own location, owned item names/IDs and worn IDs; unknowns and omissions remain explicit |
+| `inspect_entity` | exact accessible actor/item ID | Current observer-scoped conditions, owner, wear and established placement; own facts and other actors' confirmed public surfaces, never an unrestricted database lookup |
 | `visible_clothing` | present NPC ID | Session-resolved clothing projected by opaque layers and uncovered regions, with layer number and visible regions |
 | `inspect_beliefs` | subject actor ID | Up to two recent own beliefs about that person, marked tentative/challenged and subjective; never that person's private thoughts |
 | `read_belief_basis` | belief ID returned by inspection in this investigation | Up to two recent interpretations, each with up to two exact source quotes, preserving support/challenge of the proposition |
 
+Staged without notebooks retains its legacy JSON lookup planner. With notebooks,
+Staged offers the selected native/JSON port; Integrated can use either port with
+or without notebooks. **Automatic** native support depends on the provider adapter
+and server chat template; unsupported native tools are not retried over another
+protocol after uncertain dispatch.
+
+`inspect_entity` is available without private notebooks. Its bounded index and
+snapshot freshness contract are described in [observable state tools](npc-observable-state.md).
 With private notebooks enabled, the same rounds also offer `notebook_info`,
 `notebook_read`, `notebook_write`, `notebook_edit` and `notebook_delete`. They read
 or stage changes to this NPC's own freely organized document. Own thoughts,
@@ -87,10 +101,12 @@ remain historical; current host facts take precedence.
 ## Limits and safety of state
 
 - `agent_steps`: 0–3; only Enabled/live mode uses the loop.
-- Each round: one logical model call, at most 768 output tokens (also limited by
-  the selected role and the saved CHPM output budget), up to two local tool operations.
+- Each Staged lookup round: one logical model call, at most 768 output tokens
+  (also limited by the selected role and the saved CHPM output budget), up to two
+  local tool operations. Integrated responses use the decision output budget,
+  because a response may contain the complete proposal.
 - Pinned source excerpts: at most eight distinct sources and 6,000 characters per
-  NPC, shared by search, belief-basis, self and clothing reads. A ninth source
+  NPC, shared by search, belief-basis, self, entity and clothing reads. A ninth source
   returns `evidence_source_limit_reached` without evicting earlier reads. Expanding
   an existing handle remains possible within the character budget. A partially
   available search/basis response reports `partial`; the proposal receives that
@@ -105,7 +121,8 @@ remain historical; current host facts take precedence.
   pair. The ordinary narrator call remains separate. For three active NPCs and
   two agent rounds, reserve **14 CHPM calls**, versus 8 without the agent.
 - The host checks session/observer ownership, source handles, current frame, and
-  present-actor access. Tools read only the current turn's captured clothing views.
+  present-actor access. State/clothing reads use this input's captured views;
+  they do not refresh from a later mutable world or authorize a world action.
 - Psychological updates, looked-up clothing observations and audit records commit
   only with the successfully reviewed reply. Failure leaves saved state unchanged.
   Rewind/regeneration invalidate their source-bound causal history as before.
@@ -131,7 +148,10 @@ remain historical; current host facts take precedence.
 Host envelope version 6 migrates versions 1–5, retaining budgets and state, with
 agent lookups defaulting to off. The core snapshot is independently versioned.
 
-### Cost of the two belief tools
+### Historical measurement: the two belief tools
+
+These figures isolate an earlier change at the revision below. They do not measure
+the current combined instructions, entity index or every subsequent tool addition.
 
 Local measurement against `bc33c1e6` (2026-11-05), using production prompt/schema
 serialization: the planner instructions and schema grow from 1,920 to 2,227 Unicode
@@ -166,7 +186,7 @@ The matrix CLI supports `--agent-steps 0|1|2|3` and `--input-chars`. Plan withou
 network calls first, for example:
 
 ```bash
-python -m backend.engine.chpm.evaluation.matrix_cli plan --suite stress \
+poetry run python -m backend.engine.chpm.evaluation.matrix_cli plan --suite stress \
   --case recall-paraphrase-h40 --agent-steps 2 --input-chars 32000 --output-tokens 4096
 ```
 
@@ -189,5 +209,7 @@ excess request count, invalid JSON or exhausted output) is skipped as one whole
 batch. No partial plan executes. `agent_audit.stop=invalid_plan` and
 `lookup_performed=false` record the degradation; the subsequent proposal receives
 `agent_plan_status`. This is not a zero-hit memory search and authorizes no invented
-knowledge. Transport errors and session-scope violations still stop the turn; no
-transport retry was added.
+knowledge. Transport errors leave this investigation without an additional agent
+retry; Keep playing may recover through the existing explicit simplified-RP
+policy. Session-scope violations remain integrity errors. See
+[failure and continuation rules](chpm-continuation.md).

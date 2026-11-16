@@ -64,9 +64,11 @@ be rejected or ignored by a compatible API even when it returns HTTP 200.
 
 ## Settings and diagnostics
 
-Connection settings display a compatibility notice for each role, outside the
-collapsed generation settings. It explains prompt-only, JSON-only and native
-schema limits. These notices are not inserted into RP messages or notifications.
+The shared OpenAI-compatible endpoint control selects Prompt only, JSON object
+or JSON schema. Per-role connection and generation controls live under
+**General settings**. Native provider policy is selected by the router.
+The policies in this guide describe transport behavior, not a certification of a
+model or server.
 
 Test Model uses one small structured request for every provider. It exercises the
 technical output path while retaining the selected role's temporary endpoint and

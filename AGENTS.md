@@ -1,6 +1,9 @@
 # TaleWeaver Agent Guidelines
 
-Welcome to the TaleWeaver workspace! This project uses the **Antigravity Customization System** with progressive disclosure rules, on-demand skills, and guidelines aligned with [Copilot Instructions](.github/copilot-instructions.md).
+Repository instructions for TaleWeaver contributors and coding agents. Follow the
+checked-in [Copilot Instructions](.github/copilot-instructions.md) and use the
+[documentation index](docs/README.md) to distinguish current guides from research
+and historical reports. Local agent tooling is optional.
 
 > [!IMPORTANT]
 > **Language Rule**: All texts, UI labels, buttons, tooltips, documentation, comments, and agent communications must be kept strictly in **English** until the user explicitly specifies otherwise.

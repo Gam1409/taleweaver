@@ -258,6 +258,7 @@ Limits are shared by upload, processing, editing and import:
 | Primary group name | 80 characters |
 | Tags per entry / tag text | 12 / 48 characters |
 | Related entries / recipients | 12 / 32 |
+| Extraction output | At most 6,144 tokens, also capped by the Generator role's configured output limit |
 
 Quota failures preserve existing accepted records and completed work. Free space
 before explicitly retrying. World Info status and API errors use fixed host-authored
@@ -281,3 +282,8 @@ Publication joins the existing session mutation lease and invalidates the curren
 session's derived recall epoch in the same transaction. Draft upload and processing
 controls remain usable during gameplay. Index retrieval reloads current SQL content
 and scope after embedding awaits, rejecting stale or deleted references.
+
+Portable [agent-runtime corpus references](specs/agent_runtime.md) are authored
+resource declarations, not this session's mutable World Info rows. Importing an
+adventure does not automatically fetch those resources or publish them here;
+portable activation and ingestion adapters remain separate integration work.

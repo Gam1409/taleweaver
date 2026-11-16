@@ -1,7 +1,12 @@
 # Interface parity review
 
-This review compares the interface changes with the current `origin/main` and
-checks the existing data owners, actions and configuration gates. No main-only
+> **Historical interface review snapshot.** The findings, branch names, test counts, failing
+> baselines and browser observations below describe the reviewed revision. They
+> are not current release status or a claim that later changes were retested. See
+> [current session settings](../session-content-settings.md), [World Info](../session-world-info.md) and [frontend transport](../engineering/frontend-transport.md) for active contracts.
+
+This recorded review compared interface changes with its then-current `origin/main` and
+checked the existing data owners, actions and configuration gates. No main-only
 changes were identified at review time. Presentation changes do not introduce a
 new adventure schema, session state store or model-generation pipeline.
 

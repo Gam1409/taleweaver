@@ -1,42 +1,64 @@
-# Planned world features
+# World features: current foundations and remaining work
 
-The current priority is fixing existing behavior and validating a stability release.
-These ideas are a backlog, not features included in that release. Before each change,
-trace its existing implementation, configuration gates and lifecycle tests, then
-extend its current owner wherever possible.
+This is a scope map, not a promise that every idea below is implemented or a fixed
+release order. Before extending a feature, trace its current owner, configuration
+gates, source provenance and lifecycle tests. Reuse that owner rather than adding
+another state ledger or extraction request.
 
-1. **Evolving item state.** Preserve an item's ID, ownership and history as a container
-   becomes filled, a blank sheet becomes written or a matchbox becomes empty. Reuse
-   the physical-condition ledger for supported facts; inspect the gaps for contents,
-   quantities and consumed components before choosing a data-contract extension.
-   This is the first candidate after the current bug fixes.
-2. **Emergent NPC registration.** Extend existing character discovery and learning
-   when a newly encountered character becomes more fully described. Reuse its stable
-   identity and distinguish self-reported information from confirmed world facts.
-3. **Coherent NPC rotation.** Extend Living World/Concordia scheduling so a growing
-   cast does not require analyzing every NPC each turn. Departures, absence and return
-   must preserve identity and have supported world explanations. Off-screen progress
-   and new possessions need explicit provenance rather than invented gap-filling.
-4. **User-authored world rules.** Audit and adapt upstream script support for opt-in
-   triggers, conditions and actions. Examples include a periodic world event changing
-   traits, timed character conditions and a seeded random outcome when entering a
-   doorway. Use existing clocks, script boundaries and rollback mechanisms.
-5. **Additional world knowledge.** Import source-attributed lore into the session's
-   existing RAG memory with clear world/session scope and separation from canonical
-   outcomes already established in play.
-6. **Fact dependency viewer.** A small star button opens a read-only view of facts,
-   sources and their relationships, reusing existing evidence and causal lineage.
-7. **Reference-driven world generation.** Accept source URLs and configurable depth
-   and size limits when collecting history, locations, characters, clothing, goals
-   and items. Show progress and warn before a detailed world may take hours to build.
-   Inspect existing generation jobs and recovery before introducing another pipeline.
-8. **Character LoRA selection.** Allow NPC and player cards to select an installed
-   LoRA file for compatible ComfyUI workflows. Extend existing presets and loader
-   handling; define how multiple depicted characters and unsupported workflows work.
-9. **Catalogue compatibility and example worlds.** Audit remaining upstream catalogue
-   differences, complete compatibility and provide two or three distributable example
-   worlds with different sizes and levels of detail. Keep public descriptions neutral.
+## Foundations already available
 
-Automatic NPC creation, rotation, scripts, lore import, graph UI, reference-driven
-generation, character LoRAs and catalogue expansion remain planned work. The item
-state proposal also needs an existing-functionality audit before implementation.
+- **Evolving item state:** [item identity and current properties](item-state.md),
+  [clothing and placement reconciliation](narrated-item-reconciliation.md) and
+  [persistent physical conditions](persistent-physical-state.md) retain canonical
+  IDs and separate ownership, placement, wear and condition. They do not guarantee
+  correct interpretation of every narrative paraphrase.
+- **Encountered characters:** [NPC introductions and learned cards](npc-introductions.md)
+  resolve supported identities, retain attributed facts and expose current state.
+  This is not unrestricted automatic creation of any person mentioned in prose.
+- **Cast focus and scheduling:** [Living World](living-world-usage.md),
+  [larger CHPM casts](chpm-large-casts.md) and [NPC presence](engineering/npc-presence.md)
+  provide bounded scheduling, focus and absence/return state. They do not prove
+  that every off-screen action or return has a coherent narrative explanation.
+- **Authored mechanics:** the [scripting engine](scripting_engine.md) provides
+  restricted adventure hooks and deterministic rules in supported modes. Parsing
+  or importing a script does not make every upstream API available or enable RPG
+  scripts in VN mode.
+- **Additional world knowledge:** [World Info](session-world-info.md) imports and
+  reviews session-owned facts, with source attribution, groups, tags and bounded
+  [RAG recall](memory-rag.md). It is mutable session knowledge, not an adventure
+  template or automatically resolved portable authored corpus.
+- **Community adventures:** the [catalog and compatibility adapter](adventure-catalog.md)
+  install supported stories and prepare original-project exports. Feature checks
+  still reject unsupported behavior; a recognized envelope version alone is not
+  a compatibility guarantee.
+
+## Remaining design and evaluation
+
+1. **Richer item contents and quantities.** Audit supported properties and
+   condition facts before adding quantities, nested contents or consumed-component
+   semantics. Preserve identity, ownership and source-backed changes.
+2. **Broader character discovery and coherent rotation.** Extend supported
+   discovery when a new character is described without a clear introduction.
+   Keep stable identities and claimed/observed attribution. Off-screen progress,
+   new possessions and returns require supported events rather than gap-filling.
+3. **Further upstream rule compatibility.** Audit unsupported hooks and APIs
+   individually. Use existing clocks, sandbox, changesets and rollback boundaries;
+   compatibility must include failure and mode-specific execution tests.
+4. **Fact dependency viewer.** A read-only view could expose sources, relationships
+   and causal lineage through existing evidence. Graph navigation must not create
+   causal links from similarity or shared wording.
+5. **Reference-driven world generation.** Source URLs, collection depth, asset
+   bounds and progress reporting could extend existing generation/recovery jobs.
+   Importing World Info alone does not generate an adventure or a population.
+6. **Character LoRA and reference pipeline.** Character-card selection of installed
+   LoRAs, consistent portrait/sprite variants and multi-character illustrations need
+   checkpoint/workflow compatibility, identity checks and measured visual results.
+   Existing ComfyUI presets and reference inputs are foundations, not a guarantee
+   of unchanged anatomy, outfit details or framing across models.
+7. **Catalogue coverage and distributable examples.** Continue testing remaining
+   upstream differences and example worlds of different sizes. Preserve source
+   authorship and asset licenses; keep public descriptions neutral.
+
+Source-valid host transitions, model understanding, literary quality and visual
+consistency require different checks. Passing a mocked integration test does not
+establish all four.

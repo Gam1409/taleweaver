@@ -7,7 +7,7 @@ loop or separate notebook inference request.
 
 ## Enable notebooks
 
-In a Visual Novel session, open **Session Memory & Settings → NPC Personality**,
+In a Visual Novel session, open **Session settings → NPC Personality**,
 choose **Enabled**, and check **Private NPC notebooks**. Checking the option
 selects at least one **Agent tool round per active NPC**. Increase the request
 budget if the displayed minimum exceeds the saved limit, then save.
@@ -57,6 +57,11 @@ copied into the narrator's input.
 Notebook strings are inert data. Text resembling code, instructions, URLs or file
 paths is never evaluated or opened by these tools. The host supplies the session
 and NPC scope; the model cannot choose a different notebook owner.
+
+Private means actor-scoped within the story, not encrypted secrecy from the host
+operator. Current documents are in the session database and transferred in save
+archives. Optional raw model telemetry can contain returned notebook pages; the
+bounded metadata-only tool audit is a separate, deliberately redacted view.
 
 ## Local tools
 

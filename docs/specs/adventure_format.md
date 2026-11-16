@@ -1,223 +1,213 @@
-# TaleWeaver Adventure Format Specification
+# TaleWeaver adventure format
 
-This document defines the structure, schema, and field definitions for `.adv` (JSON) and `.adz` (ZIP Bundle) adventure formats used in TaleWeaver.
+This reference describes authored adventure blueprints in the current fork.
+The canonical writer is
+[`AdventureExporter.build_full_manifest`](../../backend/engine/adventure_exporter.py).
+The generated `WorldManifesto` and the simplified authoring/import DTO are related
+inputs, not identical copies of this export envelope.
 
-Feature-specific authored data may use top-level `extensions`. The proposed
-[`agent_runtime` version 1 contract](agent_runtime.md) defines portable adventure
-defaults and NPC seeds; changing session state remains outside adventure blueprints.
+See [catalog compatibility](../adventure-catalog.md) for preparing an original-project
+copy and [portable agent configuration](agent_runtime.md) for extension schemas.
 
----
+## Files and versions
 
-## 1. File Formats
+| Format | Contents |
+| --- | --- |
+| `.adv` | UTF-8 JSON adventure blueprint. Image references remain references. |
+| `.adz` | ZIP with `adventure.adv` at its root and referenced local images below `assets/`. |
+| `.ads` | A separate saved-session archive, including session state and history; not an adventure blueprint. |
+| `.twe` | A separate [single-entity bundle](entity_bundle_format.md). |
 
-- **.adv**: A standalone UTF-8 JSON file containing the complete adventure manifest (`WorldManifesto`).
-- **.adz**: A ZIP archive containing:
-  - `adventure.adv`: The core manifest file (JSON).
-  - `assets/`: A directory containing all localized image assets referenced by relative paths in the manifest (e.g., `assets/cover.png`, `assets/scene_1.webp`).
+The fork writes `format: "TaleWeaver"`, `version: "1.3"`. This top-level version
+is the file-format version. `adventure.version` is the author's release version;
+it is not replaced with the file-format number.
 
----
+Ordinary imports require a supported envelope with a numeric version of at least
+`1.0`. That minimum check is not a promise that every future upstream feature is
+implemented. The community-catalog/public-copy adapter performs additional field
+and script checks and currently audits envelopes through `1.3.1`; unsupported
+APIs and newer envelopes are rejected rather than silently enabled.
 
-## 2. Manifest Structure (`adventure.adv`)
+An ADZ import is bounded to 1,000 entries, 50 MiB per entry, 500 MiB total unpacked
+data and a 100:1 per-entry compression ratio. Paths, duplicates and passive asset
+policy are checked separately. Catalog downloads also have a configurable byte
+budget. Session archives use their own budgets and lifecycle.
 
-The manifest represents the complete blueprint of a generated or exported world.
+## Canonical envelope
 
 ```json
 {
   "format": "TaleWeaver",
   "version": "1.3",
-  "adventure": { ... },
-  "protagonist": { ... },
-  "scenes": [ ... ],
-  "npcs": [ ... ],
-  "objects": [ ... ],
-  "exits": [ ... ],
-  "quests": [ ... ],
-  "awards": [ ... ],
-  "scripts": [ ... ]
+  "adventure": {
+    "origin_id": "69d62242-c2cc-4716-8473-a24502955d35",
+    "title": "The Harbor Archive",
+    "version": "1.0.0",
+    "rule_enforcement_mode": "chat",
+    "language": "en"
+  },
+  "protagonist": {"name": "Alex", "role": "Visitor", "description": "A traveler"},
+  "scenes": [{"id": "HARBOR", "label": "Harbor", "description": "A quiet quay"}],
+  "exits": [],
+  "npcs": [],
+  "objects": [],
+  "quests": [],
+  "awards": [],
+  "sequences": [],
+  "scripts": [],
+  "init_script": null
 }
 ```
 
----
+Exports can also contain authored `visual_presets`, `visual_preset_source`,
+`npc_card_settings`, `clothing_settings`, `narrator_settings`, `world_brief`,
+`world_brief_sources` and valid top-level `extensions`. They are not all features
+of the original project. The compatibility exporter reports or blocks changes
+needed for an original-project copy.
 
-### 2.1 Adventure Metadata (`adventure`)
+## Identity and scope
 
-General configuration, narrative constraints, and gameplay settings.
+New template and session storage IDs are UUIDs. Entity and scene IDs are stable
+adventure-local reference keys; uppercase names such as `ARCHIVIST` or `IRON_KEY`
+are a useful authoring convention, not a requirement to rewrite legacy IDs.
+The same local key may exist in another template or a session copy. Always resolve
+references in their template/session scope.
 
-| Field | Type | Description |
-| :--- | :--- | :--- |
-| `living_world_settings` | `object` or `null` | Optional validated Living World defaults, inherited by new VN sessions. Contains settings only, never session events or private NPC memories. |
-| `title` | `string` | The title of the adventure. |
-| `teaser` | `string` | A short, atmospheric hook/summary (max 300 chars). |
-| `context` | `string` | Foundational world-building lore and background for the AI Game Master. |
-| `plot` | `string` | Compact plot overview and story milestones for AI narrative consistency. |
-| `rules` | `string` | Special world rules (e.g. "Magic requires physical sacrifice", "NPCs cannot be harmed"). |
-| `walkthrough` | `string` | Recommended walkthrough and puzzle solution steps for the GM / agent modes. |
-| `completed_condition` | `string` | Custom condition defining game victory (defaults to all main quests in RPG mode). |
-| `gameover_condition` | `string` | Custom condition defining game over (defaults to player HP <= 0 in RPG mode). |
-| `original_prompt` | `string` | The original prompt used during generation (for documentation purposes). |
-| `image_url` | `string` | Relative path (`assets/...`) or canonical URL (`/data/...`) to the cover visual. |
-| `rule_enforcement_mode` | `string` | `"rpg"` (strict mechanics & dice checks), `"story"` (streamlined mechanics), or `"chat"` (pure narrative). |
-| `time_per_turn` | `number` | In-game minutes elapsed per in-game turn (default: 5). An in-game turn ends when the player changes scene or the active sequence changes; messages within one scene do not advance the base time. |
-| `pacing_minutes` | `number` | Frequency of world background heartbeats / scheduled events. |
-| `clock_enabled` | `boolean` | Whether to track and display in-game time / calendar. |
-| `ingame_timestamp` | `string` | Formatted starting in-game timestamp (e.g. `"Day 1, 08:00"`). |
-| `selected_tone` | `string` | Narrative tone identifier or description (e.g. `"Dark Fantasy"`, `"Cyberpunk"`). |
-| `selected_image_styles`| `array` | List of visual style IDs from the style catalog. |
-| `min_scenes` / `max_scenes` | `number` | Constraints defining world generation scope. |
-| `container_generation_enabled` | `boolean` | Enables generation of containers with nested loot. |
-| `scripts_generation_enabled` | `boolean` | Enables generation of custom event scripts by the World-Builder. |
-| `max_containers` | `number` | Hard cap for container objects generated in the world (`0..30`). |
-| `award_generation_enabled`| `boolean` | Whether custom achievements/awards are generated for this adventure. |
-| `creator` | `string` | Optional author / creator identifier (max 100 chars). |
-| `copyright` | `string` | Optional copyright notice (max 100 chars). |
-| `license` | `string` | Optional license string or identifier (max 100 chars). |
-| `init_script` | `string \| null` | Optional global Python initialization script executed when a new game session starts. Sets up starting variables, narrative messages, and shared helper functions. |
+`adventure.origin_id` identifies the story across export, installation and updates.
+Existing origin keys are preserved; an unpublished template without one receives
+a repeatable UUID on export. Catalog comparisons canonicalize UUID spellings and
+retain exact, case-sensitive non-UUID legacy keys. Titles do not identify a story.
+See [storage identifiers](../storage-identifiers.md).
 
----
+## Adventure metadata
 
-### 2.2 Protagonist (`protagonist`)
+The following table describes commonly used fields, not every exporter property.
+Use the writer and current model definitions when implementing a transfer tool.
 
-The baseline state and attributes of the player character.
+| Field | Meaning |
+| --- | --- |
+| `title`, `teaser` | Display title and hook; editor limits are 50 and 300 characters respectively. |
+| `version`, `origin_id` | Authored release version and stable story identity. |
+| `creator`, `copyright`, `license`, `license_url` | Story attribution and publication license. |
+| `language` | Authored content language; a session can select its own subsequent content language. |
+| `original_prompt`, `plot`, `rules`, `intro_text`, `walkthrough` | Authored generation/narrative material. The generated input can use aliases such as `context`; exports use their canonical fields. |
+| `image_url` | Cover reference; ADZ packing localizes eligible local images. |
+| `rule_enforcement_mode` | `rpg`, `story`, `chat` or `vn`. Legacy `strict_rules` can affect non-VN mechanics selection. |
+| `time_per_turn`, `pacing_minutes`, `max_time_per_turn`, `clock_enabled` | Story-clock/pacing controls, not wall-clock playtime. See the mode and time guides. |
+| `starting_timestamp`, `time_system`, `time_config` | Starting game minute and calendar configuration. `ingame_timestamp` is not the canonical export field. |
+| `selected_tone` | Selected tone object or null. |
+| `selected_image_styles` | Array of selected style objects. |
+| `generate_scene_images`, `generate_npc_images`, `generate_item_images` | Generation preferences; actual provider/workflow configuration is separate. |
+| `min_*`, `max_*`, `*_generation_enabled` | Supported world-builder scope and generation switches. These are not new gameplay permissions. |
+| `living_world_settings`, `npc_personality_settings` | Validated defaults inherited when creating an appropriate new session; not live events, minds or notebook contents. |
+| `can_damage_npcs`, `npcs_can_damage_protagonist`, `game_over_rules` | Mode-dependent mechanical preferences. |
+| `completed_condition`, `gameover_condition`, `*_guard_expression` | Narrative ending conditions and supported deterministic guards. |
 
-| Field | Type | Description |
-| :--- | :--- | :--- |
-| `name` | `string` | Character name. |
-| `role` | `string` | Character class or narrative role (e.g., `"Rogue"`, `"Arcane Scholar"`). |
-| `description` | `string` | Physical description, personality, and backstory. |
-| `profile_image` | `string` | Path or URL to the protagonist character portrait. |
-| `hp` / `max_hp` | `number` | Starting and maximum health points (default: 200). |
-| `stamina` / `mana` | `number` | Secondary resources for physical/magical actions. |
-| `stats` | `object` | Core RPG attributes: `strength`, `dexterity`, `intelligence`, `wisdom`, `charisma`, `armor_class`. |
-| `starting_inventory` | `array` | Initial list of item objects or item IDs carried by the protagonist. |
-| `starting_equipment` | `object` | Mapping of equipment slots (e.g. `"MainHand"`, `"Body"`) to starting items. |
+VN normalizes RPG combat, quests, awards, sequences and mechanical ending gates
+out of its template. It still supports structured progression and persistent
+world/item state. See [VN mode](../visual-novel-mode.md),
+[VN time](../vn-time-passages.md) and
+[the mode policy](../../backend/core/game_modes.py).
 
----
+## Protagonist and NPCs
 
-### 2.3 Scenes (`scenes`)
+`protagonist` defines the starting avatar. Its exported fields include `name`,
+`role`, `description`, `goal`, `character`, `profile_image`, vitals and maxima,
+`exp`, the scalar attributes (`strength`, `dexterity`, `intelligence`, `wisdom`,
+`charisma`, `armor_class`), additional `stats`, `status_effects`,
+`starting_inventory` and `starting_equipment`. Supported identity/appearance fields
+are handled by their existing models and clothing projections.
 
-The physical locations composing the world map.
+An NPC record includes a stable `id`, `name`, `description`, authored `character`
+and `goal`, initial location, inventory/equipment, appearance, visibility and
+supported metadata/hooks. Exports use stored `current_scene_id`; generated
+blueprints commonly use `start_scene_id`, which the application mapper resolves.
+NPC inventory is possession, not a list of items that have already been dropped.
 
-| Field | Type | Description |
-| :--- | :--- | :--- |
-| `id` | `string` | Unique uppercase slug (e.g., `"DUNGEON_CELL"`, `"TAVERN_MAIN"`). |
-| `label` | `string` | Human-readable scene name displayed in the UI. |
-| `description` | `string` | Sensory, atmospheric description of the location. |
-| `image_url` | `string` | Path or URL to the background scenery image. |
+`metadata_json.personality_profile` contains authored categorical identity.
+`metadata_json.agent_runtime` is a portable seed namespace described in
+[its own spec](agent_runtime.md). Current psychological experience, private
+notebooks and session memory are not NPC blueprint fields.
 
----
+## Scenes and exits
 
-### 2.4 Exits (`exits`)
+Scenes contain `id`, `label`, `description`, `image_url`, optional
+`decorative_objects` and scene-entry/leave hooks. Generated inputs can use `name`
+for the display label. A scene's description is not an interactable item record.
 
-Connections and passageways between scenes.
+Exits connect `from_scene_id` to `to_scene_id` and can define `label`,
+`exit_type`, `is_locked`, `lock_description`, `code_to_unlock`, `item_to_unlock`,
+`rule_to_unlock`, `unlock_expression` and supported traversal/unlock hooks.
+Stored exits are directional edges. The generator's `is_bidirectional` convenience
+flag can create a reverse edge; do not infer a reverse edge from a display label.
+Both endpoints must refer to scenes in the same world scope.
 
-| Field | Type | Description |
-| :--- | :--- | :--- |
-| `from_scene_id` | `string` | Origin scene ID. |
-| `to_scene_id` | `string` | Destination scene ID. |
-| `label` | `string` | Descriptive name of the exit (e.g., `"Heavy Iron Portcullis"`). |
-| `exit_type` | `string` | `"one_way"` or `"bidirectional"` (default: `"bidirectional"` for normal passages). |
-| `is_bidirectional` | `boolean` | Whether the passage can be traversed in both directions (convenience boolean, matches `exit_type == "bidirectional"`). |
-| `is_locked` | `boolean` | Whether the exit is initially locked/blocked. |
-| `code_to_unlock` | `string \| null` | Code/word required to unlock (case-insensitive in gameplay). |
-| `item_to_unlock` | `string \| null` | Key item ID required in player inventory to open the exit. |
-| `rule_to_unlock` | `string \| null` | Special rule or puzzle description required for unlocking. |
-| `lock_description` | `string` | Narrative clue or description when encountering the lock. |
+## Objects, clothing and conditions
 
----
+Object records include identity, description, `item_type`, `is_portable`, initial
+location/placement, visibility, inventory and type-specific fields. The current
+item-creation editor uses `DEFAULT` for an ordinary item and also offers
+`WEAPON`, `WEARABLE`, `CONSUMABLE`, `READABLE`, `CONTAINER`, `SWITCH` and
+`CONSTRUCTABLE`. Generated or imported worlds can retain additional established
+type strings such as `STATIC`, `PICKABLE`, `TOOL` and `KEY`. `ITEM` also appears
+as a display fallback; it is not the ordinary-item type selected by the current
+editor.
 
-### 2.5 NPCs (`npcs`)
+| Concern | Canonical authored representation |
+| --- | --- |
+| Equipment | `wearable_slots`, supported scalar `stat_modifier_*` fields, damage/cost fields. |
+| Containers | `inventory`, lock state and `code_to_unlock`, `item_to_unlock`, `rule_to_unlock`, `unlock_expression`. Import supports the established metadata mapping. |
+| Readable items | `text_log_content`, `text_log_format`, read hooks. |
+| Switches | Declared states, initial state, transitions, gates/outcomes and supported success/failure hooks. See the editor and switch schemas. |
+| Construction | `combination_ingredients`, combination logic, craft guards and hooks. |
+| Clothing | Canonical item identity plus authored clothing metadata and the actor's `visual_profile`; coverage/wear does not replace possession ownership. |
 
-Non-Player Characters inhabiting the world.
+Do not substitute invented fields such as `unlock_code`, `switch_actions` or a
+single `stat_modifiers` object for the current export mapping. A compatibility
+adapter must explicitly map any external aliases.
 
-| Field | Type | Description |
-| :--- | :--- | :--- |
-| `id` | `string` | Unique uppercase slug (e.g., `"NPC_BLACKSMITH"`). |
-| `name` | `string` | Character name. |
-| `description` | `string` | Appearance, demeanor, and dialogue style. |
-| `current_scene_id` | `string` | Initial location scene ID where the NPC is positioned. |
-| `spatial_position` | `string` | Placement in scene (e.g., `"behind the counter"`, `"near the fireplace"`). |
-| `npc_type` | `string` | `"HUMANOID"`, `"ANIMAL"`, `"MONSTER"`, or `"BEING"`. |
-| `movement_type` | `string` | `"STATIONARY"` or `"MOVABLE"`. |
-| `voice` | `string \| null` | Google / ElevenLabs TTS voice identifier for dialogue. |
-| `hp` / `mana` / `stamina` | `number` | NPC combat and interaction resources. |
-| `inventory` | `array` | Items currently held or dropped by the NPC. |
-| `is_hidden` | `boolean` | If true, NPC is not immediately visible without inspecting/searching. |
+Live mutable item properties and physical conditions are session state with
+source provenance; they do not require replacing the item's identity. See
+[item state](../item-state.md), [physical state](../persistent-physical-state.md)
+and [clothing/state reconciliation](../narrated-item-reconciliation.md).
 
----
+## Quests, sequences and awards
 
-### 2.6 Objects (`objects`)
+Quests use `id`, `title`, `description`, `goal`, `impact`, `exp_reward`, `status`
+(`open`, `completed`, `failed`) and optional `required_*`/`guard_expression` gates.
+An `is_main` boolean is not the canonical quest schema. Sequences provide ordered
+chapters with their own entry/end conditions, hooks and rewards.
 
-Interactive elements, items, containers, and state machines.
+Awards use `key`, `title`, `description`, `tier` (`bronze`, `silver`, `gold`,
+`negative`), `requirement` and optional deterministic gates. An exported
+`is_earned` value is accepted as blueprint data; it does not grant the receiving
+user an achievement. Earned status is resolved from that user's progression.
 
-| Field | Type | Description |
-| :--- | :--- | :--- |
-| `id` | `string` | Unique uppercase slug (e.g., `"CHEST_GOLD"`, `"LEVER_GATE"`). |
-| `name` | `string` | Item or object display name. |
-| `item_type` | `string` | Classification: `"WEAPON"`, `"WEARABLE"`, `"CONSUMABLE"`, `"KEY"`, `"READABLE"`, `"CONTAINER"`, `"SWITCH"`, or `"CONSTRUCTABLE"`. |
-| `description` | `string` | Physical and visual description. |
-| `is_portable` | `boolean` | `true` for portable inventory items; `false` for static scene objects. |
-| `spatial_position` | `string` | Location in scene (e.g., `"resting on the wooden pedestal"`). |
-| `wearable_slots` | `array` | Valid equipment slots (e.g., `["Head"]`, `["MainHand"]`, `["Body"]`). |
-| `stat_modifiers` | `object` | Attribute buffs/debuffs (e.g., `{"strength": 2, "armor_class": 1}`). |
-| `inventory` | `array` | Nested items contained inside `CONTAINER` objects. |
-| `is_locked` | `boolean` | Lock state for `CONTAINER` objects. |
-| `unlock_code` | `string \| null` | Secret code or combination required to open the container. |
-| `unlock_item` | `string \| null` | Item ID required to unlock the container. |
-| `unlock_rule` | `string \| null` | Narrative condition or requirement to open the container. |
-| `switch_state` | `string \| null` | Current active state for `SWITCH` objects (e.g., `"OFF"`). |
-| `switch_states` | `array \| null` | List of valid states for `SWITCH` objects (e.g., `["OFF", "ON"]`). |
-| `switch_actions` | `array \| null` | Action definitions triggered upon state transitions. |
-| `combination_ingredients`| `array` | Item IDs required to craft/assemble `CONSTRUCTABLE` objects. |
-| `reveals_item_id` | `string` | Item spawned or revealed upon interaction/use. |
+## Scripts and extensions
 
----
+Standalone `scripts` records declare `id`, `trigger`, `code`, optional name,
+description and target. `init_script` is a top-level canonical field. Its supported
+non-VN session initialization and helper-definition behavior are described in the
+[scripting reference](../scripting_engine.md). Importing a file stores authored
+scripts; it is not a request to execute arbitrary server Python.
 
-### 2.7 Quests (`quests`)
+The `extensions` envelope accepts up to 32 valid namespace objects, with a
+256 KiB UTF-8 serialized-value budget. Unknown/null nested values can survive
+transport without becoming executable or activated configuration. See
+[`agent_runtime`](agent_runtime.md) for the exact normalization and preflight rules.
+Do not embed mutable session state, credentials or provider endpoints in a
+portable adventure contract.
 
-Narrative and mechanical objectives.
+## Validation and transfer lifecycle
 
-| Field | Type | Description |
-| :--- | :--- | :--- |
-| `id` | `string` | Unique uppercase slug (e.g., `"QUEST_ESCAPE_PRISON"`). |
-| `title` | `string` | Quest title shown in the quest tracker. |
-| `description` | `string` | Narrative briefing and lore context. |
-| `goal` | `string` | Concrete completion requirement for the logic engine. |
-| `is_main` | `boolean` | `true` for main story objectives; `false` for side quests. |
-| `exp_reward` | `number` | Experience points granted to the protagonist upon completion. |
+Structural checks, authoring validation and AI-assisted review are available;
+passing an envelope/import check does not prove graph connectivity, script
+semantics or identical model behavior. Run the
+[authoring validator](../adventure-authoring-validation.md) before sharing.
 
----
-
-### 2.8 Awards (`awards`)
-
-Achievements players can unlock through specific actions.
-
-| Field | Type | Description |
-| :--- | :--- | :--- |
-| `key` | `string` | Unique identifier (e.g., `"AWARD_MASTER_THIEF"`). |
-| `title` | `string` | Achievement display title. |
-| `tier` | `string` | Achievement rank: `"bronze"`, `"silver"`, or `"gold"`. |
-| `requirement` | `string` | Exact trigger condition evaluated during turn execution. |
-
----
-
-### 2.9 Scripts (`scripts` & `init_script`)
-
-Custom sandboxed event scripts reacting to game hooks and global initialization logic. For full syntax, API references, and examples, see the [Scripting Engine Guide](../scripting_engine.md).
-
-| Field | Type | Description |
-| :--- | :--- | :--- |
-| `id` | `string` | Unique uppercase slug (e.g., `"SCRIPT_LEVER_PUZZLE"`). |
-| `name` | `string` | Human-readable title for the script. |
-| `trigger` | `string` | Event hook: `"on_init"`, `"on_turn_start"`, `"on_enter_scene"`, `"on_interact"`, `"on_logic_pass_done"`, `"on_narration_done"`, or `"on_turn_end"`. |
-| `target_id` | `string \| null` | Optional target scene ID or entity ID that filters when this script fires. |
-| `code` | `string` | Safe Python script utilizing the sandboxed `tw` GameContext API. |
-| `description` | `string \| null` | Optional narrative/technical description of the script logic. |
-
----
-
-## 3. Best Practices & Guidelines
-
-1. **Identifiers**: Always use alphanumeric uppercase slugs separated by underscores (e.g. `TEMPLE_ALTAR`, `KEY_RUSTY`).
-2. **Relative Assets**: When exporting or creating `.adz` packages, keep image references relative to `assets/` (e.g. `assets/chest.png`).
-3. **Container Nesting**: Containers should contain valid item objects with appropriate portability and metadata.
-4. **Validation**: All manifests are validated against graph connectivity (every scene reachable via exits) before game session startup.
+Normal imports use existing transactions and source/asset checks. A failed import
+must not replace the previously valid template. Catalog updates create another
+template release so existing playthroughs retain their snapshots and assets.
+Full saved-session history, World Info and notebooks belong in a session transfer,
+not in this blueprint. Export and publication preparation are separate actions;
+preparing a compatible local copy does not publish it online.

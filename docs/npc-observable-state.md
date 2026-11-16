@@ -4,6 +4,8 @@ In **Session settings → NPC Personality**, choose **Enabled** and at least one
 **Agent tool round per active NPC**. `inspect_entity` is available with or without
 private notebooks. Staged and Integrated use the same read-only projection;
 native function calls and JSON compatibility retain the existing request limits.
+Staged without notebooks uses its legacy JSON planner; the selected native/JSON
+memory port applies to notebook-enabled Staged and to Integrated operation.
 
 ## Read a current entity
 

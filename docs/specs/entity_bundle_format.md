@@ -26,13 +26,25 @@ assets/image.<ext>  # optional image (png, jpg, webp)
 | Field    | Description |
 |----------|-------------|
 | `kind`   | `protagonist`, `npc`, or `item`. |
-| `entity` | NPC/item: the `WorldEntity` columns (without `template_id`, `session_id`, `image_url`). Protagonist: profile, vitals, attributes, `stats` (incl. scripts and special actions), and `status_effects`. |
+| `entity` | NPC/item: the supported `WorldEntity` transfer fields, excluding database scope, timestamps and image location; the authored `id` is included as a suggested new key. Protagonist: profile, vitals, attributes, `stats` (incl. scripts and special actions), and `status_effects`. |
 | `image`  | Path of the image entry inside the ZIP, or `null`. |
 
 ## Import Behaviour
 
-Endpoints: `GET /api/adventures/{id}/editor/transfer/protagonist`, `GET /api/adventures/{id}/editor/transfer/entity/{entity_id}`, `POST /api/adventures/{id}/editor/transfer/import`.
+These owner-authorized editor endpoints operate on templates, not a live session:
 
-- **NPC / item**: always created as a new entity. On an ID clash a suffix is added (`SWORD` → `SWORD_2`). If the original scene does not exist, the entity is placed in the start scene. References to scenes/items that do not exist in the target adventure (`allowed_scenes`, `inventory`, `reveals_item_id`) are removed; missing crafting ingredients are only reported. All adjustments are returned as `warnings`.
-- **Protagonist**: replaces the profile, stats, and portrait of the current protagonist. Inventory and equipment stay unchanged, as they reference adventure-specific items.
-- Images are checked with Pillow and must be PNG, JPEG, or WEBP. Size limits: 25 MB per bundle file, 20 MB per entry, max. 8 entries.
+`GET /api/adventures/{id}/editor/transfer/protagonist`, `GET /api/adventures/{id}/editor/transfer/entity/{entity_id}`, `POST /api/adventures/{id}/editor/transfer/import`.
+
+- **NPC / item**: always created as a new entity. The suggested key is normalized to uppercase ASCII letters/digits/underscores and a 30-character bound; on a clash a suffix is added (`SWORD` → `SWORD_2`). If the original scene does not exist, the entity is placed in the start scene. References to scenes/items that do not exist in the target adventure (`allowed_scenes`, `inventory`, `reveals_item_id`) are removed; missing crafting ingredients are only reported. All adjustments are returned as `warnings`.
+- **Protagonist**: replaces the supported profile and stats; a bundled image replaces the portrait, while an absent image keeps it. Inventory and equipment stay unchanged, as they reference adventure-specific items.
+- Images are checked with Pillow and must be PNG, JPEG, or WEBP. Limits: 25 MiB per bundle, 20 MiB per entry, a 1 MiB manifest, at most 8 entries and a 100:1 compression ratio.
+
+Opaque metadata, including an NPC's portable `agent_runtime` seed, is data rather
+than activation. Transfer sanitizes known world references; it does not migrate
+arbitrary third-party references inside opaque namespaces. Review copied seed
+relationships against the target adventure before activation or public-copy
+preparation. See the [runtime contract](agent_runtime.md).
+
+The format owner is [`entity_bundle.py`](../../backend/engine/entity_bundle.py);
+template mapping and reference warnings live in
+[`entity_transfer_service.py`](../../backend/api/routes/adventures/entity_transfer_service.py).

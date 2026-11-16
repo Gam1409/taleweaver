@@ -11,7 +11,11 @@ saved. **Use default** resolves and saves that preference again. The previous
 browser-only preference no longer overrides the server. Local storage only
 mirrors the current language for audio playback.
 
-## First-stage coverage
+## Coverage
+
+The saved selector supports Arabic, Chinese (Simplified and Traditional), English,
+French, German, Italian, Japanese, Korean, Portuguese, Russian and Spanish. Names
+and locale aliases are normalized by `backend/core/content_language.py`.
 
 - New storyteller narration, dialogue, combat narration and closing epilogues.
 - Action ideas, including explicit `/shuffle` requests. Changing language replaces
@@ -25,11 +29,18 @@ mirrors the current language for audio playback.
   checkpoint does not rewind the language preference; old suggestions are replaced
   when the session snapshot reloads.
 
-The existing UI labels, system notifications, stored world descriptions, opening
-text, quest descriptions and English internal memories are unchanged. This is not
-a translation of an existing world. Text-log translation remains available via
-its existing button. Original entity names and speaker identifiers are preserved
-so portraits, commands and game objects keep their identity.
+Changing the language does not translate existing UI labels, stored world
+descriptions, opening text, quests or earlier memories. Compression can still
+produce its English chronicle under the separate memory contract. Text-log
+translation remains available via its existing button. Original entity names and
+speaker identifiers are preserved so portraits, commands and game objects retain
+their identity.
+
+The saved Bable Fish choice also selects locally bundled session fonts: Alegreya
+Sans for Latin/Cyrillic, Baloo Bhaijaan 2 for Arabic, M PLUS Rounded 1c for Japanese,
+and Noto Sans SC, TC or KR for the corresponding scripts. Mixed-language prose
+keeps its text direction without reversing interface controls. See the
+[bundled font inventory and licenses](../frontend/public/assets/fonts/session/README.md).
 
 ## Technical contract
 
@@ -66,27 +77,18 @@ language preference, not gameplay content.
 6. Compare inventory IDs, effects, locks and quest outcomes before and after language changes.
 7. Simulate a failed settings request: the UI should report it and retain the prior choice.
 
-Automated tests use mocked models and an isolated database. Live multilingual
-quality testing with the user's models is still needed before merging into main.
+Automated tests use mocked models and an isolated database. They verify language
+propagation and persistence, not the multilingual quality of a particular model.
 
-## Validation on the experimental branch
+## Implementation and verification
 
-- Backend regression selection: 242 passed, three failed. The same three tests
-  fail on the unmodified base commit `f0c3e21`: the consumable import, readable
-  inventory snapshot and manifest starting-scene fixtures are rejected as legacy
-  adventures. These failures precede this change.
-- Additional copy/checkpoint language regression: one passed (243 passing checks
-  in total, including 28 new language cases).
-- Production frontend build passed. `vue-tsc --noEmit` reports the same diagnostic
-  set as the unmodified base; no new diagnostics were introduced.
-- New Python modules, migration and tests pass Ruff check and format check.
-  Checking every touched module still reports existing lint findings in
-  `sessions.py`, `session_importer.py` and `turn_adventure_gen.py`, plus existing
-  formatting differences in the first two. Comparison with the base found no new
-  lint findings; broad unrelated reformatting/refactoring was excluded.
-- Alembic upgrade/downgrade/upgrade on a temporary database preserved an existing
-  session and initialized its new language column to NULL.
-- Chromium against the production build and an isolated API/database passed:
-  repeated Russian/Spanish/Japanese selection, reload persistence, Russian Ideas,
-  stale local-storage preference handling, separate-session isolation and an
-  injected HTTP 503 during save. No browser runtime errors were observed.
+- `backend/core/content_language.py`: accepted names, locale aliases and prose policy.
+- `backend/api/routes/adventures/session_language.py`: owner-scoped persistence.
+- `frontend/src/components/game/BableFishSelector.vue`: current session selector.
+- `frontend/src/utils/sessionTypography.ts`: language/script font mapping.
+- `tests/test_session_content_language.py`: scope, language propagation, copy and
+  checkpoint regression coverage.
+
+The language column and its migration are already part of main. Earlier branch
+comparison counts, inherited lint errors and pre-merge status are historical
+results rather than current installation requirements.

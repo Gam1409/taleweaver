@@ -1,5 +1,10 @@
 # Clothing integration audit
 
+> Historical audit with subsequent implementation notes. Reproductions, suggestions
+> and test counts refer to the recorded revision, not a claim that every listed gap
+> remains open in main. Use [the current clothing guide](character-appearance-and-clothing-plan.md)
+> and [physical-state guide](persistent-physical-state.md) for operational behavior.
+
 The VN clothing pipeline is connected: the continuity request receives `clothing_context`
 and structured wardrobe action schemas, accepted actions update state, narration is rebuilt
 after wardrobe changes, and image composition uses saved appearance and visible clothing.

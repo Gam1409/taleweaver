@@ -1,5 +1,10 @@
 # RP state reconciliation: investigation and free-endpoint pilot
 
+> Historical investigation at the revision named below. Main subsequently gained the
+> [physical-condition ledger](../persistent-physical-state.md), [item state](../item-state.md)
+> and [observable-state tool](../npc-observable-state.md). The original pilot results
+> and proposed architecture below are retained as evidence, not the current feature inventory.
+
 Date: 2026-11-07. Application inspected at `059089cf`. This report proposes future state work; it does not claim a physical-condition ledger has been implemented.
 
 ## Finding

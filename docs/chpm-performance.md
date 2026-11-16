@@ -43,8 +43,11 @@ durations. These measurements do not establish a quality or speed benchmark.
 Source checking and database reads run sequentially against the same leased turn.
 The read transaction is released before independent cognition starts. Each job has
 its own observer inputs and psychological projection. Results are merged in actor-ID
-order only after all jobs succeed. The existing shared narration review and completed
-turn transaction still govern psychological persistence and publication.
+order after the jobs finish. Under Keep playing, a completed invalid proposal may
+defer that actor if a usable peer survives; other failures retain their shared
+rollback boundary. The same policy applies sequentially. Shared narration review
+and the completed-turn transaction still govern persistence and publication;
+see [partial analysis recovery](chpm-continuation.md).
 
 The same global request counter and single shared proposal retry apply. Outstanding
 normal requests retain their reserve even when other NPCs finish earlier. Concurrent

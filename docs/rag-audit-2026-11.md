@@ -1,5 +1,11 @@
 # RAG audit and implemented corrections
 
+This November 2026 audit is a historical change record, not an exhaustive status
+report for every later revision. For current setup, bounds and data ownership see
+[session memory](memory-rag.md), [World Info](session-world-info.md) and
+[semantic NPC memory](chpm-semantic-memory.md). The findings and test evidence below
+describe this audit's implementation wave.
+
 Scope: public session recall and optional observer-scoped NPC Personality recall.
 Canonical SQL history, source-bound psychology and current inventory/clothing
 remain authoritative. No live or paid model requests were used for these fixes.

@@ -142,8 +142,9 @@ bypass recovery. Backups of world state do not rewind remote inference reservati
 
 This is **not a distributed inference scheduler**. Use one backend worker and one
 backend process per journal. Other applications sending requests to the same GPU
-are outside this queue. Disabling the flag intentionally restores the old unguarded
-behavior; only do so after stopping unresolved remote work. The reservation itself
+are outside this queue. With no explicit role policies, disabling the legacy flag
+restores the old unguarded behavior; only do so after stopping unresolved remote
+work. Configured per-role pools still apply when that flag is off. The reservation itself
 opens no SQL transaction and performs no world mutation. Recoverable gameplay turns
 use separate durable checkpoints to release SQL writers during model waits; see
 [review remediation](engineering/review-remediation-2026-10.md).
@@ -164,9 +165,11 @@ embeddings vs narration, streaming lifetime, deadlines, cancellation, late resul
 crash recovery, stale/admin-only acknowledgement, disk failure and the disabled path.
 No live GPU or real-browser E2E test was performed.
 
-Recorded checks for this step: the final Living World/replay/provider selection
+Historical initial-rollout evidence: the final Living World/replay/provider selection
 passed 144 tests, and the diagnostics/admission selection passed 57 (these selections
 overlap). The earlier router/retry/embedding selection passed 139 tests. Ruff and
 format checks passed for all 13 modified/new Python files, mypy passed for the five
 new inference/API modules, and the frontend production build passed. The full
-repository suite was not rerun; dependency deprecation and bundle-size warnings remain.
+repository suite was not rerun for that rollout. These counts describe that change,
+not the current checkout's CI result; use the current workflow reports for release
+verification.

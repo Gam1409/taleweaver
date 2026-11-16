@@ -3,8 +3,10 @@
 Windows, macOS and Linux share one supervisor and the same web application.
 Docker remains the server-oriented fourth distribution; it has no desktop tray.
 The supervisor starts one owned backend process, which serves the built frontend.
-Python, Node.js and model weights do not need to be installed by desktop users.
-AI and image providers still use the endpoints configured in Administration.
+The package includes its Python runtime and built frontend, so Python and Node.js
+are not required on the desktop host. Model weights are not bundled: local
+inference servers need their own models, or use a configured hosted provider.
+AI and image providers use the endpoints configured in Administration.
 
 ## Starting and controlling the application
 
@@ -34,7 +36,9 @@ The default profile uses the OS application-data directory:
 
 `server.env` stores generated signing/encryption keys; `data/` holds SQLite,
 sessions and media; `memory/` holds RAG; `logs/desktop.log` includes server output.
-Logs rotate at 5 MB with two backups. Secrets and logs are outside public media.
+The desktop log rotates at 5 MiB with two backups. System diagnostics and rejection
+traces, when enabled, use `logs/diagnostics/` within the profile. Secrets and logs
+are outside public media.
 Keys are generated only for a new profile and persist across updates. A database
 without its original keys is rejected instead of silently rekeyed. Back up the
 whole profile before updating. Replacing the application bundle does not replace
@@ -72,16 +76,15 @@ and `SHA256SUMS` to a draft or published release without rebuilding the applicat
 Manual runs retain the release status unless **promote** is explicitly enabled;
 promotion publishes it, removes Pre-release and marks Latest after uploads complete.
 
-The requested `v0.7.1-beta` release also has automatic completion monitoring, pinned
-to commit `5c291c971ddac8fbda26ed8060b57fc2fad4a7d3`. Each successful required workflow
-completion rechecks all four gates, allowing whichever finishes last to publish
-the verified archives and promote that release. Pending or failed checks keep its
-status unchanged. Concurrent completion events are serialized; a recorded build
-attempt and existing assets make repeat notifications idempotent. Promotion is a
-one-time action; later notifications do not reclaim Latest from a newer release.
-The default-branch
-automation does not move the existing version tag. A manual run can bootstrap the
-same check if all source workflows had finished before monitoring was installed.
+Successful required workflow completions also trigger delivery checks for the
+workflow's default release target, currently `v0.7.1-beta`. The verifier resolves
+the existing tag to its exact commit; it does not use a hard-coded source SHA or
+move the tag. It accepts successful trusted runs at that commit and requires the
+latest run of each gate. Pending or failed checks retain the release status.
+Concurrent events are serialized. Recorded build/promotion stamps make repeats
+idempotent; later notifications do not reclaim Latest from a newer release.
+Use a manual run with an explicit tag for another release. Promotion is opt-in for
+manual runs; automatic completion events use the workflow's promotion setting.
 
 For a local build with Python 3.12 and Node 22:
 

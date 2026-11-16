@@ -32,18 +32,19 @@ Both reading and refreshing suggestions check session ownership.
   duplicate clicks, identical output, errors, timeout, and discarded late results.
 - Chromium checks exercised the actual action bar and game socket with mocked
   HTTP responses, including typed commands, Russian text, and mobile layout.
-- The game-loop and content-language regression suites passed. The production
-  frontend build passed. Type checking still has the same 129 distinct pre-existing
-  diagnostics after normalizing source line numbers; no new diagnostics were added.
+- The game-loop and content-language suites cover integration with normal turns.
+  Current lint, type, test and build checks are defined in
+  [the CI workflow](../.github/workflows/ci.yml); old branch diagnostic counts are
+  not the current type-checking baseline.
 
 No live model or image server was used for these checks.
 
-## LiteLLM cancellation warning
+## Recorded LiteLLM cancellation investigation
 
 `coroutine 'BaseLLMHTTPHandler.async_completion' was never awaited` is separate
 from Alembic's informational `Will assume non-transactional DDL` message.
 TaleWeaver awaits its asynchronous completion calls. A cancellation race was
-reproduced in the installed LiteLLM 1.103.1 dispatcher with a mocked provider and
+reproduced against LiteLLM 1.103.1 with a mocked provider and
 no network: cancellation during `run_in_executor` can leave the returned provider
 coroutine unconsumed. This does not prove the cause of any particular user log.
 

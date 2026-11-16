@@ -117,7 +117,10 @@ RGB or actual TTS behavior. Those need the corresponding integration paths and,
 where necessary, separate live observation. Keep unrun cases and unrated outputs
 explicit rather than interpreting technical success as psychological success.
 
-## Initial live findings
+## Historical initial live findings
+
+These are results of the first smoke investigation, not a current release-wide
+quality score or evidence that every later tool/workflow change was live-tested.
 
 The first smoke investigation covered **four distinct fixture contexts**, with
 repeated baseline/candidate attempts: **14 context executions and 56 recorded

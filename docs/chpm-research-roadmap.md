@@ -5,6 +5,12 @@ references for this work. Original files are retained unchanged with SHA-256
 checksums. Their research claims and planned test statuses are not implementation
 claims for TaleWeaver.
 
+This page maps research concepts to current implementation and records historical
+evaluation limits. For current settings, workflow and tool contracts start with
+[the module guide](chpm-pilot.md), [decision workflows](npc-decision-workflows.md)
+and [observable state](npc-observable-state.md). Completed host tests are not
+evidence of human-like emotion or autonomous experience.
+
 ## Development objective
 
 NPC decisions should follow their own authored identity, goals, accessible
@@ -68,12 +74,16 @@ by default. Off and shadow modes do not advance the new core.
   the pilot's separate source-bound agenda. Explicit identity migration is not yet
   available; disabling/re-enabling CHPM does not reset the baseline.
 - The current witnessed host frame contains the observer's authoritative scene,
-  visible co-present NPC IDs, own possessions and known worn item IDs. Changes
+  visible co-present NPC IDs, own possessions, worn item IDs, own current conditions
+  and admitted scene facts. Changes
   since the previous observation form a separate witnessed source, with unknown
   causes. It excludes hidden actors, other inventories, private memories, scene
   prose and unverified outcomes. See [world perception](chpm-world-perception.md). Approved player excerpts
   and reviewed assistant speech are stored as **reports**, not world facts.
-  Observations begin when enabled; past events are not reconstructed automatically.
+  New observations begin when enabled. Bounded [source recovery](chpm-source-continuity.md)
+  can recover eligible missed reports; it does not invent past perceptions or
+  retrospective psychological decisions. Optional [state inspection](npc-observable-state.md)
+  exposes current actor-filtered facts through tools, not another canonical ledger.
 - The full state lives in `entity_states.__chpm__.minds`: original genesis,
   accepted journal, projection and message bindings. Pending observations remain
   turn-local until the reviewed reply is committed. Failed turns cannot publish
@@ -96,8 +106,9 @@ by default. Off and shadow modes do not advance the new core.
 - Limits remain explicit: 32 psychological identities, 256 active events and
   8,192 total archived/active events per observer, with 2,048 beliefs.
   [Capacity admission](chpm-memory-lifecycle.md) now checks a whole-turn reserve
-  before CHPM inference, warns in settings and requires an explicit pause/Standard
-  selection instead of failing midway or dropping history. Exact archival is
+  before CHPM inference and warns in settings. A capacity rejection is recoverable:
+  Keep playing may visibly use simplified RP, while Strict stops. It never frees
+  capacity by dropping accepted history. Exact archival is
   implemented; semantic consolidation remains future work. Verified replay
   prefixes are cached with bounded memory.
   Model context includes one current host frame and at most
@@ -106,7 +117,10 @@ by default. Off and shadow modes do not advance the new core.
 
 ## Live cognitive interpretations and local relationship expectations
 
-Live VN proposals now include an explicit `interpretations` array (zero to two).
+Live VN proposals split relationship assessments into `new_beliefs` and
+`belief_revisions`, with at most two assessments combined. The adapter converts
+accepted assessments into the core's interpretation events; the wire contract
+does not let the model rewrite an existing belief's subject or proposition.
 The same model call proposes candidates and subjective assessments. The host
 validates the complete assessment batch **before** intent selection; the reviewed
 reply still commits the batch atomically. Shadow retains the older comparison
@@ -141,11 +155,14 @@ model interpreted it correctly. Exact duplicate propositions share an ID, but
 semantic paraphrases are not automatically merged. Repeated source roots are not
 new evidence; distinct messages repeating a claim can still have distinct host
 roots. Their count is **never** treated as independent corroboration or calibrated
-confidence. Live selection now adds `initiative-gated-v1`: independent intentions
-take priority over unsupported clarification. A question requires a specific gap
-with two available conditional actions, and no equally useful independent option.
-Permission to continue speaking is excluded by the narrator/reviewer contract.
-Goal alignment and the meaning of the gap remain model proposals, not independently
+confidence. Current live selection uses `motivated-choice-v2`: an eligible,
+source-grounded model preference is accepted without deterministic goal-tier or
+motive-dominance veto. Clarification requires a specific unresolved external fact
+or player intention and two distinct conditional actions; actions blocked on that
+answer are not independently available. Permission to continue speaking is
+excluded by the narrator/reviewer contract. Earlier `initiative-gated-v1` behavior
+is retained as historical comparison. Goal alignment and the meaning of the gap
+remain model proposals, not independently
 calibrated psychological utility or a formal proof of semantic necessity.
 This is a source-bound qualitative appraisal layer, not full EMA appraisal,
 calibrated emotion dynamics, or measured human-like relationship development.
@@ -160,9 +177,10 @@ with quoted goal alignment; it preserves competing tensions and reports/belief
 status. The existing prose review sees the selected reasons. This is a causal
 trace contract, not independent semantic verification or calibrated motive ranking.
 No extra call or numerical trait/relationship update is added. Qualitative
-`motive-frontier-v1` now removes strictly dominated personal-motive alternatives
-within the eligible goal tier. Incomparable ties remain deterministic, not calibrated
-psychological preferences.
+Current `motivated-choice-v2` retains goal tiers and personal-motive dominance as
+diagnostics. The earlier `motive-frontier-v1` selector removes strictly dominated
+alternatives within its eligible goal tier; it is a comparison policy, not current
+live selection or calibrated psychological utility.
 
 The [affect/needs layer](chpm-experience.md) separately records up to two current,
 source-bound subjective estimates per proposal. Needs satisfaction and frustration
@@ -193,10 +211,9 @@ reference does not prove correct interpretation of a speech act.
 ## Evaluation scope
 
 The earlier comparison harness has 41 authored scenarios and records failures,
-cost and accepted text separately. After the owner stopped the model, the endpoint
-became unavailable during the run; later transport failures are not psychological
-test failures. The owner later supplied a new endpoint for the bounded appraisal
-probe described in [the appraisal evaluation guide](chpm-appraisal.md).
+cost and accepted text separately. Its historical run encountered an unavailable
+model service; transport failures are not psychological test failures. The bounded
+appraisal probe is described in [the appraisal evaluation guide](chpm-appraisal.md).
 
 The new 12-step trajectory fixture covers pressure, apology, earned cooperation,
 breach, attempted identity rewrite, a trauma reminder, repair and an invitation.
@@ -211,14 +228,15 @@ completed live run or proof of psychological development.
 
 ## Implemented pilot slices and next validation
 
-The post-probe implementation and bounded pre-merge acceptance plan are tracked in
+The historical post-probe implementation and bounded pre-merge acceptance plan are tracked in
 [final pilot validation](chpm-final-validation.md). Output exhaustion is now distinct
 from repairable malformed JSON. Matched personality-context fixtures are implemented;
 their semantic ratings remain pending live evaluation. These changes do not complete
 semantic forgetting, attachment dynamics or evolving self-narrative.
 
 The [exact archive and lexical subjective-memory view](chpm-memory-lifecycle.md)
-are implemented. Total storage remains finite; semantic consolidation is future work.
+and opt-in [semantic candidate retrieval](chpm-semantic-memory.md) are implemented.
+Total storage remains finite; semantic consolidation is future work.
 
 1. Evaluate the new source-bound candidate motives with controlled counterfactual
    pairs and source ablations. Structural grounding is implemented; semantic goal
@@ -228,9 +246,10 @@ are implemented. Total storage remains finite; semantic consolidation is future 
 2. Expand the host's observer-filtered world-event vocabulary and exercise it in
    the isolated trajectory evaluator. Keep fact, report, interpretation, intention
    and outcome distinct; do not promote arbitrary narration into observations.
-3. Calibrate the implemented qualitative motive frontier using fixed candidate
-   sets and ablations. Source-grounded reasons and dominance comparisons are now
-   recorded; calibrated utility and semantic motive validation remain open.
+3. Evaluate current model preference and historical motive-frontier selection
+   using fixed candidate sets and ablations. Source-grounded reasons and dominance
+   diagnostics are recorded; calibrated utility and semantic motive validation
+   remain open.
 4. Calibrate the implemented qualitative affect/need appraisals and extend them
    with tested dynamics if warranted. Current freshness policy does not measure
    recovery; numerical decay/physiological transitions remain open. General
@@ -239,8 +258,8 @@ are implemented. Total storage remains finite; semantic consolidation is future 
    local conversational habits, directed expectations and trait qualifications.
    Their engineering gates are not psychological validation. Attachment dynamics,
    numerical traits and evolving self-narrative remain outside this pilot.
-6. Run the [360-case cast/history matrix](chpm-matrix-evaluation.md) after restarting
-   the model server. It covers 1–20 NPCs, short/long history and three genres; local
+6. Run the [360-case cast/history matrix](chpm-matrix-evaluation.md) with an explicitly
+   authorized live model. It covers 1–20 NPCs, short/long history and three genres; local
    mock tests do not establish psychological quality or live performance.
 
 The research document's distinction between engineering invariants, internal model

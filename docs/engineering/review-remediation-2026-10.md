@@ -1,8 +1,14 @@
 # Review remediation: experimental Living World branch
 
-This change addresses the runtime defects reproduced in the October review. It
-stays on `experiment/living-world-concordia`; it does not enable autonomous NPC
-reasoning or merge the experiment into the main branch.
+> **Historical October branch remediation snapshot.** The findings, branch names, test counts, failing
+> baselines and browser observations below describe the reviewed revision. They
+> are not current release status or a claim that later changes were retested. See
+> [current engine boundary](engine-boundary.md), [inference queue](../inference-queue.md) and [dependency/CI guidance](../dependency-security.md) for active contracts.
+
+The original changeset addressed defects reproduced in the October review on
+`experiment/living-world-concordia`. That branch scope is historical: this report
+must not be used to infer which later work reached main or which modules are now
+enabled. Current activation and deployment rules are in the linked guides above.
 
 | Finding | Result |
 | --- | --- |

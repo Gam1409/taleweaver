@@ -1,4 +1,4 @@
-# Living World architecture audit
+# Living World architecture
 
 The persistence/rules foundation from `experiment/living-world-concordia` is in main.
 The bounded decisions layer adds optional Concordia without changing existing content
@@ -21,8 +21,8 @@ prompt hooks. Living World remains opt-in per session.
 
 ## Persistence boundary
 
-Use a nullable JSON column `SessionState.living_world` for the first vertical slice.
-This is SQL persistence, not an in-memory queue or a second vector database. It keeps
+The nullable JSON column `SessionState.living_world` stores the bounded simulation.
+It keeps
 the timeline, settings, clocks and bounded queue in the same transaction and existing
 snapshot as canonical changes. A separate indexed event table is appropriate before
 unbounded world histories; do not silently discard committed events to fit a limit.
@@ -49,7 +49,7 @@ deployment; enabling the experiment does not change that deployment contract.
 ## Concordia reconnaissance
 
 PyPI `gdm-concordia==2.4.0` declares Python >=3.12 and Apache 2.0. TaleWeaver supports
-Python >=3.10,<3.14. Its dependencies include numpy>=1.26, pandas, matplotlib, IPython,
+Python >=3.11,<3.14. Its dependencies include numpy>=1.26, pandas, matplotlib, IPython,
 reactivex and tenacity; provider integrations are extras. A required dependency would
 break supported Python versions. Use an optional, version-pinned adapter on Python
 3.12/3.13, with no automatic package installation on normal game startup.
@@ -77,7 +77,7 @@ Migration `9a0c4e7b1d62` adds two nullable JSON columns, preserving old rows:
 
 Events use unique IDs within a timeline; prerequisites must precede dependents in
 the stored list and game time. Each event's canonical changes and committed status
-share one SQL transaction. No SQL transaction waits for an LLM in this preview.
+share one SQL transaction. No SQL transaction waits for an LLM in this path.
 Concurrent gameplay/catch-up uses the existing session lease; duplicate commands
 also require a matching revision. Presence uses compare-and-swap independently.
 

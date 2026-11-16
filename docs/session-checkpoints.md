@@ -18,3 +18,9 @@ that limitation instead of claiming an exact item rollback.
 
 Manual and pinned checkpoints are retained. At most five unpinned automatic
 checkpoints are kept per session. Real playtime is not rewound.
+
+The selected content language is a separate session preference and is not restored
+from a Chronicles checkpoint. An NPC's [private notebook](npc-notebook.md) keeps
+its latest document across checkpoint restore and Undo; notebook versions are not
+stored in these snapshots. Psychological history and ordinary world state still
+follow their respective rewind rules.

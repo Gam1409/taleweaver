@@ -119,3 +119,8 @@ The [portable agent runtime contract](specs/agent_runtime.md) adds static
 capability configuration and NPC seeds to the existing extension envelope.
 Imports keep that JSON but do not run its engines or resolve remote RAG resources.
 The corpus adapter port is separate from the adventure catalog's `library.json`.
+
+The canonical writer and archive lifecycle are summarized in the
+[adventure format reference](specs/adventure_format.md). The catalog is a story
+installation source; it is not a shared mutable RAG database or an NPC's private
+notebook. [World Info](session-world-info.md) remains scoped to each playthrough.

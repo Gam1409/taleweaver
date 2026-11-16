@@ -6,11 +6,24 @@ in `backend/engine/chpm/version.py` and exposed in session settings and status.
 
 ## Unreleased repairs
 
+These changes are present in current main; the module release constant remains
+1.2.0. Historical version entries below describe their original rollout.
+
+- Offer opt-in Staged and Integrated decision workflows, native/JSON memory
+  compatibility, bounded parallel NPC analyses and provider timing diagnostics.
+- Give each NPC an optional private current JSON notebook; retain its latest
+  contents across Undo/Chronicles while source-bound psychology still rewinds.
+- Add exact-ID `inspect_entity` reads over current observer-accessible state,
+  without world mutations, new stores or compulsory inference requests.
+- Recover eligible historical observations through existing perception/review
+  and preserve report provenance between observers.
+
 - Localize completed proposal rejection in Keep playing mode when a separate
   usable NPC decision survives. Reuse inactive-character restrictions and the
   shared narration review; keep strict and shared-failure rollback boundaries.
-- Preserve deferred NPC psychology and exclude their new portrait thoughts and
-  emotions while retaining independently reviewed peers and their display cues.
+- Preserve deferred NPC psychology while independently reviewed peers continue.
+  Optional narrator-authored portrait thoughts/emotions remain separate UI
+  assessments and cannot update confirmed psychology or authorize story actions.
 - Allow INITIATE → CONTINUE to maintain a discussion with unchanged conditions.
   Other kind changes still need grounded revision and semantic review.
 - Expose bounded per-character failures and a partial status outside the story.

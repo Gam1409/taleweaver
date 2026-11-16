@@ -1,4 +1,4 @@
-# Persistent physical state (first implementation)
+# Persistent physical state
 
 VN sessions now keep a small physical condition ledger alongside their existing world state. An injury, dirt on an item, fluid trace, pain or another explicitly described condition survives an unmentioned turn, a location change and a page reload. A model omission does not resolve a recorded condition.
 
@@ -9,12 +9,19 @@ extensible properties, player reports, quantities and item views.
 
 ## How a completed turn changes state
 
-1. The existing post-narration item reconciliation request also receives relevant active physical facts and a `condition_updates` field. There is no additional model request.
+1. The existing post-narration item reconciliation request also receives relevant active physical facts and a `condition_updates` field. Physical state does not require a separate extraction request.
 2. The model proposes a new fact or an operation on a known condition ID. The host checks the schema, available canonical subject, operation/kind compatibility and an exact contiguous quote from the completed assistant narration. Player requests and earlier history are not evidence for this pass.
 3. After the assistant reply has a saved ID, accepted changes are stored with its ID, content hash and quote in the same final turn transaction. The host assigns condition IDs. One rejected condition candidate does not cancel other valid candidates or a valid item action.
 4. The next continuity request receives current facts for available actors, their known items and accessible loose items. The narrator receives public facts for actors, visible garments and visible scene items, plus the player's own conditions, constrained by clothing and perspective. Explicit recent resolutions remain as compact negative facts, so old prose cannot silently restore a healed wound or cleaned item.
 
 In live CHPM, bodily conditions and conditions of the NPC's current possessions enter its existing typed host snapshot. They are available through `inspect_self` and citable evidence for cognition. Treatment and explicit resolution produce host differences; a missing/corrupt record or a lost possession never establishes healing. The legacy standalone bodily context is removed when the current host snapshot supplies it, avoiding a duplicate input block. Shadow mode retains its existing input path.
+
+When agent tool rounds are enabled, [observable state tools](npc-observable-state.md)
+also provide exact-ID `inspect_entity` reads of current accessible actors/items.
+Those reads reuse this ledger and existing visibility rules; they do not introduce
+another condition store or authorize a proposed world action. The common extraction
+may use one bounded [coverage correction](narrated-item-reconciliation.md), but there
+is no separate mandatory condition-extraction request.
 
 A valid quote proves that the words occur in the reply. It does **not** prove that the model correctly understood the actor, body region, extent, actuality or completeness of the action. This implementation reduces forgotten recorded facts; it does not guarantee extraction completeness or semantic correctness. Live evaluation with the user's model remains necessary.
 
@@ -68,17 +75,20 @@ part and current detail. Fluid traces use `fluid`; another explicit physiologica
 can use `other`. Select Public only for established openly observable/shared information;
 knowledge limited to the player and particular participants remains private.
 Public manual corrections appear under **Characters > NPC > State > Physical condition**
-while that NPC is present. Private or resolved records stay out of that public card.
+while that NPC is present. Resolved records stay out of that current-state view.
+Private manual corrections are not promoted into a public card.
 This works with NPC Personality enabled or disabled. A public correction alone does
 not establish exposed skin or a visible surface for image generation.
 
-The physical ledger currently has no per-observer knowledge list. A private condition
-known to the player therefore remains available in Debug, but this card projection
-cannot distinguish it from a condition unknown to the player. Promoting it to Public
-solely to show it on the card loses that distinction. Scene continuity already has
-an `observers` mechanism for private facts; extending that existing audience model
-to physical conditions is the appropriate integration point. This limitation is not
-resolved by a prompt or by treating everyone in the room as a witness.
+The physical ledger currently has no general per-observer knowledge list. The
+session owner's card can additionally show a private condition already disclosed
+in an unchanged, non-debug assistant message when its adult, detailed-clothing and
+mature-content gates apply. It is labelled **Known from narration**, not Public.
+This read-only projection does not change NPC knowledge, RAG audiences or image
+visibility. Private manual facts and unavailable sources do not qualify. See
+[equipment card projection](narrated-item-reconciliation.md#equipment-card-projection).
+Promoting a condition to Public only to display it would lose that distinction;
+room presence alone never establishes that everyone witnessed it.
 
 An internal condition and a visible external trace have separate records when both
 are established. Partial cleaning uses `reduce` with the remaining detail; complete

@@ -1,10 +1,15 @@
 # Experimental scene pose and placement continuity
 
-Enable **Track scene poses and placement (experimental)** under the session's
-**Visual novel narration** settings. Existing sessions default to off. This adds
-one Small / Utility structured request after a completed narrator response and
-before the turn is saved. It uses that role's configured timeout and the existing
-inference admission queue. It does not start concurrent model requests.
+Enable **Track scene poses and placement (experimental)** under **Session settings
+→ Story & world → Visual novel narration**. Existing sessions default to off.
+Normal VN turns share the existing Small / Utility post-narration item/state
+request; enabling staging does not add a second staging request. The shared result
+is applied before the turn is saved, using the configured role deadline and the
+existing inference admission queue.
+
+A standalone fallback exists when no shared result was prepared. It uses the
+same evidence and completeness rules; a failed or incomplete shared request does
+not trigger another staging request. See [shared scene continuity](scene-continuity.md).
 
 The extractor receives the present public cast, previously established staging,
 and the completed narrator text. It proposes only scene-local posture and relative
@@ -21,10 +26,12 @@ are inferred. Missing deltas retain established facts. Explicit uncertainty clea
 them. Changes to scene, canonical position, presence or a referenced character's
 placement invalidate dependent facts. Re-enabling the setting starts fresh.
 
-The state lives in `entity_states.__scene_staging__`, separate from mechanical
+Poses live in `entity_states.__scene_staging__`; placed props use the existing
+`__scene_props__` registry. Both remain separate from mechanical
 permissions. The analyzer cannot change scenes, presence, inventory, ownership or
 clothing. Clothing continues to come from the existing equipment/wardrobe pipeline;
-this first version does not turn unapproved clothing changes in prose into events.
+staging does not turn unapproved clothing changes in prose into events. Grounded
+clothing changes use [narrated-item reconciliation](narrated-item-reconciliation.md).
 
 The next narrator receives a compact data projection with an explicit instruction
 not to repeat it. A completed illustration snapshot receives pose and placement

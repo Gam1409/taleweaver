@@ -8,8 +8,8 @@ including its endpoint validation, admission queue and timeout handling.
 Evaluation arms explicitly use the **Strict** failure policy. A failed cognitive
 response remains a failure in reports; the player-facing Keep playing recovery
 must not be counted as a successful CHPM decision. Recovery has separate mocked
-VN integration tests. Module release version 1.0.0 is independent of persisted
-schema and evaluation protocol versions.
+VN integration tests. Module releases are independent of persisted schemas and
+evaluation protocol versions; see [release history](chpm-changelog.md).
 
 The suite has **41 cases**:
 

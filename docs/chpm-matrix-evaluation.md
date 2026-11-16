@@ -72,9 +72,11 @@ poetry run python -m backend.engine.chpm.evaluation.matrix_cli run \
 Results include the actual perception projection and the proposal's bounded
 `context_audit`: evidence excerpts, recalled fragment aliases, retrieval counts
 and context packing tier. Check which facts reached the model before interpreting
-its answer. Current CHPM episodic retrieval is lexical; missing a paraphrase is a
-known capability limit, not evidence that semantic retrieval works. The general
-game RAG pipeline is separate and needs its own retrieval/integration tests.
+its answer. Default CHPM episodic retrieval is lexical. Production also offers
+opt-in [observer-scoped semantic memory](chpm-semantic-memory.md); a matrix fixture
+without that live index does not validate it. Missing a paraphrase on the lexical
+path does not establish semantic-retrieval quality. Shared narrator RAG and
+World Info have separate retrieval/integration tests.
 
 A server's advertised context window does not change CHPM's configured character
 budget. Large raw-model context tests must be labelled separately from a full

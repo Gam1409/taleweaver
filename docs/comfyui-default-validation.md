@@ -1,5 +1,10 @@
 # Default ComfyUI workflow validation
 
+> Dated validation record, not a current full-checkpoint benchmark. Its live findings
+> are retained with their original hardware/model scope. For current setup, limits
+> and image-preparation routing use [the ComfyUI guide](comfyui/README.md). No new
+> live generation was performed for this documentation review.
+
 Status: **live validation performed on 2026-11-06**, using ComfyUI 0.35.0 on an NVIDIA A40. Four installed checkpoints covered three registered families: Nova Anime AM, Illustrious (WAI v17), and SD 1.5 (Counterfeit V3 and Majicmix v7). The 77-case baseline completed without submission or execution failures. Other registered families still need their own live runs.
 
 **Artistic readiness is not established by successful execution.** The baseline exposed inconsistent portrait crops, garment duplicates, unwanted wearers/mannequins and material changes. Additional sampler, embedding, upscale and presentation experiments are separate from the baseline; no experimental sampler combination was promoted to a universal default.

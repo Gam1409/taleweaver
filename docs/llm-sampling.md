@@ -1,7 +1,7 @@
 # Generation settings and sampling
 
 Open **Administration → Intelligence (LLM)**. Each role has one collapsible
-**Generation settings** panel containing its applicable output-token limit,
+**General settings** panel containing its applicable output-token limit,
 reasoning controls, sampling settings and endpoint overrides. The **?** buttons
 explain each control; click again, press Escape or click outside to close help.
 

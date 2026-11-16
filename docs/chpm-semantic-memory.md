@@ -2,7 +2,7 @@
 
 NPC Personality 1.2.0 can use semantic similarity to find older observations when
 the current interaction uses different words. This option is **disabled by
-default**. It improves evidence retrieval; it does not turn a language model into
+default**. It adds semantic retrieval candidates; it does not turn a language model into
 a complete psychological simulation or guarantee that it uses every fact.
 
 ## Enable

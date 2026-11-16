@@ -13,27 +13,34 @@ their portrait and learned history. New NPCs receive a server-generated UUID; th
 names can use any language. Existing authored NPCs remain usable as before.
 
 Dialogue and hover cards resolve an unambiguous shortened name to the same session NPC:
-`Рин` can refer to `Доктор Рин Аояма`, retaining the existing ID, portrait and card.
+`Мира` can refer to `Архивист Мира Белова`, retaining the existing ID, portrait and card.
 Explicit IDs, exact names and recorded aliases take priority. Short forms match complete
 consecutive name parts, not arbitrary letter prefixes; ambiguous forms are not assigned
 to a guessed character. Scene and metadata copies with the same ID count as one person.
 This is display resolution only: it creates no NPC, merges no records and needs no LLM call.
 
-The card keeps the portrait, general description and a short **General overview**
-in a separate profile column while the right side scrolls. On narrow screens the
-profile becomes a compact block above the tabs. **State & clothing** shows a grid
-of currently visible worn garments, their saved images and partial-displacement
+The card keeps the portrait and general description in a separate profile column
+while the right side scrolls. On narrow screens the profile becomes a compact
+block above the tabs. **General overview** appears below **Character card display**
+in the state details; the refined layout also offers an **Overview** tab.
+**State & clothing** uses the
+recorded body layout: a humanoid silhouette with slots, or an equipment list.
+It shows currently visible worn garments, saved images and partial-displacement
 markers, alongside physical conditions. It uses the existing coverage and condition
 projections, not a new state store or model call. Covered clothing layers and private
-conditions are omitted; absent, audible-only and hidden NPCs have no live observation.
+conditions unavailable to the player's view are omitted; absent, audible-only
+and hidden NPCs have no live observation.
 Missing coverage or an invalid condition ledger is marked unconfirmed, not healthy
 or undressed. Resolved conditions are absent from the current-state list.
 
 Visible physical traces are labeled **Visible now**. Other public conditions, such
 as a reported pain, can appear as previously confirmed only when their exact latest
 source passage still matches a saved assistant message in this session, including its
-content hash and occurrence span when present. Private ledger descriptions are not
-shown. **Refresh observations** reloads the saved facts without requesting generation.
+content hash and occurrence span when present. Where the enabled content/view
+policy permits it, a condition already disclosed to the player may be labeled
+**Known from narration** even though it remains private to other characters.
+This owner view does not grant NPC agents access to another character's hidden
+conditions. **Refresh observations** reloads saved facts without generation.
 
 **History** contains the existing two history tabs: **General history**
 (background, appearance and other known facts) and **History with your character**
@@ -112,10 +119,11 @@ what the player character learned. These are model instructions, not a new deter
 authorization/stealing system: the existing skill-check schema has no per-item binding
 between a roll and a transfer. Reliable conditional theft needs that engine extension.
 
-Gifts, storage, use/consumption, wearing, dropping and onward transfers must preserve
-the real inventory state and stable item IDs. Wearing/storing is currently represented
-by NPC notes while the item stays in their inventory; NPC equipment slots and automatic
-equipment-derived stats are not implemented here. The latest learned status of an item
+Gifts, storage, use/consumption, wearing, dropping and onward transfers preserve
+canonical item IDs through the existing ownership, clothing and physical-state
+owners. Ownership, wear state and physical placement are separate; a coat on a
+bench need not lose its owner. The journal records learned accounts rather than
+applying transfers or clothing effects. The latest learned status of an item
 supersedes older appearance/equipment observations in prompt memory, while the journal
 retains the history. A discarded cloak is therefore not reused as the latest outfit.
 
@@ -153,7 +161,7 @@ per character, prioritizing the latest value of each category/topic. Extraction 
 up to 24,000 characters of current narration and up to 3,000 of the previous player
 message. Extremely long responses may therefore leave later passages unprocessed.
 
-Learning has a 90-second timeout, up to three total automatic attempts per message,
+Learning uses the configured Small/Utility role timeout, up to three total automatic attempts per message,
 and one worker per session. Database claims reject duplicate or stale results.
 Process-wide limits allow two learning jobs and one
 automatic portrait at a time. This implementation assumes a **single backend process**;
@@ -161,6 +169,18 @@ multiple application workers would need shared capacity and portrait coordinatio
 require manual retry to avoid automatically submitting another paid generation.
 
 ## Verification
+
+Current regressions cover source/evidence checks, scope, background task fencing,
+current-state projection, histories and session lifecycle behavior. Model and media
+responses are controlled in automated tests; extraction and portrait quality need
+separate live evaluation. Repository CI is the source for the current lint, type
+and test status.
+
+<details>
+<summary>Historical rollout validation notes</summary>
+
+The counts and baseline errors below describe the original implementation wave,
+not known failures or totals for current main. They are retained as an audit record.
 
 - Broad backend run: 285 passed; three adventure-format tests also fail identically
   on unchanged `main` (`45f0667`). They concern legacy adventure startup, not journals.
@@ -191,6 +211,7 @@ require manual retry to avoid automatically submitting another paid generation.
   `tests/conftest.py`. TypeScript retains the same 129 normalized baseline errors,
   with no new diagnostics.
 
-All automated model, image and external HTTP responses were mocked. A live playtest
-with the user's models is still needed to assess semantic extraction and portrait
-quality.
+All automated model, image and external HTTP responses in that wave were mocked.
+Live playtests remain separate from those historical engineering checks.
+
+</details>

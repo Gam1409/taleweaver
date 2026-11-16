@@ -36,6 +36,18 @@ These changes reduce browser work. They do not accelerate inference or remove th
 
 The item response schema distinguishes an existing canonical item from a newly described item. A failed reconciliation records a bounded failure code and, for schema failures, field paths in session diagnostics. Public messages distinguish invalid item data, malformed JSON, timeout, an uncertain inference reservation and an unavailable check. Provider response bodies and credentials are not returned. A failed check preserves the story and valid portrait thoughts/emotions.
 
-Clothing ownership, worn profiles and item condition notes already have saved state. A general lifecycle for wounds, contamination, fluid traces and their explicit resolution is **not implemented by these fixes**. Likewise, the inference admission queue is not a durable queue of player actions. Both need separate evaluation before changing turn semantics or adding model calls.
+Clothing ownership, worn profiles, mutable item properties and bodily conditions
+have canonical saved state. The shared post-narration check can record, change,
+treat, reduce or explicitly resolve conditions through the
+[physical-state ledger](persistent-physical-state.md); it does not infer automatic
+healing or guarantee that every literary description was extracted correctly.
+Current [item properties](item-state.md) remain attached to existing item IDs.
 
-See the [state-reconciliation investigation and anonymous endpoint pilot](research/rp-state-reconciliation-2026-11-07.md) for measured failure modes and proposed next steps.
+NPCs can optionally [inspect current accessible state](npc-observable-state.md)
+within their configured tool rounds. Reading a fact does not complete an action
+or bypass the normal validators. The inference admission queue still coordinates
+model requests, rather than retaining a durable queue of player actions.
+
+The [state-reconciliation investigation](research/rp-state-reconciliation-2026-11-07.md)
+is a historical experiment report. Its proposed work is not an inventory of
+features currently missing from main.

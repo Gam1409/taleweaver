@@ -26,6 +26,18 @@ requests and retries; the inference queue exposes admission state. These events
 do not record story text or credentials. Raw prompt telemetry is separate and
 contains sensitive story detail.
 
+For selected NPCs, **Session settings → NPC Personality → Last NPC analysis
+timings** separates each recorded phase's total duration from host queue wait and
+available server timing counters. **Unavailable** means the transport did not
+provide a trustworthy measurement; it does not mean zero. Non-streaming replies
+often cannot establish first-token time. Input-processing, server-generation and
+cached-token counters appear only when the provider returns them.
+
+Phase totals can contain more than one attempt. Concurrent NPC phases can overlap,
+so adding their rows does not give end-to-end user latency. Follow the correlated
+HTTP request and final turn event to measure the complete operation, including
+state application and publication.
+
 KoboldCpp's `Processed` and `Generated` timings separate reading the prompt from
 generating output. A 131k context setting is a ceiling, not the number of tokens
 used by each request. A generation allowance such as `12288` is also a ceiling,
@@ -46,6 +58,13 @@ Lower output ceilings only after observing actual output lengths: cutting off JS
 can trigger repair or a failed turn. Increasing context size does not speed up
 generation. Do not clear an uncertain inference lease while the remote request may
 still be running.
+
+The experimental [Integrated NPC workflow](npc-decision-workflows.md) can combine
+tool investigation and decision submission. Compare it with Staged from the same
+pre-turn state and request budget. **Memory tool compatibility → JSON compatibility**
+is useful for a server without native tools, but neither setting guarantees a
+speedup. Both retain the same state, evidence and review checks. Keep the
+administrator's structured-output mode separate from that tool-protocol choice.
 
 The host batches newly observed excerpts into one source-ledger validation and
 hashes each source message once per reconciliation. Every source binding and exact

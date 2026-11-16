@@ -1,5 +1,11 @@
 # TaleWeaver v0.7.1-beta
 
+> [!NOTE]
+> Release snapshot for the `v0.7.1-beta` tag. Later commits on `main` can add or
+> change features without changing these historical notes. Use the
+> [documentation index](docs/README.md) for the current source checkout; packaged
+> desktop downloads remain tied to their release tag.
+
 This stability update improves continuity between narrated events, saved world state
 and the information supplied to subsequent model requests. The application remains
 in beta; NPC Personality and model-assisted state extraction remain experimental.

@@ -1,5 +1,11 @@
 # Emotional progression: matched-case specification
 
+> Evaluation design, not an executed acceptance report. Baseline limits and gaps
+> below refer to the issue #33 investigation; use current [Personality documentation](../chpm-pilot.md)
+> and [presentation contracts](../npc-portrait-presentation.md) when constructing a
+> new run. Each result must name the tested revision and distinguish proposed
+> fixtures, mocked host checks and actual live-model trajectories.
+
 Companion to the [issue #33 plan](emotional-progression-issue-33.md) and
 [research decisions](emotional-progression-research.md). These are proposed
 fixtures and acceptance contrasts, not results of executed tests.

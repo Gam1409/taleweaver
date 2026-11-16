@@ -1,3 +1,8 @@
+> [!NOTE]
+> Historical release announcement for `v0.7.0-beta`. Desktop archives contain the
+> tagged source, while maintained guides describe the current checkout. Start
+> with the [documentation index](docs/README.md) for current behavior and setup.
+
 <div align="center">
 <img src="https://raw.githubusercontent.com/Gam1409/taleweaver/v0.7.0-beta/docs/branding/visualnovel.png" alt="VisualNovel" width="300" />
 

@@ -1,6 +1,10 @@
 # ComfyUI setup review
 
-Scope: preset creation, model selection, workflow editing, prompt configuration and
+Status: historical browser review of the original setup interface. Current setup and
+graph editing are documented in [the provider guide](README.md). Screenshots and
+observations below were not repeated for the 2026-11-16 documentation review.
+
+Scope at that revision: preset creation, model selection, workflow editing, prompt configuration and
 save/reload in the actual TaleWeaver UI. Chromium was checked at 1440×1000 and
 390×844. Screenshots were captured and inspected during the review; the final
 settings run used an isolated database and a local copy of the server's node
@@ -20,8 +24,9 @@ Remaining limits:
 - Setup still has two explicit levels: Apply to form, then Save Visuals Settings.
   The drawer explains this and offers Discard. This follows the existing settings
   model; changes are not silently saved when a dialog closes.
-- Custom graph topology is easier to edit visually in ComfyUI. TaleWeaver provides
-  import/export, raw JSON and common parameters rather than duplicating its canvas.
+- That reviewed revision exposed import/export, raw JSON and common parameters.
+  Current main additionally has a visual graph canvas and supported editor-JSON
+  conversion; this historical review does not assess that later interface.
 - Filename detection cannot inspect model weights. Unknown/ambiguous files need a
   one-time explicit selection. Routine image generation uses the saved rules.
 - Images may not follow every semantic detail. Img2img is approximate and is not

@@ -1,5 +1,10 @@
 # Multilingual visual contracts — round 2
 
+> Historical design review based on the revision named below. Several stages were
+> subsequently implemented; proposal-era defaults and deferred lists are not the
+> current feature inventory. See [current illustration preparation](../comfyui/README.md#moment-illustrations)
+> and the [Stage 2 implementation record](visual-plan-stage2-implementation.md).
+
 **Status:** revised design for discussion, not implementation. Source revision:
 `3f46c8bf`. This document supersedes the staging, taxonomy, caching and cost decisions
 in round 1. The original proposal remains available as the architectural background.

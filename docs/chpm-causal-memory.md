@@ -87,10 +87,11 @@ motives. Model quality and old-history reconstruction require separate live chec
 ## Beyond this release
 
 These are observer-owned causal accounts, not a complete physical or political
-simulation. Body/skin conditions need a separate host state lifecycle: origin,
-affected region, visibility and explicit resolution, rather than an emotion or an
-inventory flag. A narrated circumstance can be retained here without becoming a
-server-verified physiological condition.
+simulation. [Physical and item conditions](persistent-physical-state.md) already
+have their own host ledger, visibility, source and resolution rules. Causal notes
+do not write that ledger or replace it with an emotion or inventory flag. A
+narrated circumstance can be retained here without becoming a server-verified
+physical condition.
 
 An intrigue spanning a cardinal, messenger, secretary and king also needs distinct
 world events, observations, transmitted reports and personal interpretations.
@@ -100,7 +101,8 @@ does not automatically give other NPCs knowledge, run inactive characters' priva
 decisions or force downstream outcomes. A future shared event layer must retain
 that separation and supply each NPC only its accessible portion of the chain.
 
-Further agent retrieval should build an observer-specific situation view: pinned
+Current [state inspection](npc-observable-state.md) and observer memory supply
+parts of an observer-specific situation view. Further retrieval research can combine pinned
 identity and abilities; own current possessions and conditions; visible environment
 and participant changes; known relationships and their sources; ongoing purposes,
 desires and relevant past actions. Authored ability is distinct from an available

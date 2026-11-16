@@ -1,5 +1,10 @@
 # Shared visual plans and default scene preparation
 
+> Implementation record for the saved-plan/compiler transition. The main routing
+> and cache contract remain relevant; the verification counts below are historical,
+> not current CI totals. Current user setup is in the
+> [provider guide](../comfyui/README.md#moment-illustrations).
+
 This release completes the reusable compiler stage. Saved visual plans are now the
 standard preparation path for neutral VN moment illustrations. The Legacy selector
 has been removed. Existing `visual_preparation: legacy` settings and older API

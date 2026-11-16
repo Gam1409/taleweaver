@@ -72,7 +72,8 @@ The latest appraisal per channel/dimension/subject is projected separately; all
 accepted events remain in the exact journal/archive. At most 128 dimensions are
 retained per observer. Admission reserves two potential new dimensions and two
 events before inference. Admission also reserves at most four new state sources;
-a full turn reserves 75 events in total. Existing storage limits are unchanged.
+a full turn currently reserves 81 events/evidence records and 75 source bindings
+through `chpm/capacity.py`, including bounded historical recovery. Existing storage limits are unchanged.
 
 Up to eight recent dimension records are exposed in the cognitive/narrator context.
 For 30 simulation minutes they are labelled recent appraisals; afterwards the
@@ -99,8 +100,8 @@ development uses the separate [evidence and alternative-explanation policy](chpm
 Tests cover mixed states, independent need channels, exact citations, rejected
 batches, historical-only triggers, duplicate grounds, elapsed-time uncertainty,
 unchanged identity/relationships, forked references and real VN commit/rollback
-with mock models. The user has stopped the live model to avoid hosting cost;
-behavioral calibration of these new contracts is deferred until it is available.
+with mock models. Behavioral calibration requires separately authorized live
+evaluation; passing these checks does not establish emotional or psychological quality.
 
 The schema omits generated display titles, not constraints, and prompt JSON uses
 compact UTF-8. The motive catalogue references the already supplied pinned

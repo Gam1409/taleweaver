@@ -1,5 +1,11 @@
 # NSFW required atoms (Stage 3)
 
+> Historical stage-3 implementation record. The guard has since gained further
+> keyword/participant handling and prompt integration; statements that policy text
+> was unchanged describe that stage, not every later revision. Current routing is
+> summarized in the [provider guide](../comfyui/README.md#moment-illustrations).
+> The guard checks prompt data, not image pixels or complete scene meaning.
+
 Stage 3 of the multilingual visual contract adds a **required atomic subset for
 explicit scenes** on the retained NSFW illustration route. It is a **check, not
 a prompt**: NSFW prompt construction, mature addenda and content policy are

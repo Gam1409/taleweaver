@@ -65,7 +65,9 @@ deferrals. Invalid proposals do not partially mutate the saved state.
 
 No extra LLM request is introduced. Output can grow by one reflection; its input
 schema and source samples consume part of the existing per-request budget. The
-normal turn reserves three possible new beliefs and 53 events in total.
+normal turn reserves three possible new beliefs; the complete host reserve is
+81 events/evidence records and 75 source bindings, including state observation,
+causal updates and historical recovery. See [capacity](chpm-memory-lifecycle.md).
 
 The source research files remain unchanged under `docs/research/chpm/`. This
 implementation is a qualitative pilot, not the complete research specification.

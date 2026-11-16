@@ -1,267 +1,162 @@
-# ComfyUI image generation (experimental)
+# ComfyUI image generation
 
-Select **ComfyUI (Local)** in either image profile under Admin → Visuals. The
-backend must be able to reach the configured URL, for example
-`http://127.0.0.1:8188`. Localhost means the backend host/container, not the browser.
-Local endpoints require `ALLOW_PRIVATE_NETWORK_MODELS=true`, like other local
-providers. SSH tunnels remain external to TaleWeaver.
+Select **ComfyUI (Local)** under **Administration → Visuals** and enter the API
+URL, for example `http://127.0.0.1:8188`. The backend must reach this address:
+localhost refers to the backend host/container, not the browser. Local URLs need
+`ALLOW_PRIVATE_NETWORK_MODELS=true`; see [provider network policy](../provider-network-policy.md).
 
-## Configure a preset and assign it to a profile
+## Presets, workflows and assignments
 
-1. Enter the ComfyUI API URL, then choose **New preset** in the Standard or
-   High-Fidelity card. Select a model family under **Start from a template** and
-   click **Use starter workflow**. The app fills bindings, resolves unique matching
-   filenames to their server folders, and checks compatibility automatically.
-2. Verify the model files once. If a filename is unknown or ambiguous, select the
-   installed file. **Generation parameters** holds steps, CFG, guidance, denoise,
-   sampler and scheduler; normal generation reuses these saved values.
-3. Automatic prompt-template selection supplies the model family's rules. The
-   configured Small / Utility LLM adapts each asset description automatically.
-   Fine-tuning the rules is optional; see [prompt presets](presets.md).
-4. Optionally expand **Use a previous image** and choose a matching starter. The
-   suggested family and compatible loader filenames come from the base workflow.
-5. **Apply to form**, use **Test Generation**, then **Save Visuals Settings**.
-   This is a one-time setup per preset; covers, scenes, portraits, items, account
-   avatars and catalog tiles receive their prompt and dimensions automatically.
+1. Open **Image tasks & presets → Manage presets & assignments**. New libraries
+   contain editable Anima and Illustrious task presets. Existing custom libraries
+   stay intact; **Add standard presets · Anima + Illustrious** adds missing entries.
+2. Create/edit a preset or choose **Create from a task template**. Select the model
+   family, image task and actual component layout. The catalogue has 80 recipes:
+   ten families and eight tasks. Files and custom nodes must already be installed
+   on ComfyUI; TaleWeaver does not download weights or dependencies.
+3. Use model/node discovery and choose the exact installed filenames. A unique
+   basename can be resolved automatically; unknown or ambiguous files need an
+   explicit selection. Static checks cannot inspect checkpoint tensors or VRAM.
+4. Configure base and optional reference workflows. Review prompt rules separately
+   from graph sampling/loader settings. **Test Generation** tests a draft and does
+   not save it or assign it to every task.
+5. **Apply to form → Apply assignments → Save Visuals Settings**. Select task
+   assignments and the separate test preset. Standard (`simple`) and High-Fidelity
+   (`advanced`) profiles also serve other image providers; image-task routing
+   determines which configuration actually runs.
 
-For a custom graph, import a **ComfyUI API-format JSON** exported with **File →
-Export (API)** in ComfyUI (older interfaces require developer mode). Editor-format
-JSON with `nodes`/`links` is not supported. Maximum: 256 nodes / 256 KiB per graph.
-Map the prompt and final image output under **Advanced: workflow inputs and
-output**; incomplete mappings open this section automatically. Optional bindings
-include negative prompt, seed and dimensions. Bind literal inputs, not sockets.
+See [task recipes](../comfyui-task-templates.md), [preset rules](presets.md) and
+[starter architectures](starters.md). A saved adventure/session can retain its own
+image settings instead of following later global changes. Check the effective
+settings for that target before diagnosing a different model or workflow.
 
-**Advanced: edit or export workflow JSON** supports direct graph edits and download.
-Invalid JSON leaves the draft unchanged. Removed/connected inputs lose their
-bindings and must be remapped. Export includes the API graph; TaleWeaver bindings
-and prompt rules remain in the saved preset. Use ComfyUI for visual node editing.
+## Import and edit a workflow
 
-**Check server compatibility** reads `/object_info`; it does not execute or install
-anything. It checks node types, known model choices, required inputs and bindings.
-A real image test is still needed to verify runtime dependencies and VRAM. The
-selected output must publish `images` (normally SaveImage); its first image is used.
+The preset editor accepts **ComfyUI API JSON** and supported **editor JSON** with
+`nodes`/`links`. Editor graphs are converted to API graphs using server node schemas
+and core-node fallbacks; unsupported or ambiguous conversions are reported. The
+backend still executes API graphs only. PNG workflow metadata is not a JSON import.
 
-See [starter families and validation](starters.md) for dependencies and test coverage.
+TaleWeaver has a visual graph canvas, an expandable editor, node parameters, raw
+JSON and API JSON export. Review automatically suggested bindings after import.
+The graph editor handles supported topology and inputs; ComfyUI remains the place
+to develop/test custom-node behavior and install its dependencies.
 
-Models, encoders, VAE files and custom nodes must already be installed on ComfyUI.
-Workflow import does not download dependencies. Model/sampler/steps/CFG/denoise
-values remain in the graph. Only mapped inputs are replaced; there is no automatic
-translation of provider-specific sampler names. Prompt templates change text only.
+Map the positive prompt, output node and optional negative prompt, image, seed and
+dimensions. Bind literal inputs rather than connected sockets. There is one input
+image binding; no automatic mask authoring or multi-reference assembly is supplied.
+Only mapped inputs change at generation time. Sampling, guidance, LoRA loading and
+unmapped inputs remain part of the graph. A1111-style LoRA text alone does not
+insert a ComfyUI loader.
 
-Existing workflows migrate into named presets with their previous prompt behavior.
-Selecting a prompt template enables model-specific formatting and optional language
-adaptation. This does not add automatic inventory-to-image composition.
-An unmapped seed remains fixed in the workflow. A mapped seed uses the configured
-TaleWeaver seed, or a fresh seed when it is absent/negative.
+Limits are 256 nodes / 256 KiB per graph, 32 presets / 2 MiB for preset data, and
+128 saved workflow versions / 4 MiB for the workflow library. A preset pins its
+workflow copy; editing another saved workflow does not silently replace every
+preset that previously used it.
 
-## Image dimensions and file sizes
+## References and portraits
 
-ComfyUI outputs use the same limits as TaleWeaver's existing adventure uploads:
+A configured reference workflow must have an `image` binding. Eligible editor
+regeneration can upload the owned current asset through `/upload/image`. Session
+NPC portrait regeneration has its own previous-image option and requested-change
+field; see [portrait regeneration](../portrait-regeneration.md).
 
-| Asset | Maximum dimensions | Maximum file size |
-|---|---|---|
+References require a compatible ComfyUI workflow. Missing/unreadable references or
+unsupported providers fail explicitly; the current image is retained on failure.
+Ordinary first-image generation does not silently acquire a reference. The built-in
+reference variants are img2img at denoise 0.3, not a universal face-identity adapter.
+Custom identity/pose adapters must match the model family and installed nodes.
+
+Current main requests **waist-up** NPC/hero portraits, with the entire head visible.
+The separate portrait-framing/character-pipeline experiment is paused and is not
+part of these defaults. Checkpoint-independent framing, stable identity, automatic
+wardrobe/expression fidelity, full sprites and multi-character identity composition
+are not established by a successful workflow or a correct state projection.
+
+## Moment illustrations
+
+VN illustrations use the selected completed reply's hash-checked snapshot, rather
+than replacing historical clothing/positions with the current session state.
+There are two preparation paths, selected by the session content setting:
+
+- **Neutral sessions:** saved visual plans are the default. Frozen public facts
+  become one reusable English plan with description/tag surfaces. Deterministic
+  description, tags and hybrid compilers produce the selected prompt. The optional
+  semantic audit checks the final assembled text; it is not pixel inspection.
+- **Content-enabled sessions:** the existing source-based preparation path remains.
+  It uses the verified passage and saved facts, existing fidelity checks and a
+  bounded feedback retry. Its content/addendum gates remain independent of
+  checkpoint-specific formatting; it is not a fallback after a neutral-plan failure.
+
+A cold neutral plan normally uses one normalization call and one audit call when
+auditing is enabled; a structural repair can add one call. Exact cached artifacts
+need no preparation calls. A compatible format/profile can reuse normalization but
+requires its own final-text audit. Saved plans and artifacts share eight records /
+2 MiB; rebuild, source/revision changes, copy/import and checkpoint restoration
+invalidate derived entries. Canonical state is not changed by image preparation.
+
+**Generation details → Saved visual plan** exposes provenance, limitations and audit
+status. **Query** shows bounded preparation exchanges when captured. Declared
+coverage and valid IDs do not prove translation accuracy or picture fidelity.
+See [shared visual plans](../design/visual-plan-stage2-implementation.md) for the
+cache contract and [visual diagnostics](../diagnostics/visual-fidelity.md) for tracing.
+
+## Jobs, cancellation and timeouts
+
+UI jobs use owner-scoped `/api/settings/visual-jobs` requests. Duplicate submissions
+and concurrent jobs for the same target are guarded within one backend process.
+Job status is in memory and survives for one hour after completion, not a restart.
+Run one backend worker; there is no distributed visual-job coordinator.
+
+The adapter polls the exact ComfyUI `prompt_id`, selects the configured image output
+and saves the returned image and thumbnails through normal TaleWeaver storage.
+**Stop** abandons local processing and tries to remove that queued prompt only.
+A running remote task may continue; TaleWeaver does not send a global interrupt.
+Check the server before resubmitting an interrupted/unknown remote request.
+
+ComfyUI's configured queue/execution budget defaults to 600 seconds (30–3600).
+Individual HTTP operations have separate transport limits. Utility preparation
+uses the configured Small-role deadline. Increasing one budget does not change the
+others. Failures identify their stage without exposing prompts, credentials or URLs.
+
+## Output bounds
+
+| Asset | Maximum dimensions | Maximum stored size |
+| --- | --- | --- |
 | Cover | 2048 × 1024 | 4 MiB |
 | Scene | 1600 × 900 | 3 MiB |
-| Protagonist / NPC | 1024 × 1280 | 2 MiB |
-| Item | 1024 × 1024 | 2 MiB |
+| Hero / NPC / account avatar | 1024 × 1280 | 2 MiB |
+| Item / style preview | 1024 × 1024 | 2 MiB |
 
-Mapped width/height receive the profile's requested resolution and workflow-specific
-alignment (8/16/32/64 pixels), limited to these
-bounds (rounded down to multiples of eight when reduced). Unmapped dimensions
-remain in the workflow. An upscaler or other downstream node can still change the
-result, so the final downloaded image is checked separately and reduced to fit.
-Aspect ratio is preserved, with no crop or upscaling. High-entropy files that still
-exceed the byte limit are reduced further. PNG retains transparency. Account
-avatars use portrait limits, catalog examples use item limits, and test generation
-uses portrait limits. These new output checks apply to ComfyUI; other providers
-retain their existing generation behavior.
+Mapped dimensions use the requested profile resolution and workflow alignment.
+Unmapped dimensions and downstream upscalers can differ, so output is checked
+again. Images are reduced to fit while preserving aspect ratio, without automatic
+crop/upscaling; PNG transparency is retained. ComfyUI transport/decode checks reject
+responses above 32 MiB or 16 megapixels. These adapter output checks do not assert
+identical processing by every other provider.
 
-Transport/decode safeguards reject responses larger than 32 MiB or 16 megapixels
-before saving. Workflows intended to produce very large images should resize at
-their output node rather than relying on TaleWeaver to decode them.
+## Examples and validation
 
-## Standard SDXL examples
+The repository retains [SDXL text](sdxl-text-api.json), [SDXL img2img](sdxl-image-api.json)
+and [combined FLUX.1 FP8](flux1-fp8-text-api.json) API examples. Their literal model
+filenames must match your server. Task templates are the broader current catalogue;
+these example files are not a separate guarantee of installed dependencies.
 
-`sdxl-text-api.json` is a standard text-to-image graph. It assumes the checkpoint
-is named `sd_xl_base_1.0.safetensors`; adjust it to the actual server filename in
-ComfyUI and export again if needed. Both SDXL examples were exercised on an A40
-with ComfyUI 0.42.5; this does not guarantee every server/custom-node combination.
+Offline tests cover graph/binding limits, editor conversion, node discovery,
+settings/preset ownership, references, output limits, cancellation, publication and
+failure preservation. Historical GPU/browser observations are retained in
+[validation history](validation-history.md), [starter coverage](starters.md#historical-live-coverage)
+and [the dated setup review](ux-review.md). No new live image-quality result is
+claimed by this documentation update. Test your actual checkpoint, encoder, VAE,
+custom nodes and task before using a generated image as an identity reference.
 
-| Binding | Text workflow | Image workflow |
-|---|---|---|
-| prompt | `2.text` | `2.text` |
-| negative_prompt | `3.text` | `3.text` |
-| seed | `5.seed` | `5.seed` |
-| width / height | `4.width` / `4.height` | `8.width` / `8.height` |
-| image | None | `4.image` |
-| Output node | `7` | `7` |
+## Implementation owners
 
-`sdxl-image-api.json` is ordinary img2img with denoise 0.55. It is not a face-identity
-adapter. For identity/style references, import a workflow designed for that task
-with its own compatible nodes/models and map its input image.
-
-## FLUX.1 Dev FP8 example
-
-`flux1-fp8-text-api.json` adapts the [official FLUX example](https://docs.comfy.org/tutorials/flux/flux-1-text-to-image)
-to the combined `flux1-dev-fp8.safetensors` checkpoint. It includes model, encoders
-and VAE in that checkpoint; a diffusion-only file requires a different loader graph.
-The graph keeps the example's 20 steps, CFG 1 and guidance 3.5. A shared
-`PrimitiveStringMultiline` feeds both `clip_l` and `t5xxl` of `CLIPTextEncodeFlux`.
-
-| Binding | Input |
-|---|---|
-| prompt | `100.value` |
-| seed | `31.seed` |
-| width / height | `27.width` / `27.height` |
-| Output node | `9` |
-
-There is no negative-text binding: this workflow uses `ConditioningZeroOut`.
-The equivalent graph was tested with the installed checkpoint's folder prefix
-on the live A40 server. Older ComfyUI versions may need an update for the string node.
-
-## Use the current image
-
-Add a second API graph to the optional **Image workflow** slot and map `image`.
-In the adventure editor's Manual Vision Weaver, select the profile and enable
-**Use current image with ComfyUI image workflow**. The backend checks ownership,
-reads the existing full-size image, uploads it via `/upload/image`, then uses the
-returned filename in the mapped input. Remote URLs and files outside the current
-adventure's library are rejected. Missing files and SVG placeholders are not references.
-
-The old image stays active if generation fails. Quick regeneration and world creation
-use the base graph; they do not silently reuse a reference. There is no automatic
-visual update each turn, pinned identity reference or gallery of previous versions.
-
-## Profiles and jobs
-
-Simple/Advanced is respected across generation and regeneration; an explicit manual
-selection overrides the content-type default. Covers default to Advanced. Account
-avatars and catalog examples use Simple. Mixed providers remain supported.
-
-UI generation uses owner-scoped jobs at `/api/settings/visual-jobs` and short status
-requests. A duplicate job ID does not submit another task during that backend
-process's lifetime. Concurrent UI jobs for the same user/target are rejected.
-The ComfyUI adapter polls the exact `prompt_id`, reads only the configured output
-and downloads the result into TaleWeaver's normal storage, including thumbnails.
-Existing adventure export/import therefore continues to package final images.
-
-The queue/execution timeout is configurable from 30 to 3600 seconds. Transport
-requests have separate timeouts. Submission is never blindly retried. An interrupted
-submission can leave an unknown remote job; check ComfyUI before resubmitting.
-
-**Stop** abandons local processing and tries to delete only that queued ComfyUI
-prompt. An already running remote task may continue. TaleWeaver never sends a global
-interrupt or clears another client's queue. Cancelling legacy threaded providers
-may also leave their remote work running.
-
-## First-version limits
-
-- Jobs are held in memory for one backend process and retained for one hour after
-  completion. A backend restart loses job status; there is no durable worker queue
-  or multi-worker coordination. Do not automatically resubmit a lost job.
-- The named preset library lives in existing administrator settings JSON. Story
-  editors can override the Standard and High-Fidelity assignments under Visuals →
-  Image generation presets. New stories inherit shared settings.
-- Only the current image of the same adventure asset can be selected as input.
-  There are no masks, multiple references, video outputs, or automatic custom-node installation.
-- PNG preserves transparency, including thumbnails; JPEG intentionally flattens it.
-- Images and selected preset IDs are portable in adventure archives; ComfyUI setup,
-  workflows and model dependencies are administrator settings and are not embedded
-  in those archives. Re-select missing preset IDs after importing on another server.
-- Compatibility checks are static and cannot guarantee available VRAM or working
-  Python/native dependencies inside custom nodes.
-
-## Diagnosing a failed image
-
-Generation logs include the exception type even when the underlying exception has
-an empty message. ComfyUI transport failures identify the stage: reference upload,
-workflow submission, job polling or image download. Their messages omit URLs,
-credentials and prompt contents.
-
-Three different limits can apply: Small/Utility LLM prompt preparation (90 seconds),
-individual ComfyUI HTTP operations (30 seconds), and the configured ComfyUI generation
-budget (600 seconds by default). Increasing the generation budget does not change
-the HTTP or prompt-preparation limits. An inner timeout is reported with its own
-context, alongside the outer image limit, rather than claiming that the outer limit
-was reached. A remote job may still finish after a client timeout; submission is
-never automatically retried.
-
-During play, use the small image button at the top left of an NPC's portrait card,
-then **Generate portrait** or **Regenerate portrait**. This works for NPCs recorded
-in the session even when they have no initial image. It uses the NPC's current description, the session's
-story preset and the configured NPC image quality. No manual prompt or game turn
-is required. The saved image belongs to this session, survives leaving/resuming
-and is included in session exports. Failed generation keeps the previous image.
-Closing the dialog while generating stops waiting; a running remote job may continue.
-
-To change an NPC in the adventure blueprint, use its editor scene's **Quick Regen**
-or **Regen (Prompt)** action. **Generate Missing** creates missing blueprint portraits.
-Those actions do not edit NPCs created inside a saved session. In the immersive game
-view, portraits are shown in the separate character panel, not inside each dialogue bubble.
-
-A missing image does not hide an NPC's card: it shows a placeholder with the same
-generation button. The panel lists visible NPCs in the current scene. A name in
-narrated dialogue alone does not create a stored NPC or a card. If the card itself
-is missing, check the session's NPC record, current location and visibility first.
-Session IDs and image paths support Unicode names, including Cyrillic; renaming
-an adventure or restarting its save is not required to generate a portrait.
-
-New adventures and saves now use UUIDs independent of their display titles.
-See the [storage and multilingual-path audit](../storage-identifiers.md) for legacy
-save compatibility and export/upload checks.
-
-The Library now offers **Resume** alongside **New session** when a saved session
-exists. Resume opens the newest unfinished save; if all saves are finished, it opens
-the newest completed/defeated one. Archived saves are not chosen automatically.
-Use **Sessions** to choose a different save. **New session** keeps existing saves.
-
-## Validation
-
-Automated tests use a fake ComfyUI HTTP transport and isolated SQLite databases.
-They cover workflow typing/bindings, node checks, image saving, reference upload,
-profile selection, settings round-trips, job ownership, duplicate submissions,
-failure preservation and cancellation without global interruption. Live workflows
-must still be tested against the actual user's ComfyUI installation.
-
-Branch validation results:
-
-- Broad selection: 226 passed, three pre-existing failures in `test_adventures_api.py`
-  (legacy consumable import, readable inventory snapshot, and manifest start scene).
-- Earlier preset update: 118 tests passed across ComfyUI, prompt presets, existing media
-  behavior and adventure lifecycle suites. This includes timeout before image
-  submission, automatic/manual rules, profile overrides, settings persistence and
-  preset IDs surviving cloning/export/import.
-- The latest affected regression selection passed 113 existing media/configuration,
-  filesystem security and adventure lifecycle tests.
-- Full manifest application generated all five visual types through the fake ComfyUI
-  transport and verified the Simple/Advanced assignments.
-- Chromium verified API JSON import, bindings, compatibility checking, generation
-  using unsaved settings, saved settings after reload, and repeated generation.
-- Live ComfyUI 0.42.5 on NVIDIA A40 generated a five-image world with SDXL/FLUX
-  assignments and then processed the previous scene via img2img. The six initial
-  remote jobs completed in approximately 16–29 seconds each. Required nodes/models
-  and filename detection were checked against the real server. LLM adaptation was
-  disabled for these GPU tests; its routing and assembly were tested with mocks.
-- Two further GPU jobs passed: generation through the browser's background-job flow
-  and a reference comparison at denoise 0.25 (about 13 seconds end to end). The latter
-  retained the original lighthouse/boat/pier much better than denoise 0.55, which
-  changed major structures. Eight live jobs succeeded in that earlier round. This is transport
-  and workflow validation, not a guarantee of exact semantic/identity preservation.
-- Chromium saved a story-specific preset, verified it after reload and restored its
-  original choice; desktop and mobile drawer layouts were inspected.
-- Frontend production build passed; TypeScript diagnostics match the previous base
-  diagnostic set. New Python modules/tests pass Ruff check and format check.
-- Full-file Ruff reports 39 existing diagnostics in modified legacy files, compared
-  with 40 on the same files at the previous commit; no new diagnostic locations.
-  Two legacy files still fail the full-file format check. New modules pass both.
-
-The final starter-workflow regression selection passed **166 tests**. All nine
-Python modules/tests changed in this update pass Ruff check and format check. The
-frontend production build passes with no additional TypeScript diagnostics relative
-to the preceding commit.
-
-The starter-workflow update adds 24 successful live jobs (eight each for SDXL,
-FLUX.1 Dev FP8 and Prefect Anima), plus an initial Anima smoke image. The family
-matrix and current limitations are documented in [starters.md](starters.md).
-
-The current setup flow and accessibility limits are recorded in the [UI review](ux-review.md).
+- [Preset/workflow contracts](../../backend/core/comfyui_config.py) and
+  [task recipe catalogue](../../backend/core/comfyui_task_templates.py).
+- [Editor JSON conversion](../../frontend/src/services/comfyEditorImport.ts).
+- [ComfyUI transport](../../backend/engine/comfyui_client.py) and
+  [visual output limits](../../backend/core/visual_limits.py).
+- [Moment generation routing](../../backend/engine/scene_illustrations/generation.py)
+  and [saved-plan preparation](../../backend/engine/scene_illustrations/plan_preparation.py).
+- [Session portrait generation](../../backend/engine/session_portraits.py).

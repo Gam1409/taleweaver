@@ -2,7 +2,15 @@
 
 Administrators can enable **System Debug** under **System & Realm → System Diagnostics** and save the setting. It persists across backend restarts. It is disabled by default and independent of gameplay debug and raw LLM telemetry.
 
-Diagnostics are written as JSON lines to `log/system-debug.jsonl` in the project root. Rotation retains at most five files: 5 MiB each in standard mode, 50 MiB each in detailed mode. Story strings retain their original language. Disabling diagnostics stops recording but retains existing files. The directory is ignored by Git and is not exposed through a download endpoint.
+Diagnostics are written as JSON lines to `log/system-debug.jsonl` in the project
+root by default. The process environment variable `TALEWEAVER_LOG_DIR` overrides
+that directory; desktop builds set it to the profile's `logs/diagnostics/`.
+Rejection traces use the same directory. Rotation retains at most five system
+log files: 5 MiB each in standard mode, 50 MiB each in detailed mode. Captured story
+strings retain their original language. Disabling diagnostics stops recording but
+retains existing files. The directory is ignored by Git and is not exposed through
+a download endpoint. See [Docker storage](../docker-storage.md) when the log
+directory needs a persistent container mount.
 
 Events cover HTTP requests and disconnects, database queries and transactions, LLM calls and retries, embeddings, image generation, background jobs, and instrumented game pipeline stages. They include UTC timestamps, durations, outcomes, safe error types and stack locations, and correlation UUIDs where available. SQL is represented by its operation category, not its text. HTTP routes use registered route patterns, not user-provided paths or queries.
 

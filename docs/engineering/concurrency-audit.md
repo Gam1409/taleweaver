@@ -1,5 +1,10 @@
 # Persistence and concurrency audit
 
+> **Historical persistence audit snapshot.** The findings, branch names, test counts, failing
+> baselines and browser observations below describe the reviewed revision. They
+> are not current release status or a claim that later changes were retested. See
+> [current inference queue](../inference-queue.md), [turn recovery](../repair-and-retry.md) and [engine boundary](engine-boundary.md) for active contracts.
+
 This audit follows a reported `database is locked` failure while saving an NPC
 journal extraction. It covers RAG maintenance, visual persistence, settings and
 session mutation paths. It does not establish that every possible race is absent.
@@ -52,13 +57,13 @@ concurrent JSON updates, native storage cancellation, reset cleanup and read-onl
 polling. Model responses are mocked; these tests verify persistence behavior, not
 live provider quality or throughput.
 
-The broader adventure API suite has 16 existing failures caused by outdated-format
+At that review baseline, the broader adventure API suite had 16 failures caused by outdated-format
 session-start fixtures. The same failures reproduce on unchanged commit
-`9ac6dfef`. The legacy `sessions.py` module also has pre-existing lint/format
+`9ac6dfef`. The legacy `sessions.py` module also had pre-existing lint/format
 findings; forwarding four endpoints to the new helper introduces no new Ruff
 findings. New modules and the other changed Python files pass Ruff checks.
 
-The main turn still flushes state before awaiting remote inference and commits at
+At that audit baseline, the main turn flushed state before awaiting remote inference and committed at
 its end. Different sessions can consequently compete for SQLite's single writer.
 Solving this fully requires staging inference separately and revalidating changes
 in a short final transaction; inserting arbitrary intermediate commits would

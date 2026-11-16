@@ -1,8 +1,10 @@
 # CHPM qualitative appraisal stage
 
-The live VN pilot now accepts bounded subjective interpretations in its existing
-candidate-generation call. Nothing is enabled by default. Ordinary mode and the
-shadow comparison remain available; NSFW prompts are unchanged.
+Live VN cognition accepts bounded subjective interpretations in its existing
+candidate-generation call. Nothing is enabled by default. Standard mode and the
+Observe comparison remain available. The current wire protocol uses separate
+`new_beliefs` and `belief_revisions` arrays; the host converts both to canonical
+interpretation events without changing the stored reducer contract.
 
 ```mermaid
 flowchart LR
@@ -42,7 +44,9 @@ Explicit agent pins keep their existing separate limits and priority.
 Output allows two interpretations with two citations each. These limits bound
 the protocol, not the accuracy of retrieval or psychological inference.
 The existing settings still bound total input characters and output tokens. Calls
-per live turn remain N + 2, or N + 4 with narration repair, plus the normal narrator.
+per successful Staged live turn with agent rounds off remain N + 2, or N + 4 with
+narration repair, plus the normal narrator. Tool rounds, shared proposal repair,
+Integrated decisions and recovery follow the [workflow guide](npc-decision-workflows.md).
 
 Current live selection uses `motivated-choice-v2` with the existing clarification
 gate; see [motivation and arbitration](chpm-motivation.md). The older comparison
@@ -53,19 +57,18 @@ automatic trauma recovery, or confidence inferred from source counts.
 
 ## Independent choice and necessary questions
 
-An unsupported `CLARIFY` cannot outrank an available independent intention merely
-because the generator labels the question as supporting a goal. A `question_gate`
-must name a specific missing external fact or player's intention and two distinct
-answers mapped to two other offered actions. Duplicate, unavailable or recursively
-questioning branches do not unlock clarification. If equally useful independent
-progress is available, it wins. If only lower-priority filler is available outside
-the conditional actions, a necessary question can still win.
+An unsupported `CLARIFY` is not an eligible live preference merely because the
+generator labels it goal-supporting. A `question_gate` must name a specific missing
+external fact or player's intention and two distinct answers mapped to two other
+offered actions. Duplicate, unavailable or recursively questioning branches do not
+unlock clarification. Actions blocked by that unresolved question remain unavailable.
 
-The policy does not select goal-conflicting compliance as a substitute for an
-unsupported question. It keeps voluntary silence available and does not force
-every character to be outgoing. Goal-grounding checks remain in place. The trace
-records `selection_reasons` and the proposed `question_gate`, separately from
-literary explanations generated after the choice.
+Current `motivated-choice-v2` accepts the model's eligible, source-grounded preference.
+Goal labels and motive-set dominance remain diagnostic rather than a calibrated
+priority over that preference. Earlier `initiative-gated-v1` favored independent
+goal-tier progress; it is not the current live selector. Silence, cooperation,
+refusal and personal goal tradeoffs remain possible when properly offered and
+grounded. The trace records `selection_reasons` and the proposed `question_gate`.
 
 Generic permission to continue talking/writing is excluded from the contract.
 The narrator must express the chosen intention without handing that choice back

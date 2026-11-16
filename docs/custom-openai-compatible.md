@@ -15,8 +15,8 @@ In **Admin → Intelligence → Local Endpoints & Memory → Local & Custom API 
 
 ## Shared address and individual roles
 
-The shared **Base URL** is the default for all five roles. Each role using
-**OpenAI-Compatible API** has a collapsible **API URL for this role** field:
+The shared **Base URL** is the default for all five roles. Open that role's
+**General settings → Connection settings** to find **API URL for this role**:
 
 - Leave it blank to follow the shared address.
 - Enter a different `/v1` address to use another server for that role. For example,
@@ -39,7 +39,7 @@ The request timeout defaults to 300 seconds and is editable up to 3600 seconds; 
 
 **Structured output support** defaults to **Prompt only** for compatibility. Prompt only and **JSON object** include the complete canonical schema in the prompt; JSON object also requests JSON syntax through `response_format`. If your server supports **JSON schema**, TaleWeaver sends a structural decoder schema through `response_format` and keeps canonical descriptions, defaults, examples and deferred validation rules in the prompt. Identical schema nodes can share local `$defs` references to reduce duplication. Scoped, recursive or unrecognized contracts retain the complete canonical prompt when a smaller representation cannot be proven safe. No narrative, source data or domain instructions are removed.
 
-Native schema mode requires the server to support the schema keywords and local `$defs` references it receives. Token and context accounting varies by server; native mode does not establish the available context. Where a prepared-request character limit is configured, it conservatively counts both messages and the response schema. Unsupported selected modes produce a server error; change back to Prompt only rather than assuming support from `/models`. NPC Personality technical requests honor the same selection, including observer-specific identifier constraints. Freeform narration does not send `response_format`, and structured output does not require tool-calling support. TaleWeaver still parses and validates the response using the canonical Pydantic schema. Schema equivalence and transport tests do not establish a model's semantic accuracy or ability to follow complex instructions.
+Native schema mode requires the server to support the schema keywords and local `$defs` references it receives. Token and context accounting varies by server; native mode does not establish the available context. Where a prepared-request character limit is configured, it conservatively counts both messages and the response schema. A server rejection of the selected mode is reported without automatically replaying the request; choose Prompt only if the server lacks support. Separately, unsupported task-schema projections can select a weaker format before dispatch, as described in [technical structured output](structured-output.md). NPC Personality technical requests honor the same selection, including observer-specific identifier constraints. Freeform narration does not send `response_format`, and structured output does not require tool-calling support. TaleWeaver still parses and validates the response using the canonical Pydantic schema. Schema equivalence and transport tests do not establish a model's semantic accuracy or ability to follow complex instructions.
 
 NPC requests expand finite dictionary keys into explicit optional properties in
 the transport schema because some grammar backends ignore `propertyNames`.
@@ -54,5 +54,11 @@ copies the same value into a one-element list and changes no story content.
 Conflicting fields, unknown IDs, malformed JSON and missing decisions are rejected.
 Corrections are logged without story text and counted separately as **Local format
 corrections**; all normal schema and semantic checks still apply afterwards.
+
+NPC Personality's **Memory tool compatibility** is a separate setting. Its JSON
+compatibility mode encodes tool operations for servers without native function
+calls; it does not change the administration setting for structured decision
+output. See [NPC decision workflows](npc-decision-workflows.md) and
+[observable state tools](npc-observable-state.md).
 
 Detection errors distinguish authentication failure, missing `/models`, timeout, and invalid/unreachable endpoints. Check the Base URL, the server log, the optional vault key, and container networking before retrying. Detection failure does not disable manual IDs. Requests never fall back to cloud OpenAI or OpenRouter.

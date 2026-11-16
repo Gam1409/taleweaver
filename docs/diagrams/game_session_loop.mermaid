@@ -1,61 +1,59 @@
 sequenceDiagram
     autonumber
     participant C as Client
-    participant API as FastAPI Router
-    participant GTM as GameTurnManager
-    participant SM as Mechanics LLM (Small)
-    participant VAL as Pass 1.5 Validator & DB
-    participant CM as Narration LLM (Complex)
-    participant ME as Media Engine
-    participant TTS as TTS Engine
+    participant API as Chat API and session lease
+    participant T as GameTurnManager
+    participant W as Technical model and domain validators
+    participant NPC as Optional NPC Personality
+    participant N as Narration model
+    participant DB as Canonical session state
+    participant BG as Deferred memory and visual work
 
-    C->>API: POST /adventures/{game_id}/chat (content, auto_visualize, language)
-    API->>GTM: process_turn()
-    GTM-->>C: SSE event: status ("Validating rules...")
-
-    rect rgb(240, 248, 255)
-        note over GTM,SM: Pass 1: Mechanics Evaluation
-        GTM->>SM: Prompt (Character Sheet, Location Context, Exits, Quests, Awards)
-        SM-->>GTM: GameEvent (Requested scene change, entity updates, exit states, switch/container actions)
+    Note over C,BG: Main foreground paths. Commands, combat, terminal reports and prose-only regeneration have separate branches.
+    C->>API: Submit a session chat request
+    API->>T: Process under the existing mutation/recovery boundary
+    T->>DB: Load scoped state, history and settings
+    alt RPG or Story mechanics
+        T->>W: Propose mechanics and resolve host rule checks
+        W-->>T: Accepted outcomes and denied actions
+    else Visual Novel
+        T->>W: Propose VN progression, movement and access
+        W-->>T: Validated world outcomes
+    else Chat
+        Note over T,W: Applicable host rules and optional generator tools still apply
     end
-
-    rect rgb(255, 245, 238)
-        note over GTM,VAL: Pass 1.5: Rule Validation & Reversion
-        GTM->>VAL: Validate state updates against DB gates (required items, codes, flags)
-        alt Illegal action / Missing key item or code
-            VAL-->>GTM: Revert state update & append to rule_violations list
-        else Valid action
-            VAL-->>GTM: Accept state update
+    T-->>C: Status and intermediate state events
+    opt NPC Personality enabled or observed
+        T->>NPC: Prepare observer-scoped context and bounded decisions
+        opt Existing tool rounds enabled
+            NPC->>DB: Read accessible evidence and current state by exact ID
+            DB-->>NPC: Bounded source-bound observations
+        end
+        NPC-->>T: Plans or observation-only results, according to mode
+    end
+    T->>N: Narrate host outcomes and applicable accepted NPC plans
+    loop Narration chunks
+        N-->>T: Candidate prose chunk
+        alt Ordinary unbuffered narration
+            T-->>C: Prose chunk before reconciliation and commit
+        else Live CHPM buffered decisions or simplified review
+            Note over T,C: Retain prose on the server until review and commit
         end
     end
-
-    GTM-->>C: SSE event: state (Pre-narration UI state)
-    GTM-->>C: SSE event: status ("Generating narrative...")
-
-    rect rgb(245, 255, 245)
-        note over GTM,CM: Pass 2: Atmospheric Narration
-        alt Has rule_violations
-            GTM->>CM: Narrative prompt overridden with rule_violations failure instructions
-        else Normal Turn
-            GTM->>CM: Narrative prompt with validated GameEvent outcome
-        end
-        CM-->>GTM: Streamed narrative prose
-        GTM-->>C: SSE event: message (Narration text chunk)
+    opt Live NPC shared review
+        T->>NPC: Validate shared narration meaning and grounded effects
+        NPC-->>T: Accept, bounded repair or existing fallback/error policy
     end
-
-    rect rgb(250, 250, 250)
-        note over GTM,VAL: State Persistence & Map Tracking
-        GTM->>VAL: Persist Avatar Stats, Inventories, Scene, and WorldMap discovery
-        opt Auto-Visualize (if scene change or image requested)
-            GTM->>ME: Generate Scene/Entity visual
-            ME-->>GTM: local_path & /data/... URL
-            GTM->>VAL: Update WorldScene / WorldEntity image
-        end
+    opt Completed VN narration
+        T->>W: Reconcile supported item, clothing and condition facts
+        W-->>T: Independently validated deltas and rejection diagnostics
+        Note over T,W: Optional scene staging retains its separate reconciliation boundary
     end
-
-    opt TTS Spoken Narration
-        C->>API: POST /api/tts/generate (narration text)
-        API->>TTS: Synthesize Speech (Strip vocal tags [whispers], resolve voice)
-        TTS-->>API: Audio Stream / URL
-        API-->>C: Audio playback
+    T->>DB: Persist reply, source bindings, canonical changes and selected visual moment
+    T->>DB: Commit the completed turn
+    T-->>BG: Schedule eligible journal, recall and visual maintenance
+    opt Live CHPM buffered delivery
+        T-->>C: Reviewed prose after reconciliation and commit
     end
+    T-->>C: Final receipt or explicit incomplete/error outcome
+    Note over C,BG: Speech and image rendering use their own settings. Neither authorizes a world-state mutation.

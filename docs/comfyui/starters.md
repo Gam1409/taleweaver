@@ -7,22 +7,32 @@ serves covers, backgrounds/scenes, protagonist and NPC portraits, objects, accou
 avatars and catalog tiles. Separate files for every aspect ratio are unnecessary.
 TaleWeaver fills the mapped dimensions from the asset type and quality profile.
 
-| Starter | Loaders / files | Default sampling | Alignment |
+The current catalogue has ten families; the earlier live matrix below tested only
+a subset. [Task templates](../comfyui-task-templates.md) also support explicit
+component-layout recipes.
+
+| Starter | Default loaders / files | Default sampling | Alignment |
 |---|---|---|---|
+| SD 1.5 | Combined checkpoint | 25 steps, CFG 7, Euler / normal | 8 px |
 | SDXL | Combined checkpoint | 25 steps, CFG 7, Euler / normal | 8 px |
 | Illustrious XL | SDXL architecture, Illustrious checkpoint | 28 steps, CFG 5, Euler ancestral / normal | 8 px |
-| Animagine XL 4.0 | SDXL architecture, Animagine 4.0 checkpoint | 28 steps, CFG 7, Euler ancestral / normal | 8 px |
+| Animagine XL 4.0 | SDXL architecture, Animagine 4.0 checkpoint | 28 steps, CFG 5, Euler ancestral / normal | 8 px |
 | FLUX.1 Dev FP8 | Combined checkpoint containing model, encoders and VAE | 20 steps, CFG 1, guidance 3.5, Euler / simple | 16 px |
+| Pony V6 XL | Combined SDXL-family checkpoint | 25 steps, CFG 7, Euler ancestral / normal | 8 px |
+| SD3.5 Large | Checkpoint + external CLIP-L/CLIP-G/T5 | 20 steps, CFG 5, Euler / sgm_uniform | 16 px |
 | Anima / Prefect Anima | Diffusion model + Qwen-3 0.6B encoder + Qwen Image VAE | 30 steps, CFG 4, er_sde / simple | 16 px |
+| Nova Anime AM | Anima-family diffusion model + Qwen-3 encoder + Qwen Image VAE | 30 steps, CFG 4, er_sde / simple | 16 px |
+| Qwen Image | Diffusion model + Qwen 2.5 VL encoder + Qwen Image VAE | 20 steps, CFG 2.5, Euler / simple | 16 px |
 
-These are starting points for the named architectures. Split FLUX loaders, Turbo,
-Edit/Kontext, masks and identity adapters need an appropriate custom graph. LoRA
+These are starting points for the named architectures. Task-template component
+recipes include split FLUX layouts; Turbo, Edit/Kontext, masks and identity adapters
+need an appropriate compatible graph. LoRA
 weights stay in the graph; a prompt template does not alter sampling settings.
 
 Anima is based on Cosmos-Predict2 and is **not** Animagine or an SDXL derivative.
 Its starter follows the official Anima graph: `UNETLoader`, `CLIPLoader` with
 `type=stable_diffusion`, `VAELoader`, `EmptyLatentImage` and normal CLIP conditioning.
-Default files are `prefectAnima_v10.safetensors`, `qwen_3_06b_base.safetensors` and
+The current base default is `anima-base-v1.0.safetensors`, with `qwen_3_06b_base.safetensors` and
 `qwen_image_vae.safetensors`. The public Prefect Anima v1.0 metadata identifies its
 base family as Anima; its derivative card did not provide separate sampler advice.
 
@@ -68,7 +78,10 @@ accordions; incomplete bindings open automatically. Advanced JSON edits preserve
 valid mappings and discard mappings to removed/connected inputs. Workflow changes
 are draft changes until **Apply to form** and **Save Visuals Settings**.
 
-## Live coverage
+## Historical live coverage
+
+This matrix records the original starter update, not a new run or current full-family
+benchmark. No new GPU jobs were run for the 2026-11-16 documentation review.
 
 On ComfyUI 0.42.5 with an NVIDIA A40 (48 GB), all 24 jobs in this matrix completed:
 
@@ -97,7 +110,7 @@ found that disabled adaptation forwarded structured asset metadata; it now forwa
 only the visual description, verified by a regression test. That final correction
 was not retested on the GPU after the server was released.
 
-All ten starter graphs were checked against a locally saved copy of the live node
+The ten graphs for the five families in that historical update were checked against a locally saved copy of the live node
 registry. The only compatibility errors for Illustrious/Animagine were their missing
 checkpoint filenames. Automated tests exercise prompt/seed/dimension binding and
 reference upload for all five families; this does not replace live model execution.
