@@ -1,5 +1,10 @@
 # Session integrity review repairs
 
+> **Historical November repair-wave record.** The findings, branch names, test counts, failing
+> baselines and browser observations below describe the reviewed revision. They
+> are not current release status or a claim that later changes were retested. See
+> [current state reconciliation](../narrated-item-reconciliation.md), [NPC workflows](../npc-decision-workflows.md) and [structured-output policy](../structured-output.md) for active contracts.
+
 The review baseline is `0eb76d04`. Changes are delivered in separately verified
 waves. Model responses in regression tests are mocked. Separate live benchmarks
 use synthetic data and keep their private endpoints and artifacts out of Git.

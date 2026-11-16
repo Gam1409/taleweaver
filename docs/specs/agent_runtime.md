@@ -22,8 +22,9 @@ is recognized. The blueprint is checked before downloading its larger assets.
 Adventure identity remains the existing `adventure.origin_id`, never a display
 title or an extension field. UUID spellings are canonicalized for comparison;
 non-UUID legacy keys remain case-sensitive and retain their original spelling.
-Incoming identities fit the existing 50-character storage bound. Catalog lookup,
-installation and export use the same identity rules without rewriting stored IDs.
+Incoming catalog identities fit the existing 50-character storage bound. Catalog
+lookup, installation and export use the same identity rules without rewriting
+stored IDs.
 
 Upstream preserves valid namespaces without interpreting their version. Its
 [format specification](https://github.com/jschm42/taleweaver/blob/47fc1292a78e2f995f2b0feb6bec3410e8cd6765/docs/specs/adventure_format.md)
@@ -47,7 +48,7 @@ the existing authored block. Unknown nested fields, including JSON null, survive
 | `extensions.agent_runtime` | Adventure-wide defaults and feature requirements | Frozen session manifest snapshot |
 | NPC core fields | `id`, `character`, `goal`, `start_scene_id`, `image_url` | Existing world/entity mechanisms |
 | `metadata_json.personality_profile` | Authored categorical traits | Existing personality profile catalog |
-| `metadata_json.agent_runtime` | NPC autonomy and initial situation/relationship/knowledge seeds | Session initialization adapter |
+| `metadata_json.agent_runtime` | NPC autonomy and initial situation/relationship/knowledge seeds | Future session initialization adapter; currently transported opaquely |
 | `SessionState.entity_states.__chpm__` | Observations, source-bound beliefs, experience, agenda and mind snapshots | CHPM reducers and lifecycle code |
 | `SessionState.living_world` | Clock cursor, events, decisions, revision and timeline | Living World |
 | World Info / memory SQL rows | Canonical corpus entries, revisions, visibility and source evidence | Existing RAG and World Info services |
@@ -126,8 +127,8 @@ Breaking shape/meaning changes increment the integer schema version. Additive
 fields with safe defaults do not. Migrations must be explicit, pure and tested;
 no implicit migration is registered in version 1.
 
-The inspector defaults to **no supported capabilities**. This PR supplies a
-contract and negotiation API, not a claim that every existing subsystem already
+The inspector defaults to **no supported capabilities**. This implementation
+supplies a contract and negotiation API, not a claim that every existing subsystem already
 implements its portable activation adapter. Hosts advertise only adapters they
 actually wire and test. Import/edit/export paths deliberately do not call engines.
 
@@ -144,7 +145,7 @@ template into an existing mind. Copy/restore uses current CHPM source rebinding,
 World Info portability and Living World timeline forking; never replay seed data
 over an existing save. A failed validation leaves the last valid session intact.
 Deleting an NPC or changing its ID requires validating its seed references again;
-this patch does not rewrite opaque third-party data during entity renames.
+opaque third-party data is not rewritten during entity renames.
 
 Map supported defaults to existing CHPM Settings and Living World Settings at
 session creation. Preserve `ensure_compatible`: CHPM live control and Living World
@@ -175,14 +176,14 @@ port in `backend/services/runtime_resources.py`. `resolve_corpora` accepts an
 installed adapter and injected remote adapters indexed by local `library_id`.
 It verifies SHA-256 and the 8 MiB resource limit before returning canonical bytes.
 Adapters own download limits, timeout, redirects, cache, credentials and revision
-lookup. There is no bundled live remote RAG provider in this PR.
+lookup. No bundled remote RAG provider or corpus-ingestion wiring is currently supplied.
 
 Each corpus reference has `id`, `source` (`installed` or `remote`), an exact
 `revision`, lowercase 64-character `sha256`, and `required` (default false).
 Only remote references have `library_id`. Endpoints, keys, local paths, embedding
 provider/model and vector dimensions stay in local configuration. A hash pins
-content, not publisher trust. Ingestion uses existing World Info validation and
-visibility; retrieval never bypasses it. Vector caches rebuild when the existing
+content, not publisher trust. A future ingestion adapter must use existing World
+Info validation and visibility; retrieval must not bypass it. Vector caches rebuild when the existing
 embedding signature changes.
 
 Missing adapters, network failures and integrity mismatch are explicit optional

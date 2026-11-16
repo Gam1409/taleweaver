@@ -14,7 +14,7 @@ NPC extraction also has a shared 12,000-character cap for known-character contex
 
 ## Maintenance and summaries
 
-Chronicle compression and grouped summaries run before optional embedding indexing. An unavailable embedder therefore cannot prevent an eligible canonical summary from being attempted. Within indexing, learned facts and summaries precede raw dialogue. Model calls retain the configured role/provider deadlines.
+Public indexing, chronicle compression, grouped summaries and optional observer indexing rotate through bounded idle units with independent failure backoff. An unavailable embedder therefore cannot permanently starve an eligible canonical summary, and repeated summaries cannot permanently starve indexing. Within public indexing, learned facts and summaries precede raw dialogue. Model calls retain the configured role/provider deadlines. See [the memory guide](../memory-rag.md) for foreground contention and timeout limits.
 
 Summaries track exact `source_keys`, in addition to their message IDs and evidence hash. Long messages are processed as bounded fragments across separate jobs, including a short final fragment. Legacy rows with null keys retain whole-message coverage. Import/copy remaps fragment message identifiers; editing or deleting source fragments invalidates derived summaries. New summaries use the session language rather than unconditional English.
 

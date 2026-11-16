@@ -1,5 +1,11 @@
 # Final pilot validation before merge
 
+> **Historical acceptance plan.** The pilot has been merged and the settings/debug
+> interface has since changed. This page retains its original batch quotas,
+> measurements and rollout work order; it is not the current merge checklist.
+> Use [NPC Personality](chpm-pilot.md), [workflows](npc-decision-workflows.md) and
+> [current evaluation tools](chpm-matrix-evaluation.md) for present behavior.
+
 This is an acceptance plan, not a claim that CHPM simulates human psychology.
 The pilot remains optional. No new live run starts until the owner supplies an
 available model endpoint; old paid instances must not be polled automatically.

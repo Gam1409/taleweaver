@@ -1,5 +1,11 @@
 # Situation, personality and emotion: research and implementation plan
 
+> Research plan and original review record. Reading notes and proposed mechanisms
+> are retained as evidence; a proposed mechanism is not proof of implementation or
+> psychological validity. For current runtime behavior, use the
+> [Personality guide](../chpm-pilot.md) and [appraisal contract](../chpm-appraisal.md).
+> This documentation update did not repeat the book review or live-model studies.
+
 Status: scene handoff and state-grounded appraisal integrations implemented,
 2026-11-10; offline validation only.
 The research baseline below records the original gap. Implementation status and

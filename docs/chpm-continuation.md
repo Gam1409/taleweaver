@@ -11,13 +11,14 @@ This is the intended behavior, not a guarantee that a model always gets it right
 
 ## Choose how to play
 
-Open **Session Memory & Settings → NPC Personality**, choose characters, and
+Open **Session settings → NPC Personality**, choose characters, and
 save between turns. Start with one active NPC before increasing the cast.
 
 For an adventure, open **Living World** in the editor's left menu. It contains
 Concordia settings and NPC Personality defaults for **new sessions only**. Existing
 sessions retain their own settings and psychological history. Session settings use
-three columns on wide screens, stacking on smaller screens. **Debug → VN Settings**
+separate navigation sections for Living World and NPC Personality, adapting to
+the available screen width. **Debug → VN Settings**
 provides mature-content controls and technical Concordia/Personality diagnostics.
 
 | Mode | What changes |
@@ -109,7 +110,10 @@ avoids reusing an intention from before the gap, and labels pre-gap emotional
 estimates as historical with current intensity unknown. It does **not** silently
 reconstruct confirmed psychological memory from the unreviewed dialogue. Events
 from that interval can therefore be missing from CHPM's observer memory even
-though they remain in the story. A new successful review closes the pending gap;
+though they remain in the story. [Bounded source recovery](chpm-source-continuity.md)
+can later admit eligible, source-checked historical observations through the
+existing perception/review calls; it does not invent their past emotions or choices.
+A new successful review closes the pending gap;
 it does not claim to have verified the missing interval.
 
 The most recent eight simplified replies retain diagnostic source IDs and hashes.

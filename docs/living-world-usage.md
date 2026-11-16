@@ -14,7 +14,7 @@ sequential engine. Neither runs a perpetual agent swarm or a second RAG database
    restart the backend. Configure the **Utility** model with **Ollama** or
    **OpenAI-Compatible API**. These are the transports covered by the shared
    inference reservation. Provider credentials and timeout use existing settings.
-3. Open a session's settings → **Living World · Experimental**. Enable Living World.
+3. Open **Session settings → Living World**. Enable Living World.
    **Pause while away** never converts wall time into game time; **Catch up when
    returning** preserves the unprocessed absence backlog.
 4. Enable **Allow bounded NPC decisions**. Enable **Schedule recurring NPC decisions**
@@ -25,6 +25,12 @@ sequential engine. Neither runs a perpetual agent swarm or a second RAG database
    processing is off. Heartbeats continue while inference waits.
 
 ### Adventure defaults for VN
+
+Enabled/live NPC Personality and Living World private decisions are mutually
+exclusive whenever `living_world_enabled && deliberation_enabled` is true.
+Rules-only Living World may coexist with live NPC Personality. Turning Living
+World off retains its private-decision preference without blocking Personality;
+turning it on rechecks compatibility. Observe/Standard do not acquire live control.
 
 When creating or editing an adventure, select **VN** and open **Living World**.
 The **Enable Concordia** checkbox reveals time controls, recurring NPC routines,

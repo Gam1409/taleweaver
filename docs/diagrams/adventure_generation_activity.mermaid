@@ -1,30 +1,22 @@
 flowchart TD
-    Start([Start World Generation]) --> CreateShell[Create Template Shell & Avatar in DB]
-    CreateShell --> StartBG[Launch Async Background Task]
-    
-    subgraph BackgroundTask [World Generation Pipeline]
-        direction TB
-        Init[Resolve Tone, Style Guidelines & Catalog] --> CallLLM[LLM: Generate Complete WorldManifesto]
-        CallLLM --> ValidateManifest{Manifest Valid & Connected?}
-        ValidateManifest -- No --> Retry[Auto-Fix / Retry LLM Generation]
-        Retry --> CallLLM
-        ValidateManifest -- Yes --> ApplyManifest[WorldManifestApplier: Write to Database]
-        
-        subgraph ApplyLogic [Entity & Asset Application]
-            direction TB
-            ClearDB[Clear Existing Template Data] --> Protagonist[Sync Protagonist Avatar & Stats]
-            Protagonist --> Meta[Save Plot, Rules, Walkthrough & Win/Loss Conditions]
-            Meta --> Quests[Initialize Quests & Achievements]
-            Quests --> Scenes[Create Scenes & Generate Background Visuals]
-            Scenes --> NPCs[Create NPCs with Voice Tags & Portraits]
-            NPCs --> Objects[Create Items, Containers & Switches with Art]
-            Objects --> Exits[Connect Map via Directional/Bidirectional Exits]
-        end
-        
-        ApplyManifest --> Finalize[Set Adventure Status: Ready]
-    end
-    
-    Finalize --> End([Generation Complete & Ready for Play])
-    
-    style BackgroundTask fill:#f9f9f9,stroke:#333,stroke-width:2px
-    style ApplyLogic fill:#fff,stroke:#666,stroke-dasharray: 5 5
+    Start(["Start generation job"]) --> Lease["Check ownership, cancellation and job revision"]
+    Lease --> Prepare["Resolve mode, narrative settings, styles and authored blueprint"]
+    Prepare --> Restore["Validate matching input fingerprint and saved staged checkpoints"]
+    Restore --> Plan["Reuse a valid plan or plan identifiers and world structure"]
+    Plan --> Protagonist["Reuse or generate validated protagonist detail"]
+    Protagonist --> Batch["Reuse or generate validated detail batches of up to two entities"]
+    Batch --> More{"More required batches?"}
+    More -->|Yes| Batch
+    More -->|No| Assemble["Assemble the world manifest"]
+    Assemble --> Validate["Validate the draft and mode-specific constraints"]
+    Validate --> Apply["Apply authored narrative and world data under generation guards"]
+    Apply --> Avatar["Persist protagonist baseline and configured portrait"]
+    Avatar --> Scenes["Persist scenes, requested backgrounds and directional exits"]
+    Scenes --> Npcs["Persist NPC identities, inventories and requested portraits"]
+    Npcs --> Items["Persist objects, requested icons and inventory references"]
+    Items --> Assets["Finalize asset reuse and generation results"]
+    Assets --> Final["Finalize validation and generation status"]
+    Final --> End(["Generation complete"])
+    Lease -.-> Stop["Cancellation or stale revision prevents further writes"]
+    Batch -.-> Retry["Invalid output uses bounded correction; exhausted jobs remain failed or resumable"]
+    Validate -.-> Retry

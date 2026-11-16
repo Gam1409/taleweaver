@@ -25,8 +25,8 @@ candidate is revalidated against the original strict contract before any state
 is applied. A malformed item cannot discard an unrelated valid scene/body section.
 
 The active request schema requires explicit `actions`, `condition_updates`,
-`scene_updates` and `final_frame_actions` arrays. Enabled staging also requires its
-root field and `changes`, `props`, `explicit` lists. Local/saved constructors retain
+`scene_updates`, `final_frame_actions` and `movements` arrays. Enabled staging also
+requires its root field and `changes`, `props`, `explicit` lists. Local/saved constructors retain
 their compatible defaults. The runtime records which sections were actually
 provided before defaults and source binding can erase that distinction.
 
@@ -148,7 +148,7 @@ An ambiguous metaphor alone must not be treated as established clothing removal.
 
 An explicitly established ordinary object or garment without a canonical ID can become an inline inventory card. The schema cannot grant bonuses or effects. Descriptions must preserve known facts and leave unknown details unspecified. New underwear requires detailed clothing and an established adult source owner (or adult recipient for a scene acquisition). These gates do not infer age from prose.
 
-Every proposal needs an exact quote from the completed response, valid participant IDs and a completed-action classification. Semantic interpretation still depends on the model: quote matching alone does not prove transfer or consent. The private `__narrated_items__` ledger stores accepted changes, rejected reasons, source input-message ID and narrative hash. Session replay/checkpoints preserve the state transactionally; newly materialized dropped objects retain runtime provenance for checkpoint cleanup. Regeneration remains a prose rewrite preserving committed outcomes, not a second transfer.
+Every proposal needs an exact quote from the completed response, valid participant IDs and a completed-action classification. Semantic interpretation still depends on the model: quote matching alone does not prove transfer or consent. The private `__narrated_items__` ledger stores accepted changes, rejected reasons, source input-message ID and narrative hash. Session replay/checkpoints preserve the state transactionally; newly materialized dropped objects retain runtime provenance for checkpoint cleanup. **Rewrite response** preserves committed outcomes rather than making a second transfer. **Regenerate turn** uses the separate [pre-turn replay boundary](turn-regeneration.md).
 
 The current reconciler covers acquisitions into actor inventories, actor-to-actor transfers, removal and wearing. Scene drops, consumption, locked-container access and gameplay rewards continue through the existing mechanics pipeline. Existing past messages are not retrospectively mined for possessions. Inline cards do not require image generation.
 
@@ -200,37 +200,49 @@ source evidence can be replaced by the current exact observation. Verification i
 bounded to the candidate placements and adds no model request. Existing reviewed
 history recovery keeps its same-owner action contract.
 
-Debug's **Restore clothing from history…** analyzes at most 80 recent user/assistant messages (48,000 characters), in chronological order. It proposes only missing garments still owned by the selected NPC, with exact assistant-message citations. The preview displays worn/carried status, descriptions, source quotes, rejected entries and any history limit. It never applies automatically. **Apply reviewed clothing** checks the preview token, evidence and state/history fingerprint again. Any intervening story/state change requires a new preview. It preserves unrelated inventory and does not replace an entire outfit. This is model-assisted recovery, so the owner must review later removals and transfers before applying. It does not infer unmentioned clothing or restore items from excluded older history.
+## Reviewed Debug recovery
 
-Recovery uses its own history-specific prompt and accepts up to 16 entries. Its wire schema separates existing-item IDs from new-garment descriptions; supplying both identities is invalid. One shared retry covers schema errors or rejected evidence, within the selected role's overall deadline. Evidence repair preserves previously validated proposals; a malformed correction or a correction that drops them leaves the original proposal inspectable. The debug Clothing window offers Main (Complex, default) or Small; existing provider fallback rules still apply.
+**Restore clothing & placed items from history** and **Recover from source
+manually…** use the same existing history window: at most 80 recent story messages
+and 48,000 source characters. The prepared model payload is capped at 64,000
+characters and may drop only complete oldest messages to fit. Recovery accepts up
+to 16 proposals and never applies them automatically.
 
-The initial model payload is capped at 64,000 characters. It includes a compact item-name catalogue, ownership, valid reusable garment metadata and current worn IDs, without duplicate inventories or image-generation metadata. If necessary, the oldest complete messages are excluded; narration and evidence quotes are never sliced. The preview marks excluded history, while apply still checks the original full state/history fingerprint. An irreducible catalogue or a budget with no room for a complete recent message fails before model invocation. Failed previews distinguish prepared context from a successful model review.
+The current workflow can restore missing garments, a known garment's wear or
+partial displacement, and explicitly supported ordinary body-placed objects.
+Player-message evidence is allowed only in this explicit reviewed workflow and
+is labelled as such; normal live reconciliation still requires completed
+narration. Manual proposals and player-sourced proposals require explicit item
+selection. A quote proves source occurrence, not the item's current ownership
+or the semantic interpretation of the passage.
 
-Debug → NPC → **Clothing → Recovery requirements** displays the saved session's clothing-layer setting and the NPC's recorded age. An explicit edit updates this session's manifest setting and NPC card, leaves the adventure template and mature-content settings unchanged, and invalidates the previous recovery preview. Unknown age stays unknown until entered by the user. Stale edits are rejected. Settings/age skips name the actual unmet requirements, and identical skip messages are shown once.
+Preview, source correction and manual proposal creation do not mutate inventory
+or advance game time. Apply rechecks canonical identity, exact evidence,
+ownership, policy and the unchanged session/history fingerprint. Existing items
+reuse their IDs. A stale preview must be refreshed; selecting a subset does not
+change its original proposal indices.
 
-Settings/age rejections appear as **Skipped** and do not block other validated garments. Source, evidence, ownership and malformed-state errors block their own candidates. The user selects validated garments; other rejected candidates do not block that selection. Apply revalidates only the selected entries against the same source/state fingerprint. Stable original proposal indices preserve item IDs when applying a subset. Recovery additionally corrects a false underwear flag for unambiguous English/Russian inner-garment names. This is a bounded vocabulary check, not a universal language classifier; body coverage or layer alone cannot distinguish underwear from ordinary skirts, trousers or swimwear. The explicit true flag is never cleared.
+See [Correcting NPC clothing and item placement](wardrobe-debug-recovery.md) for
+the current controls, model-assisted retry, source selection, manual proposals,
+body-placement scope and explicit apply behavior. That guide is authoritative for
+the recovery UI; it is separate from the automatic post-narration extractor.
 
-The debug inspector's **Scene JSON** button reads persisted evidence without invoking a model or rebuilding anything. It separates the current location/staging/placed items from a selected narrator message's frozen illustration snapshot. The latest 100 narrator messages are selectable. Snapshot status compares the same source hash used by illustration rendering; a match is not a semantic accuracy guarantee. Missing snapshots may never have been captured or may have expired. Current staging is separately marked disabled, not recorded, stale, ready or unconfirmed. Staging defaults to disabled in narration settings.
+### Inspecting frozen scene data
 
-Cached visual plans/audits are shown only for the selected message, with no current-preset revalidation. Plans are created on demand, bounded by the existing cache, and not used by every illustration route. JSON can be copied or downloaded, including on HTTP installations where the clipboard is unavailable. Access requires session ownership and debug mode; the endpoint never changes state.
+The debug inspector's **Scene JSON** button reads persisted evidence without a
+model call. It separates current location/staging/placed items from a selected
+narrator message's frozen illustration snapshot. The latest 100 narrator messages
+are selectable; the inspector distinguishes disabled, missing, stale, ready and
+unconfirmed staging. Matching hashes establish source identity, not visual or
+semantic accuracy.
 
-Garments that exist only in narration are represented as `new_item` with a null `item_id`; the engine assigns an ID after evidence validation. Recovery's new-item schema requires clothing metadata and wearable slots and cannot accept ordinary items. For each request, the existing-item branch is restricted to the target NPC's actual owned garment IDs. With no eligible recorded garments, that branch is absent. Unknown IDs and existing records with missing/invalid clothing metadata have distinct named errors. Legacy unstructured records are not silently duplicated or assigned invented metadata.
+Cached visual plans/audits belong only to the selected message. They are prepared
+on demand, bounded by their existing cache and not used by every content-policy
+route. The inspector does not revalidate a plan with today's preset or change
+state. JSON can be copied or downloaded. Session ownership and Debug mode are
+required.
 
-Recovery displays rejected quotes, proposed action basis/disposition, covered/exposed regions and the cited original assistant message. Quotes still require exact contiguous matching; the repair does not normalize or invent evidence. A limited English/Russian underwear-mention check supplements the LLM: detected mentions appear as proposed, explained by a model omission with an exact source quote, or unreviewed. These keyword hints do not establish ownership and never create garments. They cover only messages in the existing recovery window, not all historical prose or every possible paraphrase. Unreviewed mentions remain visible even when other validated garments are selected for restoration.
-
-When the model's single retry still fails, **Correct this proposal** lets the session owner choose worn (including lowered clothing) or fully removed but still owned, copy an exact item quote, and correct exposed regions with an exact placement quote from the same cited message. **Validate correction** updates only the preview and resets its selection token; it makes no model request. Source IDs, ownership, identity and garment metadata remain fixed. Validation rechecks the state/history fingerprint, exact evidence, coverage and clothing/age requirements and preserves other validated candidates. The owner then explicitly selects and restores the corrected garment. Clothing lowered to the knees remains worn with the relevant region uncovered; it is not automatically transferred to the player.
-
-Corrections display separate errors for the item quote, placement quote and exposed regions.
-Invalid regions proposed by the model remain visible until explicitly unchecked or reset.
-Select text inside the cited original message to populate either quote without retyping;
-selection outside that message is ignored. A single exact quote may fill both fields.
-Case/whitespace-only suggestions offer an unchanged excerpt from the cited source for
-explicit selection, only when the match is unique; paraphrases and combined fragments
-are never accepted as evidence. Quote-boundary whitespace is trimmed consistently before
-preview and apply, as for live item actions; interior whitespace, case and punctuation
-still require exact matching. Length limits use Unicode characters on both client and server.
-
-### Equipment card projection
+## Equipment card projection
 
 NPC cards read canonical ownership and `visual_profile.worn`; they never maintain a
 second equipment inventory or issue actions. RP continues to update those records

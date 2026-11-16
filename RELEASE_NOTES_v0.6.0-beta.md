@@ -1,5 +1,10 @@
 # TaleWeaver v0.6.0-beta: The Immersive In-Game & Scripting Engine Release
 
+> [!NOTE]
+> Historical release announcement. Feature descriptions, commands and validation
+> claims below belong to this release snapshot. For the current source checkout,
+> use the [documentation index](docs/README.md) and its maintained guides.
+
 We are thrilled to announce the release of **TaleWeaver v0.6.0-beta**! This milestone represents one of our biggest updates yet, introducing a completely reimagined **comic-style immersive gameplay experience** and a secure, deterministic **Python event scripting engine**.
 
 ---

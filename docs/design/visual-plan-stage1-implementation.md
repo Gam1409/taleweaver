@@ -1,5 +1,9 @@
 # Saved visual plans: Stage 1 implementation
 
+> Historical stage-1 implementation record. The opt-in/legacy selector described
+> below has been superseded by the default neutral-plan route. See
+> [Stage 2](visual-plan-stage2-implementation.md) and [current setup](../comfyui/README.md#moment-illustrations).
+
 Historical stage-1 notes. Current defaults and shared compiler behavior are
 documented in [Stage 2](visual-plan-stage2-implementation.md).
 

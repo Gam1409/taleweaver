@@ -15,16 +15,19 @@ Official documentation checked on 2026-11-09:
 | Anthropic compatibility | `https://api.deepseek.com/anthropic` + `/v1/messages` | Different request/response protocol |
 | Responses compatibility | `https://api.deepseek.com` + `/responses` | Responses API; TaleWeaver does not switch to it |
 
-The current model list documents `deepseek-flash` and `deepseek-v4-pro`.
-Refresh models rather than assuming historical model names remain current.
+The bundled model catalog lists `deepseek-flash` and `deepseek-v4-pro` in
+`backend/core/models_config.py`. That list is an application default, not a live
+availability check for an account. Refresh models or enter a verified provider ID.
 
 ## JSON and validation
 
 JSON Output needs an explicit JSON instruction; TaleWeaver's structured request
 builder supplies that instruction and the expected schema. This guarantees no
 domain semantics by itself: ownership, evidence, chronology and schema validation
-still belong to the application. Not every technical subsystem uses the structured
-builder: CHPM has its own bounded JSON text contract and validates its output.
+still belong to the application. NPC Personality constructs its own bounded,
+source-bound JSON contract and passes it through the same output-policy selector.
+Its local validation remains mandatory. Native/JSON memory-tool compatibility is
+a separate protocol choice; see [technical structured output](structured-output.md).
 
 The documentation permits whitespace-only JSON output and truncated output when
 the generation budget is exhausted. An HTTP success is not proof of a valid

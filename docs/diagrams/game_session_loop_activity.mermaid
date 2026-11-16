@@ -1,69 +1,34 @@
 flowchart TD
-    Start([User Interaction / Turn Submission]) --> ReceiveMsg[Receive Message & Initialize GameTurnManager]
-    ReceiveMsg --> LoadContext[Load Session State, Avatar, Entities & Exits]
-    LoadContext --> TickSystem[Advance In-Game Time & Apply Status Effects]
-    
-    TickSystem --> ModeCheck{Rule Enforcement Mode}
-    
-    subgraph Pass1 [Pass 1: Mechanics Check]
-        direction TB
-        SmallLLM[Small LLM: Evaluate Mechanics] --> ProposedEvent[Generate Proposed GameEvent JSON]
-    end
-
-    subgraph Pass15 [Pass 1.5: Validation & Reversion Gates]
-        direction TB
-        CheckExits{Exit Locks Valid?}
-        CheckContainers{Container Unlocks Valid?}
-        CheckSwitches{Switch Actions Valid?}
-        CheckVisibility{Inspect/Search Targets Visible?}
-        
-        ProposedEvent --> CheckExits
-        CheckExits -- Invalid --> RevertExit[Revert Exit State & Record Rule Violation]
-        CheckExits -- Valid --> CheckContainers
-        RevertExit --> CheckContainers
-        
-        CheckContainers -- Invalid --> RevertContainer[Revert Container State & Record Rule Violation]
-        CheckContainers -- Valid --> CheckSwitches
-        RevertContainer --> CheckSwitches
-        
-        CheckSwitches -- Invalid --> RevertSwitch[Revert Switch State & Record Rule Violation]
-        CheckSwitches -- Valid --> CheckVisibility
-        RevertSwitch --> CheckVisibility
-        
-        CheckVisibility -- Off-Scene Target --> BlockAction[Block Action & Record Rule Violation]
-        CheckVisibility -- Accessible --> ValidatedEvent[Consolidate Validated GameEvent & Violations]
-        BlockAction --> ValidatedEvent
-    end
-
-    subgraph Pass2 [Pass 2: Narration Generation]
-        direction TB
-        HasViolations{Has Rule Violations?}
-        HasViolations -- Yes --> OverridePrompt[Override Narration Prompt with Failure Details]
-        HasViolations -- No --> StandardPrompt[Standard Atmospheric Storytelling Prompt]
-        OverridePrompt --> ComplexLLM[Complex LLM: Stream Narrative Prose]
-        StandardPrompt --> ComplexLLM
-    end
-
-    ModeCheck -- RPG / Story Mode --> Pass1
-    Pass1 --> Pass15
-    Pass15 --> Pass2
-    ModeCheck -- Chat Mode --> Pass2
-
-    Pass2 --> ApplyState[Persist State to DB: Avatar Stats, Inventories, Scene Positions]
-    ApplyState --> MapUpdate[MapEngine: Register Visited Scenes & Discovered Exits]
-    MapUpdate --> QuestUpdate[Evaluate Quest Progression & Award Triggers]
-    
-    QuestUpdate --> VisualCheck{Auto-Visualize & Image Needed?}
-    VisualCheck -- Yes --> GenImage[MediaEngine: Generate Scene/Entity Visual]
-    GenImage --> SaveImage[Update Scene Image URL & Session State]
-    VisualCheck -- No --> Finalize
-    SaveImage --> Finalize
-    
-    Finalize[Emit SSE State & Final Event] --> TTSCheck{TTS Audio Enabled?}
-    TTSCheck -- Yes --> GenAudio[TTSEngine: Strip Vocal Tags & Synthesize Audio]
-    GenAudio --> End([End Turn & Play Audio in Client])
-    TTSCheck -- No --> End
-
-    style Pass1 fill:#e1f5fe,stroke:#01579b,stroke-width:1.5px
-    style Pass15 fill:#fff3e0,stroke:#e65100,stroke-width:1.5px
-    style Pass2 fill:#e8f5e9,stroke:#2e7d32,stroke-width:1.5px
+    Start(["Submit player input"]) --> Lease["Authorize session and acquire its mutation lease"]
+    Lease --> Load["Load or recover the scoped session and turn context"]
+    Load --> Branch{"Current mode and action path"}
+    Branch -->|RPG or Story mechanics| Mechanics["Structured mechanics proposal"]
+    Branch -->|VN| Progression["Structured VN progression and world resolution"]
+    Branch -->|Chat| Chat["Applicable host rules and optional generator tools"]
+    Mechanics --> Validate["Validate access, known IDs, possessions and deterministic gates"]
+    Progression --> Validate
+    Chat --> Validate
+    Validate --> Outcomes["Retain accepted outcomes and explicit refusals"]
+    Outcomes --> Clock["Advance only the applicable game-clock boundaries or confirmed elapsed time"]
+    Clock --> Personality{"NPC Personality mode"}
+    Personality -->|Off| Narrator["Build narration with canonical world context"]
+    Personality -->|Shadow| Observe["Compute observations without steering narration"]
+    Personality -->|Live| Decide["Staged or Integrated decisions; optional scoped tools"]
+    Observe --> Narrator
+    Decide --> Plans["Apply source, budget and autonomy checks to NPC meaning plans"]
+    Plans --> Narrator
+    Narrator --> Prose["Generate prose and optional presentation cues"]
+    Prose -.-> Stream["Unbuffered narration sends prose chunks before reconciliation and commit"]
+    Prose --> Review["Use enabled shared NPC review and bounded recovery policy"]
+    Review --> Complete{"Usable completed narration?"}
+    Complete -->|Yes, VN| Reconcile["Reconcile source-backed state and optional scene staging"]
+    Complete -->|Yes, other mode| Save["Persist reply and canonical turn state"]
+    Reconcile --> Save
+    Save --> Bind["Bind accepted evidence and capture the selected illustration moment"]
+    Bind --> Commit["Commit the completed turn"]
+    Commit --> Deferred["Schedule eligible background memory and visuals"]
+    Deferred --> Delivery["Release any live CHPM buffered prose, then emit the final receipt"]
+    Delivery --> End(["Turn complete"])
+    Complete -->|No| Recovery["Preserve or recover state under the existing incomplete/error policy"]
+    Recovery --> Reload["Client reconciles saved history before another uncertain action"]
+    Branch -.-> Other["Commands, combat and terminal reports can use dedicated early branches"]

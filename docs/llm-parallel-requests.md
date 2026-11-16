@@ -1,7 +1,7 @@
 # Parallel requests by LLM role
 
-Administration → Intelligence places **Allow parallel requests** next to each of
-the five model connections. Enable it only for a server capable of overlapping
+Open **Administration → Intelligence (LLM) → General settings** for a model
+connection to find **Allow parallel requests**. Enable it only for a server capable of overlapping
 inference; start with the default maximum of two (range two to four). Save the LLM
 settings. Provider, model, sampling, prompts and token limits remain independent.
 
@@ -12,7 +12,7 @@ and connection limits. A session limit of one remains sequential.
 
 ## What can overlap
 
-Independent NPC dialogue-intention analyses can overlap after their host inputs
+Independent NPC intention analyses can overlap after their host inputs
 have been prepared sequentially. They all read the same confirmed turn snapshot.
 Private observer inputs remain separate. No job executes movement, transfers or
 other world mutations. Only after every selected analysis succeeds are the results
@@ -22,10 +22,11 @@ remain in place. Dependent stages and canonical world updates remain sequential.
 
 An NPC wanting to leave and another wanting to approach that NPC are proposals,
 not two independently successful actions. A request depending on the result of
-another action must wait for that result. CHPM currently controls dialogue
-intentions; physical outcomes still belong to the host turn resolution. This
+another action must wait for that result. NPC Personality can choose speech,
+a feasible action or both; physical outcomes still belong to the host turn resolution. This
 setting does not implement a general multi-agent action resolver, and a model's
 joint review is not proof that every possible narrative contradiction is detected.
+See [NPC action autonomy](npc-action-autonomy.md) for the player/NPC boundary.
 
 ## Shared servers and recovery
 

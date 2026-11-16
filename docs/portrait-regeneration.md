@@ -1,6 +1,6 @@
 # Portrait composition and regeneration
 
-NPC and protagonist prompts request exactly one subject, chest-up framing, a
+NPC and protagonist prompts request exactly one subject, waist-up framing with the entire head visible, a
 clearly visible face, a simple background, and no lettering or multiple views.
 The ComfyUI prompt adapter receives this composition alongside the character
 facts, including when prompt adaptation is disabled. Model-specific prompt rules
@@ -42,3 +42,16 @@ another image-conditioning pipeline. No custom nodes are inserted automatically.
 IP-Adapter and face-specific adapters can improve identity consistency; ControlNet
 can guide pose/composition. Their nodes and model weights must match the image
 model family. Plain img2img and prompt instructions do not guarantee the same face.
+
+## Scope and verification
+
+The current composition comes from `PORTRAIT_COMPOSITION_INSTRUCTION` and the
+NPC/hero task templates. It is a request to the model, not a checked pixel boundary.
+Later experiments with a tighter crop, expression/outfit editing, full sprites and
+multi-character scene references remain separate from main. They do not provide
+an automatic character asset pipeline or checkpoint-independent identity guarantee.
+
+Host tests cover reference ownership, profile/workflow selection, latest confirmed
+visible state, conflicts and failed-generation preservation. Actual image quality,
+head/hair inclusion and identity retention require visual checks with the chosen
+checkpoint and workflow. No new live generation was performed for this docs review.

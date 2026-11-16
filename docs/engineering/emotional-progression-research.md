@@ -1,5 +1,11 @@
 # Emotional progression: evidence and engineering decisions
 
+> Research synthesis and engineering rationale retained from the issue #33 review.
+> Scientific concepts and proposed tests are separate from implemented contracts
+> and empirical quality results. See the current [Personality guide](../chpm-pilot.md)
+> and [appraisal contract](../chpm-appraisal.md) for runtime behavior. No books or
+> live-model studies were re-reviewed for this documentation update.
+
 Research companion to the [issue #33 work plan](emotional-progression-issue-33.md).
 Baseline: `37c4052f91e54ab16325a2bbc1e4f2fdb20a7a52`.
 This document contains original technical synthesis, not copied source material.

@@ -18,7 +18,7 @@ Please adhere to the following rules for all implementations to ensure high code
 
 * **Module & File Size Thresholds (Combating Monster Files):**
   * **Target Size:** Python modules should ideally remain under **400 lines**, with a hard warning threshold at **600 lines**.
-  * **Legacy Monster Files Policy:** Certain existing modules have grown excessively large (e.g., `backend/api/routes/adventures/editor.py`, `gameplay_logic.py`, `templates.py`, `turn_guardrails.py`, `turn_combat.py`, `backend/core/llm_router.py`).
+  * **Legacy Monster Files Policy:** Certain existing modules have grown excessively large (for example, `backend/engine/gameplay/manager.py`, `backend/api/routes/adventures/templates.py`, and `backend/core/llm_router.py`). Use canonical engine modules for new work; old route-level gameplay imports are compatibility facades.
     * **Strict Rule:** **Do NOT add new monolithic blocks or extensive methods directly into these files!**
     * When introducing new features, refactoring, or extending functionality in these domains, extract logic into dedicated sub-packages, service classes, or handler modules (e.g., `backend/api/routes/adventures/services/`, `backend/engine/handlers/`).
     * Separate route definitions (HTTP mapping, input validation) from business logic, database queries, and external service calls.
@@ -62,7 +62,7 @@ Please adhere to the following rules for all implementations to ensure high code
 
 To ensure codebase quality, security, and prevent regression:
 
-* **Automated Pre-Commit Hooks:** A Git pre-commit hook is active in `.githooks/pre-commit`. It automatically runs Ruff on all staged Python files before each commit.
+* **Pre-Commit Hook:** The repository provides `.githooks/pre-commit`, which runs staged Python lint checks. Setup scripts configure it where supported; verify local `core.hooksPath` rather than assuming every checkout has an active hook. Required validation still applies when the hook is unavailable.
 * **Developer / Agent Lint Command:**
   * Quick check: `poetry run python scripts/lint.py` (or `poetry run ruff check <paths>`)
   * Auto-fix & format: `poetry run python scripts/lint.py --fix` (or `poetry run ruff check --fix <paths>` and `poetry run ruff format <paths>`)
@@ -104,10 +104,10 @@ To ensure codebase quality, security, and prevent regression:
 
 To understand the internal processes of TaleWeaver, refer to the following Mermaid diagrams:
 
-* **Adventure Generation:** [adventure_generation.mermaid](docs/diagrams/adventure_generation.mermaid) | [Activity Diagram](docs/diagrams/adventure_generation_activity.mermaid) - Detailed workflow of how worlds are created.
-* **Adventure Import/Export:** [adventure_import.mermaid](docs/diagrams/adventure_import.mermaid) | [adventure_export.mermaid](docs/diagrams/adventure_export.mermaid) - Logic for .adz and .adv portability.
-* **Game Session Loop:** [game_session_loop.mermaid](docs/diagrams/game_session_loop.mermaid) | [Activity Diagram](docs/diagrams/game_session_loop_activity.mermaid) - Detailed flow of a single chat turn (user input to GM response).
-* **Data Formats:** [Adventure Format Specification](docs/specs/adventure_format.md) - Standardized structure for `.adv` and `.adz` files.
+* **Adventure Generation:** [adventure_generation.mermaid](../docs/diagrams/adventure_generation.mermaid) | [Activity Diagram](../docs/diagrams/adventure_generation_activity.mermaid) - World creation and resumable generation boundaries.
+* **Adventure Import/Export:** [adventure_import.mermaid](../docs/diagrams/adventure_import.mermaid) | [adventure_export.mermaid](../docs/diagrams/adventure_export.mermaid) - Adventure and session portability.
+* **Game Session Loop:** [game_session_loop.mermaid](../docs/diagrams/game_session_loop.mermaid) | [Activity Diagram](../docs/diagrams/game_session_loop_activity.mermaid) - Mode-dependent turn orchestration.
+* **Data Formats:** [Adventure Format Specification](../docs/specs/adventure_format.md) - Structure and ownership of `.adv` and `.adz` data.
 
 ---
 
@@ -140,9 +140,9 @@ To understand the internal processes of TaleWeaver, refer to the following Merma
               raise ValueError("Invalid path: cannot resolve against DATA_DIR.") from exc
           return resolved
       ```
-  * **Input Sanitization & Validation:**
-    * Use alphanumeric regex validation for any variable path components (e.g. `re.match(r"^[A-Za-z0-9_-]{1,128}$", template_id)`).
-    * Strip path separators (`/`, `\`) or traversal sequences (`..`) from parameters.
+  * **Input Validation:**
+    * Use the existing domain-specific identifier and path validators. Preserve supported legacy identifiers; an unrelated new ASCII-only regex must not invalidate existing saves.
+    * Reject traversal, unsafe components and paths outside the allowed root. Stripping characters is not a substitute for validation and must not silently rename an identity.
     * Use `os.path.basename` to extract only the filename when referencing uploaded files, or generate a random/UUID filename (e.g., `f"{uuid.uuid4()}.{ext}"`) rather than trusting the original name.
   * **Agent Compliance Rule (Required):** If an agent touches path-building/file-write code, it must run and pass the security-focused tests (`tests/test_security_hardening.py`) and include a short note in the PR/summary stating which helper functions were used.
 
@@ -157,6 +157,7 @@ To understand the internal processes of TaleWeaver, refer to the following Merma
   * The backend must be the final authority on what the GM can act on.
   * For inspect/search, only allow targets that are currently visible/accessible: current scene entities, protagonist inventory, and inventory of NPCs present in the current scene.
   * If a target is outside this scope, block the action before downstream GM/mechanics processing.
+  * Observer-local NPC tools have stricter knowledge projections. Scene presence alone does not authorize exposing another character's hidden inventory, private conditions, thoughts or notebook; use their existing projection owners.
 * **Fail-Safe Behavior:**
   * If intent extraction is uncertain or unavailable, fall back to deterministic safeguards and prefer the safe outcome (no state-advancing side effects).
 * **Systematic State-Based Enforcements (Pass 1.5) Over Text Parsing:**
@@ -186,8 +187,8 @@ To prevent terminal commands executed by AI agents (like the Gemini agent in Ant
   * Avoid spitting out huge amounts of raw text into the console (e.g., dumping a massive JSON file or a huge diff). The agent has to read, process, and compress this context, which consumes massive amounts of computation time and tokens, slowing down response times.
   * **Solution:** Limit commands to only the necessary output.
     * Use: `head -n 50 <file>` instead of `cat <file>` for large files.
-* **Use IDE Features Instead of Terminal Output:**
-  * Instead of asking the agent to read raw terminal diffs, leverage Antigravity's native visual "Review Changes" area in the agent panel to review changes visually.
+* **Review Tools:**
+  * Use an IDE diff viewer when available, or bounded targeted diffs in a headless environment. Optional local IDE tooling must not be required to review or validate the repository.
 
 ### Quick Command Guide:
 
@@ -199,22 +200,24 @@ To prevent terminal commands executed by AI agents (like the Gemini agent in Ant
 
 ## 9. Game Turn Loop & Mechanics Pipeline
 
-TaleWeaver processes each gameplay turn through a structured pipeline in [GameTurnManager](../backend/engine/gameplay/manager.py):
+The [turn manager](../backend/engine/gameplay/manager.py) dispatches according to mode and intent. The Pass 1/1.5/2 outline below describes the mechanical path; it is not a universal VN sequence. Use the [current turn diagrams](../docs/diagrams/game_session_loop.mermaid) and [narration boundaries](../docs/engineering/narration-flow.md) when changing orchestration.
 
 * **Pass 1 (Mechanics Check)**:
   * The LLM mechanics model processes the user prompt and suggests state changes (e.g. changing exit locks, switch states, opening containers, updating inventories).
 * **Pass 1.5 (Rule Validation & Reversion)**:
   * Database state updates requested by the LLM are evaluated against game configuration rules/gates (required items, codes, story flags) and player state.
-  * If a state update violates a rule (e.g. unlocking a chest without referencing the key item in the chat message, or flipping a switch without having the necessary tool), the update is **reverted** to its pre-turn state.
+  * If a proposed update violates established inventory, key/code, guard or world-state requirements, it is **reverted** to its pre-turn state. Do not substitute language-specific wording checks for the existing rule owners.
   * Reverted violations are gathered into a `rule_violations` list.
 * **Pass 2 (Narration Generation)**:
   * If `rule_violations` list is not empty, the system overrides `game_event.narrative_description` with the violations list.
   * This overrides the LLM-generated narrative description, forcing the narration LLM to narrate a failure instead of hallucinating a successful action.
+* **VN and optional NPC decisions**:
+  * VN uses its own narration flow with optional CHPM preparation and review. Shared post-narration reconciliation owns item, condition, movement and staging updates. Preserve source evidence, IDs, ownership, visibility and the existing commit/recovery boundaries; do not add duplicate extraction requests for state already supplied by that path.
 * **Key Concepts**:
   * **WorldEntity**: Objects or NPCs in the game. Objects can be `CONTAINER`, `SWITCH`, etc., and have specific lock metadata.
   * **WorldExit**: A connection between scenes (directional or bidirectional).
   * **Exit Resolution**: Always resolve session-scoped exits by preferring the session row (via mapping from_scene_id/to_scene_id) over the template-scoped exit to respect dynamic in-game unlocking.
-  * **Key Item Mentions**: Enforced state-based validation checks to verify if key items or codes are mentioned or utilized in the player's turn to prevent automatic/implicit unlocking. The game is designed to be language-independent.
+  * **Unlock Requirements**: Existing rule checks validate required items, codes, guards and world state before committing changes. Keep them language-independent and separate from observer-local memory or model assertions.
   * **Dynamic Item Generation**: Narrated-item reconciliation can register evidence-backed ordinary objects and garments in VN sessions. Keep its ownership, evidence and clothing-policy checks; it cannot grant mechanical bonuses. See [narrated-item reconciliation](../docs/narrated-item-reconciliation.md).
 
 ---
@@ -222,7 +225,7 @@ TaleWeaver processes each gameplay turn through a structured pipeline in [GameTu
 ## 10. Backend Data Inspection & Debugging Guidelines
 
 When debugging game mechanics, missing items, entity visibility issues, scene transitions, or adventure configurations:
-* **Mandatory CLI Inspector:** Use `python scripts/inspect_state.py` (or refer to the `taleweaver-inspector` skill) instead of writing one-off ad-hoc database queries or raw SQL scripts.
+* **Mandatory CLI Inspector:** Use the checked-in `scripts/inspect_state.py` instead of one-off production database queries. Run it in the project environment, for example `poetry run python scripts/inspect_state.py`; an optional private skill is not required.
 * **Inspecting Adventures & Manifests:**
   * `python scripts/inspect_state.py list-adventures` — List all templates with versions, languages, and statuses.
   * `python scripts/inspect_state.py show-adventure "<title_or_id>" [--entities|--scenes|--exits|--manifest]` — Detailed breakdown of scenes, entities, combination ingredients, reveal/unlock rules, and exits.

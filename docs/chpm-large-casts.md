@@ -48,8 +48,12 @@ and two more for narration repair and repeat review. The ordinary narrator call 
 reserve 8 CHPM calls; twenty reserve 25. Unused reserve is not spent. Lower actual
 participation costs less. Provider retries can add physical calls and cost.
 
-Set Active NPCs per turn to 20 for full processing. Requests are sequential and
-the reply is buffered until review. Large casts require larger shared schemas,
+Set Active NPCs per turn to 20 for full processing. Requests are sequential by
+default; [concurrent NPC analyses](chpm-performance.md) permits up to four
+independent jobs, subject to the shared connection policy. The reply stays buffered
+until review. Optional agent rounds change the reserve to `A × (1 + agent_steps) + 5`;
+this must fit the hard 25-request limit, so full 20-actor processing cannot also
+reserve tool rounds. Large casts require larger shared schemas,
 output allowance and narrator/reviewer context. Settings permit explicit limits
 up to 192,000 input characters and 8,192 output tokens; defaults are unchanged.
 The provider's own smaller token/context limits still apply. There is no automatic

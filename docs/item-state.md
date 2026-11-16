@@ -2,7 +2,9 @@
 
 VN item reconciliation uses the existing physical ledger for mutable item properties.
 The item keeps its canonical ID, intrinsic description, owner, placement and images.
-No additional model request, inventory store or database migration is introduced.
+It extends the shared reconciliation request rather than introducing a standalone
+item-property request, inventory store or database migration. The shared check may
+make one bounded coverage correction; see [reconciliation limits](narrated-item-reconciliation.md).
 
 ## Extensible properties
 
@@ -65,6 +67,11 @@ NPC cards display the current property value, including values reported by the p
 rather than substituting the confirmation sentence. Private properties are visible on
 the player's own possessions; public world projections exclude them. Transfers keep
 properties attached to the item ID, including when its new owner leaves the scene.
+
+With NPC Personality and agent tool rounds enabled, `inspect_entity` can read an
+exact accessible item ID before the NPC decides. Its snapshot keeps ownership,
+wear, placement and current recorded properties distinct. See
+[observable state tools](npc-observable-state.md) for audience and freshness limits.
 
 Debug → State supports item properties, manual corrections, source inspection and
 recent property history. Manual edits use `change` even for empty or clean values.

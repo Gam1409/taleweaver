@@ -26,7 +26,7 @@ portrait options continue to operate with Personality off, shadow or live.
 VN progression resolves physical outcomes, time, access, possessions and movement.
 It no longer advertises or forwards the model's `narrative_description`. Legacy
 responses containing that field are ignored. Host-generated rejection/resolution
-descriptions still reach narration; RPG/Chat keep their own unchanged contracts.
+descriptions still reach narration; non-VN modes keep their own contracts.
 
 The optional world `story_beat` is a movement projection with an NPC ID and destination.
 It cannot carry an alternative dialogue answer or preference through free purpose/

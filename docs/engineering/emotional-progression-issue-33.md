@@ -1,5 +1,11 @@
 # NPC Personality: emotional progression and expression
 
+> Issue #33 implementation plan and baseline findings. The phases and open gaps
+> below describe that planning revision; later integration is documented in the
+> [Personality guide](../chpm-pilot.md), [workflows](../chpm-performance.md) and
+> [appraisal contract](../chpm-appraisal.md). Recorded baseline results are historical;
+> this plan does not establish current live-model quality.
+
 Working plan for [issue #33](https://github.com/Gam1409/taleweaver/issues/33).
 Baseline: main `37c4052f91e54ab16325a2bbc1e4f2fdb20a7a52`, including merged #32.
 Status: reading complete; first bounded packing repair and evaluation fixtures

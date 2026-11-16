@@ -1,5 +1,11 @@
 # RP engine scenario matrix
 
+> Backlog/evaluation matrix from the original investigation. Coverage and confirmed
+> gap labels describe the checked revision, not an assertion that every gap remains
+> in current main. Consult the current [Personality guide](../chpm-pilot.md),
+> [item-state contract](../item-state.md) and [physical-state contract](../persistent-physical-state.md)
+> before reproducing a case. Proposed probes are not executed test results.
+
 This is an engineering backlog and evaluation design, not a claim that every row already passes. It covers ordinary play as well as attempts to confuse identity, time, ownership, knowledge and causality. Existing automated tests establish specific host contracts; mocked responses do not establish live-model comprehension.
 
 **Covered boundary** means a named test family exercises the relevant host boundary. **Probe** means the combined scenario still needs a dedicated regression or live evaluation. **Gap** means a limitation is confirmed in the current implementation. Never report a probe as a discovered defect without reproducing it.

@@ -65,7 +65,7 @@ terminal-report tasks, translation, and mechanics extraction remain unchanged.
 
 ## Reproducible offline comparison
 
-Run `python scripts/evaluate_narration_flow.py --profile gentle` (or `balanced` /
+Run `poetry run python scripts/evaluate_narration_flow.py --profile gentle` (or `balanced` /
 `off`) to compare the checked-in fictional examples. This command needs no model
 configuration, database or API key. Its JSON contains metrics and editorial review
 notes, with no source prose. Fixtures cover English, Russian, Arabic, Japanese,

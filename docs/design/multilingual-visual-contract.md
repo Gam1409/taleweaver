@@ -1,5 +1,10 @@
 # Multilingual visual contracts across tags, prose and hybrid prompts
 
+> Historical design proposal based on the revision named below. It is retained as
+> architectural rationale; its feature flags, proposed modules and cost estimates are
+> not current setup instructions. Current behavior is described in the
+> [provider guide](../comfyui/README.md#moment-illustrations) and [Stage 2 record](visual-plan-stage2-implementation.md).
+
 Status: proposal for review, not an implementation. Based on main commit 3f46c8bf.
 Scope: neutral visual continuity and format-aware scene preparation. Narrative
 language, original evidence, existing content-policy/addendum behavior, references,

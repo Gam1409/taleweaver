@@ -22,10 +22,11 @@ nodes. It ignores LoRA, VAE and text-encoder filenames. This is a filename hint,
 not architecture detection or inspection of model weights.
 
 Automatic selection requires every discovered base-model name to match the same
-known family. If a reference graph exists, it must match that family too. Unknown,
-renamed, mixed, editing or refiner models require a manual choice. A failed match
-does not silently reuse stale rules. Custom loaders or connected model-name inputs
-may need manual selection even when their workflows execute correctly.
+known family. A reference graph participates in that check unless it has its own
+explicit prompt rules. Unknown, renamed, mixed, editing or refiner models require
+a manual choice. A failed match does not silently reuse stale rules. Custom loaders
+or connected model-name inputs may need manual selection even when their workflows
+execute correctly.
 
 Selecting a template or editing any rule disables automatic selection. Manual rules
 survive workflow changes and settings reloads. Turning automatic selection back on
@@ -43,6 +44,7 @@ validates settings and prepares generation, rather than trusting stale UI result
 | Illustrious XL | Visual tags, without forced Pony scores |
 | Animagine XL 4.0 | Ordered tags and the author's 4.0 quality suffix |
 | Anima / Prefect Anima | Illustration tags and descriptive sentences; separate from Animagine XL |
+| Nova Anime AM | Its own visual-tag/score policy; not the generic Anima hybrid policy |
 | Qwen-Image | Detailed description with counts and spatial relationships |
 
 These are editable starting points. A derivative can have different requirements.
@@ -55,13 +57,16 @@ conservative/community conventions from verified author guidance.
 
 1. Resolve the story's Standard/High-Fidelity selection and any explicit manual
    quality override. Other image providers keep their existing behavior.
-2. Build visual source facts from the asset description, selected art style and
-   available mood. This does not extract a complete inventory or infer hidden facts
-   from the game state.
+2. Build task-specific source facts. Ordinary assets use their descriptions/style;
+   managed portraits use current canonical visible appearance and condition data.
+   This does not expose another character's private inventory or infer hidden facts.
+   Moment illustrations have a separate [saved-snapshot preparation path](README.md#moment-illustrations)
+   and do not add another ordinary adapter pass afterward.
 3. When enabled, ask the configured **Small / Utility LLM** to adapt those facts to
    the template's format, language, instructions and word budget. This adds an LLM
-   call per generated asset, with a 90-second timeout. An error aborts that image
-   request before submitting a ComfyUI job; no hidden format fallback is used.
+   call per ordinary generated asset, using the configured Small/Utility role
+   deadline. An error aborts that image request before submitting a ComfyUI job;
+   no hidden format fallback is used.
 4. Assemble required prefix, body and suffix in code. The LLM does not produce
    workflow JSON, CFG, steps, LoRA strengths or required trigger tokens.
 5. Replace only the mapped workflow inputs. Existing negative text is combined with
@@ -82,8 +87,10 @@ English independently of the story's content language, and can be changed manual
 
 ## Workflow details that matter
 
-- Export **API format** from ComfyUI after verifying the workflow there. Ordinary
-  editor JSON and template image/PNG metadata are not direct `/prompt` payloads.
+- Export **API format** from ComfyUI after verifying the workflow there. TaleWeaver's
+  editor can also convert supported editor JSON using node schemas; inspect its
+  conversion report and bindings. The backend submits API graphs only. PNG metadata
+  is not a direct JSON import or `/prompt` payload.
 - Models, matching encoders/VAE files, custom nodes and their Python dependencies
   must already be installed. `/object_info` verifies registered node types and known
   input/model choices. It cannot prove GPU memory availability or runtime dependency
@@ -101,9 +108,12 @@ English independently of the story's content language, and can be changed manual
   multiple encoder inputs, expose one literal string input in your API graph and
   connect it to the relevant nodes, or keep deliberately fixed secondary prompts.
   TaleWeaver does not guess how to update every encoder/refiner prompt.
-- Prompt rules apply to both graphs in one preset. Use separate presets when an
-  editing model needs different change/preservation instructions. Uploading an image
-  alone does not guarantee identity preservation; that depends on the workflow.
+- Prompt rules normally apply to both graphs in one preset. In the **Reference**
+  tab, enable **Use different prompt rules for the reference workflow** when the
+  editing model needs different change/preservation instructions. These explicit
+  reference rules override the common rules only when a reference is supplied.
+  Uploading an image alone does not guarantee identity preservation; that depends
+  on the workflow.
 - Image dimensions and storage limits still follow [the provider guide](README.md).
   Choose a model-appropriate generation resolution and explicitly resize the output
   in ComfyUI when needed. Prompt templates do not rewrite dimension or sampling nodes.
@@ -116,7 +126,8 @@ partner API node credentials are not configured by it.
 Save Visual Preferences after applying a preset to the form. Changes to a shared
 preset affect every profile/story referring to it. **Save as new** makes a separate
 copy before applying it to the form. The library is limited to 32 presets / 2 MiB;
-each graph remains limited to 256 nodes / 256 KiB.
+each graph remains limited to 256 nodes / 256 KiB. The separate saved workflow
+library allows 128 versions / 4 MiB.
 
 In an existing adventure, open **Visuals → Image generation presets** and select
 Standard and/or High-Fidelity overrides. New stories inherit shared settings until
@@ -149,16 +160,22 @@ including [SDXL](https://comfyui-wiki.com/en/workflows/sdxl),
 non-official** source. These references describe workflow behavior; they do not
 establish one universal prompting convention for all checkpoints.
 
-## Non-graphic mature themes
+## Content preference and prompt adaptation
 
-The pink **Взрослая тематика** checkbox in a preset's Prompt tab is off by default.
-With Small / Utility LLM adaptation enabled, it permits romantic tension, flirting
-and implied intimacy between clearly adult characters when consistent with the
-scene. It does not introduce sexual context, explicit acts, intimate anatomy or
-graphic details, and excludes minors and age-ambiguous characters. The preference
-is stored separately from automatic template selection, so detecting another model
-does not reset it. It affects LLM prompt adaptation only; manual prompts and workflow
-JSON/sampling controls remain unchanged.
+The pink **Mature content** checkbox in a preset's Prompt tab is off by default.
+During Small / Utility LLM adaptation, the backend adds the configured content-level
+instructions only when both this preset preference and the session/adventure content
+setting are enabled. The existing soft/medium/hard level selects the addendum; the
+checkbox does not itself enable a session setting. The UI's current non-graphic
+description is narrower than this backend contract and should not be treated as
+an output filter.
+
+The preference is stored separately from automatic template selection, so detecting
+another model does not reset it. It affects this LLM adaptation path only; manual
+prompts and workflow JSON/sampling controls remain unchanged. Moment illustrations
+have their own [preparation paths](README.md#moment-illustrations). None of these
+settings changes canonical character state or guarantees the content of generated
+pixels.
 
 ## A test image works but the adventure rejects its workflow
 

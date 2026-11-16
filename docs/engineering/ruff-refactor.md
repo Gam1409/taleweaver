@@ -1,5 +1,10 @@
 # Backend refactoring and CI lint cleanup
 
+> **Historical refactor validation snapshot.** The findings, branch names, test counts, failing
+> baselines and browser observations below describe the reviewed revision. They
+> are not current release status or a claim that later changes were retested. See
+> [current engine boundary](engine-boundary.md) and [current CI workflow](../../.github/workflows/ci.yml) for active contracts.
+
 The full CI command (`ruff check backend scripts`) reported 363 findings on
 `4bc659ce`. The final `inspect_state.py` warning was one finding, not the cause
 of the other failures. CI stopped at lint before running tests.
@@ -76,7 +81,8 @@ unchanged; no general security or complexity rule was disabled.
 
 ## CI limitation
 
-The existing workflow suppresses pytest failures with `|| true`. A green workflow
-alone therefore proves neither that all tests passed nor that live models were
-tested. This refactor does not introduce or expand that exception; local test
-results and baseline comparison must be read separately.
+At the reviewed revision, the workflow suppressed pytest failures with `|| true`.
+A green run from that baseline did not establish passing tests. The current
+[CI workflow](../../.github/workflows/ci.yml) reports separate lint, type, test,
+frontend and optional-Concordia jobs and propagates test failures. Neither a
+historical nor a current offline run establishes live-model quality.

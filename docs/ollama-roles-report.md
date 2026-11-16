@@ -1,5 +1,11 @@
 # Ollama role implementation report
 
+> Historical implementation and evaluation record for the revisions named below.
+> Failure counts, model timings, branch paths and paused experiments describe that
+> work, not current `main`. For current configuration use [Ollama roles](ollama-roles.md),
+> [provider network policy](provider-network-policy.md) and the current
+> [CI workflow](../.github/workflows/ci.yml).
+
 Base: `3641ff71ef6ed17265d5d28bdce2863987f4cb92`. Branch: `feat/ollama-role-settings`, stacked on the earlier custom OpenAI-compatible endpoint feature. No dependency lock file or database schema changes.
 
 Implemented all five roles, the shared provider/model resolver, migrated callers, role-specific discovery and unsaved connection tests. See [configuration and the 30-location audit](ollama-roles.md).
@@ -11,7 +17,7 @@ Implemented all five roles, the shared provider/model resolver, migrated callers
 - Full `pytest -q`: **914 passed, 14 failed** in 686.86 seconds. Four failures were stale constructor/stream fixtures, corrected and verified in subsequent focused runs. The other ten reproduce on the untouched base snapshot; see the list below. The full suite is not green.
 - Ruff across all modified Python files: **114 baseline diagnostics → 98**, **zero new**. Existing complexity/security diagnostics were not suppressed. New Python modules and tests pass Ruff. `ruff format --check`: **40 files passed**.
 - Matched fresh mypy runs (`--no-incremental`) on changed backend modules: **1688 baseline errors → 709**, **0 new**. Counts include imported modules; errors are compared by file/message while ignoring shifted line numbers.
-- Frontend: `npm install --package-lock=false --ignore-scripts --cache /workspace/.cache/npm` and `npm run build` passed. Lock files remain unchanged. New Vue/TypeScript modules pass ESLint.
+- Frontend: `npm install --package-lock=false --ignore-scripts` and `npm run build` passed. Lock files remain unchanged. New Vue/TypeScript modules pass ESLint.
 - Chromium component/service check: five role panels, five isolated model lists, correct URL for each discovery request, correct role/URL in all five Test payloads, cleared numbers sent as `null`, and no browser errors.
 - Local fake-server comparison: `ollama` and `ollama_chat` both passed all five request paths. Both send `options.num_ctx=8192` and `options.num_predict=777`, with Pydantic schema in `format`. The chat variant preserves message roles. The saved API mode selects either transport; Generate remains the compatibility default. Actual timeout tests on both transports verified four attempts against a slow local HTTP server.
 - Real browser/API check against the replacement RunPod endpoint: **three save/reload rounds passed for all five roles**, including model swaps, separate role URLs, timeout/context settings, Generate/Chat mode and visibility from a second user. No browser errors. Screenshots are available in the separate [`docs/ollama-settings-preview`](https://github.com/Gam1409/taleweaver/tree/docs/ollama-settings-preview/docs/screenshots) branch.
@@ -53,7 +59,7 @@ Models: `hf.co/mradermacher/Qwen3-14B-Uncensored-GGUF:Q6_K` for small, generator
 - Actual compression requests were observed during gameplay, using the compression role's Qwen model, timeout and context settings.
 - The first rich-world attempt ended with an incomplete response stream around 600 seconds while the user reported resetting server settings. That interrupted attempt is not evidence of completed generation or of Qwen's reasoning quality.
 - After the replacement endpoint was configured and the three browser rounds passed, the rich-world retry reached **12,288 completion tokens** and failed with the application's explicit truncated-response error. The model response took 649.14 seconds; the job reported failure after 653.63 seconds. It did not produce a playable world. The request used Qwen, Chat, `think=false`, `num_ctx=32768` and a 600-second request timeout. The test-only streaming transport continued receiving data beyond 600 seconds: this timeout is not a hard total-duration limit for that streaming adapter.
-- Direct SSH to the supplied exposed endpoints and to the RunPod SSH gateway returned connection refused from this cloud environment. The uploaded key pairs matched, but SSH authentication was never reached. A user-managed localhost tunnel is documented; end-to-end tunnel testing remains unverified.
+- Direct SSH to the supplied exposed endpoints and to the RunPod SSH gateway returned connection refused from this cloud environment. SSH authentication was never reached. A user-managed localhost tunnel is documented; end-to-end tunnel testing remains unverified.
 
 ## Paused live validation
 
@@ -61,9 +67,9 @@ The user requested that live testing stop and the current work be pushed to GitH
 
 The rich-world prompt also requested bracers in an `Arms` slot, whereas the application's equipment schema uses `Hands`. Correct that test input before the next retry; no equipment result was produced in this failed run.
 
-## Existing full-suite failures
+## Full-suite failures at the original baseline
 
-All ten reproduce on the original base code:
+All ten were reproduced on the original base code:
 
 - `test_adventures_api.py::test_import_adv_preserves_consumable_effects_in_avatar_inventory`
 - `test_adventures_api.py::test_chat_snapshot_inventory_readable_uses_text_log_content`
@@ -137,3 +143,42 @@ Chat is now an opt-in setting, assessed against the user's real models. Successf
 - `tests/test_validation_endpoint.py`
 - `tests/test_validation_persistence.py`
 - `docs/ollama-roles-report.md`
+
+## Original call-site audit (historical)
+
+At the routing change's revision, the specification's 30 original locations mapped to the following code. Several monolithic files had already been split into helpers before this change; repeated rows represent their original callers.
+
+| # | Specification location | Current implementation | Role |
+| --- | --- | --- | --- |
+| 1 | `agent_logic.py:211` | `agent_logic.py`, agent decision | `play_agent` |
+| 2 | `editor.py:1871` | `editing/ai_fix_llm.py` | candidate `complex` / `small`; environment fallback has no role |
+| 3 | `editor.py:699` | `editing/validation.py` | `complex` |
+| 4 | `config_api.py:1264` | `/settings/test-llm` | request role, default `small` |
+| 5 | `gameplay_logic.py:1186` | mechanics pass | `small` |
+| 6 | `gameplay_logic.py:1433` | generator tool intent pass | `small` |
+| 7 | `gameplay_logic.py:1525` | chat progression pass | `small` |
+| 8 | `gameplay_logic.py:1692` | narration pass | `complex` |
+| 9 | `turn_combat.py:266` | `combat/narration.py::_complex_llm`, aftermath | `complex` |
+| 10 | `turn_combat.py:659` | `combat/narration.py::_complex_llm`, special event | `complex` |
+| 11 | `turn_adventure_gen.py:489` | terminal epilogue | `complex` |
+| 12 | `gameplay_logic.py:2208` | history compression | `compression` |
+| 13 | `turn_guardrails.py:143` | `guardrails/base.py::_small_llm` (inspect/items/reveals) | `small` |
+| 14 | `turn_guardrails.py:985` | same shared guardrails helper | `small` |
+| 15 | `turn_guardrails.py:1115` | same shared guardrails helper | `small` |
+| 16 | `turn_suggestions.py:227` | prompt suggestions | `small` |
+| 17 | `turn_adventure_gen.py:106` | short intent classification | `small` |
+| 18 | `gameplay.py:755` | translation | `small` |
+| 19 | `assets.py:355` | image prompt suggestion | `small` |
+| 20 | `templates.py:445` | story idea | `small` |
+| 21 | `templates.py:696` | template field generation | `small` |
+| 22 | `users_api.py:232` | biography generation | `small` |
+| 23 | `editor.py:3644` | `editing/generation.py::_small_llm` | `small` |
+| 24 | `editor.py:3689` | same shared editor generation helper | `small` |
+| 25 | `editor.py:3743` | same shared editor generation helper | `small` |
+| 26 | `editor.py:3795` | same shared editor generation helper | `small` |
+| 27 | `editor.py:3839` | same shared editor generation helper | `small` |
+| 28 | `editor.py:3890` | same shared editor generation helper | `small` |
+| 29 | `world_generator.py:497` | `WorldGenerator.generate_world` | `generator` (explicit overrides retained) |
+| 30 | `templates.py:637` | surprise preset | `generator` |
+
+`TurnLlmContext` also obtains its small, complex and compression choices through `turn_context_helpers.resolve_model_settings`, which uses the shared resolver. No production role caller retains a direct `GameMasterLLM(...)` construction; the sole exception is the intentionally role-free environment fallback.

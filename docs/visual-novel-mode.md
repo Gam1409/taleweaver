@@ -12,7 +12,7 @@ existing cast and history. The first version provides no in-session VN/JRPG swit
 
 ## Narration
 
-In session settings, expand **Visual novel narration** and choose **Leisurely**,
+In **Session settings → Story & world**, expand **Visual novel narration** and choose **Leisurely**,
 **Balanced** (default) or **Brisk**, then save. Pace controls how much of an
 interaction a reply develops. It does not authorize a time jump, a relationship
 commitment or a decision on behalf of the player.
@@ -38,13 +38,19 @@ still applies, with an additional 1,440-minute bound per action. RPG and Chat ti
 semantics are unchanged. Time interpretation remains model-dependent; the code
 does not infer elapsed time from language-specific keywords or real request latency.
 
+An explicit completed time passage has a separate, source-bound field and can
+advance more than one day within its configured limits. It is not truncated by
+the ordinary estimate cap. See [VN time passages](vn-time-passages.md) for units,
+the 365-day bound, rejection rules and Living World catch-up.
+
 ## Characters and relationships
 
 NPC history now prioritizes durable facts and changes instead of routine gestures.
 Optional [memory and relevant recall](memory-rag.md) adds source-backed retrieval
 and layered summaries, with background work deferred while the player is active.
 
-An additional bounded Small/Utility-role call considers up to three present,
+The base VN social-continuity pass is separate from the optional **NPC Personality**
+module. Its bounded Small/Utility-role call considers up to three present,
 visible NPCs per player input. It proposes reactions based on personality and
 established events. Private state includes trust, affinity, respect, tension,
 recent memories and short-term intentions. By default, cards show only learned
@@ -73,9 +79,19 @@ simulation of autonomous lives. Timeout or invalid output preserves valid state
 and falls back to conservative narration. Model accuracy still matters: validation
 cannot prove that every interpretation of a literary passage is correct.
 
+Optional **Session settings → NPC Personality** adds selected NPCs' source-grounded
+perception, decisions, review and tool access. Its Staged/Integrated workflows,
+private notebooks and current-state inspection have their own settings and bounds;
+the three-character social-pass limit is not the NPC Personality cast limit.
+See [NPC decision workflows](npc-decision-workflows.md),
+[private notebooks](npc-notebook.md) and [observable state](npc-observable-state.md).
+NPC initiative remains subject to [world-action validation](npc-action-autonomy.md)
+and never authorizes deciding for the player.
+
 ## Emotion palette and character thoughts
 
-**Палитра эмоций** and **Мысли персонажей** are independent session display options.
+**Палитра эмоций** and **Мысли персонажей** are independent session display options
+under **Session settings → Characters**.
 They work with **NPC Personality** off, in observation mode or in live mode.
 The same narrator reply supplies a dominant emotion and its intensity, and/or a
 short fictional thought; there is no additional model request. When personality
@@ -100,14 +116,18 @@ later possessions. The latest 100 snapshots are retained; generated image record
 remain available. Messages without a matching snapshot cannot be illustrated.
 An undone, deleted or edited message cannot receive the result of an obsolete job.
 
-Snapshots include the public location description and known NPC positions. Prompt
-preparation selects the final visible arrangement: stepping back, releasing a hand
-or leaving supersedes an earlier approach or contact. ComfyUI uses these instructions
-together with its selected model's prompt rules and the story's visual style. Legacy
-scenes use one Utility call. For characters with tracked clothing, a bounded
-composition extraction precedes formatting; both calls share a total preparation
-timeout. Vocal tags remain in displayed narration and TTS; the image prompt does
-not treat them as visible objects.
+Snapshots include the public location, cast, known clothing, confirmed visible
+conditions and scene-local placement. For ordinary sessions, preparation builds a
+saved English visual plan from those frozen facts, audits it and compiles it for
+the selected model family. A valid cached plan can be reused. Sessions with mature
+content enabled use the existing source-based preparation path. These paths have
+different logical request counts; they do not promise a single adaptation call.
+
+Prompt preparation uses the Small / Utility role's configured deadline. Image
+generation has the image provider's separate timeout. No preparation step loads
+today's hidden inventory or fills an old moment from later state. Vocal delivery
+cues remain available for narration/TTS rather than becoming visible objects.
+See [current moment illustration paths](comfyui/README.md#moment-illustrations).
 
 The narrator is explicitly constrained to approved NPC movements. These instructions
 do not automatically repair an existing discrepancy between prose and engine state,
@@ -123,18 +143,23 @@ VN preferences, private social state and illustration references live in the
 session's versioned JSON state. They participate in save/load, checkpoint rewind,
 session copying and ADS export/import. Copy/import remaps message evidence IDs and
 illustration references; copied image assets are isolated from the original session.
-No database migration is required.
+No database migration is required for the base VN JSON preferences and social state.
+
+NPC notebooks are an explicit exception to rewind: each NPC has one latest
+document, retained across Undo and Chronicles rather than a history of notebook
+versions. Copy/export/import use the notebook's own portability path.
 
 Saving pace while a reply is being generated returns a busy response; save again
 after the reply finishes. Turn and pace writes share a nonblocking session lease
 in the standard single-worker server. Multi-worker deployments need shared
 coordination; this lease does not serialize unrelated administrative edits.
 
-A normal VN input uses a continuity pass, a social pass when eligible characters
-are present, and narration. Movement confirmation and existing optional background
-services may add calls. Manual illustration may use prompt adaptation and the image
-provider. The social pass has a 45-second timeout. Existing provider settings still
-govern the other calls.
+A normal VN input can use continuity, the social pass for eligible characters,
+narration and the shared completed-narration state check. NPC Personality, movement
+confirmation, a bounded state-coverage correction and optional background services
+can add requests. The social pass uses the configured Small / Utility role timeout,
+not a fixed 45-second limit. Manual illustration has its own preparation and image
+requests. See [turn latency](turn-latency.md) for the request boundaries and timings.
 
 Automated tests use deterministic mocked models and image providers. They verify
 contracts, mode isolation, ownership, persistence and failure paths; they do not

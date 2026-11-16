@@ -1,25 +1,42 @@
 # Frontend request and stream contracts
 
-Application API requests use `services/http.ts` for URL construction, credentials,
-authentication headers and a single unauthorized event. Raw fetch remains only
-inside that transport and for external audio media, which is not an API request.
+Shared application transport lives in
+[`services/http.ts`](../../frontend/src/services/http.ts): URL construction,
+credentials, authentication headers, cancellation and the unauthorized event.
+API wrappers reuse this transport and can set their own deadlines. External media
+requests are a separate concern.
+
+## Request deadlines
 
 Finite requests include response-body consumption in their deadline and release
-parent abort listeners after completion. The helper preserves response status,
-headers and fetch metadata. Ordinary reads use 15 seconds; ordinary editor writes
-allow 60 seconds. Long model-backed actions, image uploads and streamed turns
-explicitly use `timeoutMs: null`, retaining the native response stream and their
-server/caller deadline. NPC read controllers keep their existing whole-operation
-timer and navigation cancellation. Do not apply a short browser timeout to a
-generation request whose completion may be uncertain.
+parent abort listeners after completion. Response status, headers and fetch
+metadata are preserved. The default belongs to the wrapper actually used:
 
-Chat and play-agent consume the same SSE parser. It supports LF, CRLF and CR,
-Unicode characters split across network chunks, multiple data lines, heartbeat
-comments, cancellation and obsolete-session guards. Malformed JSON is an error;
-an unterminated event at EOF is not a confirmed final receipt. Existing turn
-reconciliation still verifies saved history rather than repeating the action.
+| Call path | Current deadline |
+| --- | --- |
+| `apiFetch` without an override | 15 seconds. |
+| `useApi.ts` request wrapper | 20 seconds unless its call supplies another numeric value. |
+| Authenticated-user refresh (`store/auth.ts`, `/auth/me`) | 12 seconds. |
+| Session / NPC settings wrappers | Commonly 15 seconds; specific operations can override it. |
+| Ordinary editor writes | Commonly 60 seconds in their service wrapper. |
+| Community catalog fetch/refresh | 30 seconds. |
+| Community catalog install | 10 minutes, including bounded file transfer/import. |
+| Streamed turns and selected long model/image operations | Explicit `timeoutMs: null`; caller cancellation and server/provider deadlines still apply. |
 
-Gameplay's notification composable is a facade over the editor's notification
-service. One application-level component renders notifications. IDs, dismissal
-and timer cleanup share one store; existing five/eight-second durations remain
-appropriate to each caller.
+These are client request deadlines, not model context or output-token budgets.
+Check the service call instead of applying one blanket read/write timeout.
+NPC read controllers also retain whole-operation timers and navigation cancellation.
+An uncertain write outcome must be reconciled from saved state rather than
+retried automatically as a new action.
+
+## Streaming and request ownership
+
+Chat and Play-Agent consume the shared SSE parser. It handles LF, CRLF and CR,
+Unicode split across network chunks, multiple data lines, heartbeat comments,
+cancellation and obsolete-session guards. Malformed JSON is an error; an
+unterminated event at EOF is not a confirmed final receipt. Turn reconciliation
+checks saved history instead of repeating an uncertain player action.
+
+Gameplay notifications use a facade over the shared editor notification store.
+The application-level renderer, IDs, dismissal and timer cleanup stay with that
+owner. A notification is not evidence of a committed gameplay mutation.

@@ -14,6 +14,14 @@ the deployment `.env`; back it up separately and protect it as a secret.
 `DATABASE_URL` and `MEMORY_DB_DIR` inside Compose point at these mounts; optional
 `DOCKER_DATABASE_URL` changes the database destination explicitly.
 
+The data mount also holds the durable inference-reservation journal. Back it up
+with the deployment and do not delete it to bypass an uncertain remote request.
+System diagnostics default to `/app/log`, which is outside these three mounts.
+For persistent diagnostics, mount a separate private directory and set the
+process environment variable `TALEWEAVER_LOG_DIR` to its container path. Detailed
+logs and rejection traces can contain private story data; see
+[system diagnostics](engineering/system-diagnostics.md).
+
 ## Updating an existing installation
 
 Old Compose installations placed SQLite in `DOCKER_DATA_DIR/taleweaver.db`.

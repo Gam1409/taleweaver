@@ -7,10 +7,13 @@ exit status and reports are uploaded; there is no advisory ignore list.
 CodeQL separately analyses Python and TypeScript/JavaScript. Dependabot opens
 weekly update proposals; publishing still requires the normal test checks.
 
-The November 2026 refresh updates Pillow, certifi, aiohttp, filelock,
-OpenTelemetry and Black, and updates Vue, DOMPurify, Vite and frontend tooling.
-Pillow 13 requires Python 3.11, which is now the application minimum. Desktop,
-Docker and CI use Python 3.12; Concordia remains optional and requires 3.12+.
+The declared application range is Python `>=3.11,<3.14`. Desktop, Docker and CI
+use Python 3.12. The optional Concordia extra requires Python 3.12 or later within
+that application range and is not installed by ordinary `poetry install`.
+
+The November 2026 refresh updated Pillow, certifi, aiohttp, filelock,
+OpenTelemetry and Black, and Vue, DOMPurify, Vite and frontend tooling.
+Pillow 13 requires Python 3.11, matching the application minimum.
 
 ESLint now uses its supported flat configuration. Its previous baseline checks
 are preserved; the migration does not enable every TypeScript recommended rule.

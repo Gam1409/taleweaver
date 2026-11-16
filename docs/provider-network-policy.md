@@ -1,10 +1,16 @@
 # Provider network policy
 
-TaleWeaver supports self-hosted model servers. Legacy Ollama, ComfyUI and
-Automatic1111 URLs may target loopback/private addresses by default. Setting
-`ALLOW_PRIVATE_NETWORK_MODELS=false` rejects them through the shared URL validator.
-For an Internet-facing deployment, restrict administrator accounts and network
-egress as well; a URL setting is not a network firewall.
+TaleWeaver supports self-hosted model servers. The shared provider URL validator
+allows private/loopback addresses by default for legacy local setups. Setting
+`ALLOW_PRIVATE_NETWORK_MODELS=false` rejects those destinations on paths that use
+that validator, including Ollama role overrides/discovery, ComfyUI client setup
+and embedding configuration.
+
+This flag is not uniform dispatch-time protection for every legacy provider.
+The shared legacy `ollama_url` and direct Ollama/Automatic1111 image transports do
+not revalidate their configured URL at each generation request. Only configure
+trusted endpoints, restrict administrator access and enforce deployment network
+egress separately. The flag is not a network firewall.
 
 Administrator-managed **Custom OpenAI** endpoints are stricter: private addresses
 require explicitly setting `ALLOW_PRIVATE_NETWORK_MODELS=true` in the environment

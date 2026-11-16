@@ -1,5 +1,11 @@
 # Neutral visual quality experiment
 
+> Historical source-rich preparation experiment. Its former universal-default claim
+> below was superseded: neutral sessions now use saved visual plans; content-enabled
+> sessions retain the source-based route. Use the current
+> [illustration guide](../comfyui/README.md#moment-illustrations). The benchmark protocol
+> is a research design, not a completed image-quality result.
+
 Status: implementation and mocked regression verification only. No live image-quality
 claim. Source-rich context is now the default; no environment setting is required. This path is for
 non-graphic illustrations. The single preparation path is independent of the adventure's

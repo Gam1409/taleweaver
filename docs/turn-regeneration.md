@@ -35,3 +35,8 @@ the desired turn; that restores the checkpoint and discards its later branch.
 If no safe snapshot exists, deletion is refused and the current branch is kept.
 Undo consumes the latest-turn snapshot. Play a new supported turn to capture a
 new one; there is no additional archive of turn snapshots.
+
+An NPC's [private notebook](npc-notebook.md) is one current document outside the
+turn/checkpoint snapshot. Accepted notes keep their latest contents across Undo,
+Regenerate and Chronicles restore. Rewinding gameplay does not restore an older
+notebook version.

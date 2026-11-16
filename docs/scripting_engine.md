@@ -1,6 +1,17 @@
 # TaleWeaver Scripting Engine Guide
 
-The **TaleWeaver Scripting Engine** provides a secure, sandboxed environment for embedding deterministic event-driven logic directly into adventures. By authoring lightweight Python-style scripts, world builders and the AI World-Builder can craft complex interactive puzzles, reactive traps, dynamic NPC movements, and custom victory or defeat conditions that seamlessly interface with TaleWeaver's generative game master.
+The scripting engine evaluates bounded Python-style adventure logic through a
+restricted AST interpreter. Scripts can define puzzle rules, hooks, world changes
+and ending conditions using the exposed `tw` API. This is an adventure-authoring
+API, not the NPC agent's memory/tool API; JSON in a private notebook is never run
+as a script.
+
+The implementation reference is
+[`context.py`](../backend/engine/scripting/context.py), with dispatch in
+[`runner.py`](../backend/engine/scripting/runner.py) and interpreter limits in
+[`sandbox.py`](../backend/engine/scripting/sandbox.py). The fork does not expose
+every API from newer upstream releases: for example, `tw.dialog`, `tw.party` and
+arbitrary provider/network calls are not provided by this context.
 
 ---
 
@@ -8,19 +19,19 @@ The **TaleWeaver Scripting Engine** provides a secure, sandboxed environment for
 1. [Overview & Architecture](#overview--architecture)
 2. [Sandbox Security & Limits](#sandbox-security--limits)
 3. [Event Triggers & Lifecycle](#event-triggers--lifecycle)
-4. [Global Initialization Script & Helper Methods](#global-initialization-script--helper-methods)
+4. [Global Initialization Script & Helper Methods](#global-initialization-script-init_script--helper-methods)
 5. [The `tw` Scripting API](#the-tw-scripting-api)
    - [tw.player](#twplayer)
    - [tw.scene](#twscene)
    - [tw.exits](#twexits)
    - [tw.npcs](#twnpcs)
-   - [tw.objects](#twobjects)
+   - [tw.objects](#twobjects-or-twitems)
    - [tw.switches](#twswitches)
    - [tw.vars](#twvars-persistent-state)
    - [tw.story](#twstory)
    - [tw.memories](#twmemories)
    - [tw.game](#twgame)
-   - [tw.quests](#twquests)
+   - [tw.quests and tw.sequences](#twquests-and-twsequences)
    - [tw.awards](#twawards)
    - [tw.dice](#twdice)
    - [tw.log & tw.debug (Logging & Diagnostics)](#twlog--twdebug-logging--diagnostics)
@@ -30,6 +41,8 @@ The **TaleWeaver Scripting Engine** provides a secure, sandboxed environment for
    - [Example 3: Three-Lever Puzzle with Persistent State](#example-3-three-lever-puzzle-with-persistent-state)
    - [Example 4: Boss Encounter & Victory Condition](#example-4-boss-encounter--victory-condition)
    - [Example 5: Turn-Based Survival Countdown](#example-5-turn-based-survival-countdown)
+   - [Example 6: Cursed Amulet (Inline Object Script)](#example-6-cursed-amulet-inline-object-script)
+   - [Example 7: Ambusher NPC (Inline NPC Script)](#example-7-ambusher-npc-inline-npc-script)
    - [Example 8: Switch Mechanism State & Guard Expression](#example-8-switch-mechanism-state--guard-expression)
    - [Example 9: Global Init Script with Helper Functions](#example-9-global-init-script-with-helper-functions)
 7. [Authoring in the World-Editor](#authoring-in-the-world-editor)
@@ -38,7 +51,7 @@ The **TaleWeaver Scripting Engine** provides a secure, sandboxed environment for
 
 ## Overview & Architecture
 
-While TaleWeaver's generative LLM master creates rich, adaptive prose and roleplay, certain game mechanics (such as combination locks, physical traps, locked gates, and badge criteria) require **deterministic, tamper-proof execution**.
+While TaleWeaver's generative LLM master creates rich, adaptive prose and roleplay, certain game mechanics (such as combination locks, physical traps, locked gates, and badge criteria) require **explicit host-controlled rules** rather than a prose-only outcome.
 
 ```
                            +------------------------+
@@ -76,7 +89,14 @@ While TaleWeaver's generative LLM master creates rich, adaptive prose and rolepl
                            +------------------------+
 ```
 
-Every script executes inside an isolated AST interpreter (`SafeAstInterpreter`), generating an atomic `ScriptChangeset` that updates scenes, locks, items, NPC locations, and avatar parameters before client rendering.
+Scripts run in `SafeAstInterpreter` and accumulate a `ScriptChangeset` for the
+host to apply. This is not a separate operating-system process or a guarantee
+that an individual script failure rolls back every earlier changeset operation.
+Test the complete hook and its host application path, including failures.
+
+VN disables the RPG event-script generation/initialization path. Use the existing
+VN progression and state owners for VN sessions; a stored script is not evidence
+that it executes in every mode.
 
 ---
 
@@ -91,7 +111,7 @@ To ensure player safety and server reliability:
 - **No Introspection Escapes**: `str.format`, `format_map` and `mro` are blocked (format strings could otherwise walk `{0.__globals__}`), as are frame/generator/code attributes (`f_*`, `gi_*`, `cr_*`, `ag_*`, `tb_*`, `co_*`). Use f-strings or `+` for text.
 - **Instruction & Time Budget**: Each script execution is capped at **10,000 steps** and **2 seconds** (`ScriptTimeoutError`), preventing infinite loops and CPU exhaustion.
 - **Resource Protections**: Script source is capped at **100,000** characters before parsing. Strings, lists, tuples and dicts are capped at **100,000** elements/characters, `range()` at 100,000 elements, and integers at 10,000 bits (`ScriptSecurityError`). Amplifying operations such as `replace`, separator-heavy `join`, percent formatting, container text conversion and list/dict growth are checked before allocation or mutation, including unbound builtin methods. Facade arguments and attribute writes also have a bounded expanded payload; cyclic payloads are rejected. These are interpreter limits, not process isolation or a total process-memory quota.
-- **Safe Builtins**: Available built-ins are restricted to `abs`, `all`, `any`, `bool`, `dict`, `float`, `int`, `len`, `list`, `max`, `min`, `range`, `round`, `str`, `sum`, `tuple`.
+- **Safe Builtins**: Available built-ins are restricted to `abs`, `all`, `any`, `bool`, `dict`, `float`, `int`, `len`, `list`, `max`, `min`, `print`, `range`, `round`, `str`, `sum`, `tuple`.
 - **Inline conditionals**: `a if condition else b` is supported.
 
 ---
@@ -102,13 +122,13 @@ Scripts declare a trigger event and an optional target entity or scene.
 
 | Trigger | When it Executes | Target Field Usage |
 | :--- | :--- | :--- |
-| `on_init` | When a new game session starts, immediately after initial world manifest and entity state setup. | Global (`*` or empty). |
-| `on_turn_start` | When a new in-game turn begins, i.e. right after the player's scene or the active sequence changed (after `on_turn_end` of the previous turn, before narration). | Global (`*` or empty). |
+| `on_init` | When a new game session starts, immediately after initial world manifest and entity state setup. | Global (omit `target_id`, or use null/empty). |
+| `on_turn_start` | When a new in-game turn begins, i.e. right after the player's scene or the active sequence changed (after `on_turn_end` of the previous turn, before narration). | Global (omit `target_id`, or use null/empty). |
 | `on_enter_scene` | When the player enters a new scene. | Specific `scene_id` or empty for any scene. |
-| `on_interact` | When the player examines, attacks, talks to, or manipulates an entity. | Specific `entity_id` (NPC or object) or empty for all. |
-| `on_logic_pass_done` | After game mechanics and state mutations finish, before narration is generated. | Global (`*` or empty). |
-| `on_narration_done` | After narration generation completes, before final turn persistence. | Global (`*` or empty). |
-| `on_turn_end` | When the current in-game turn ends, i.e. when the player's scene or the active sequence changed (before `on_turn_start` of the next turn). | Global (`*` or empty). |
+| `on_interact` | When a supported entity interaction dispatches this hook; a mention alone is not a guaranteed trigger. | Specific `entity_id` (NPC or object) or empty for all. |
+| `on_logic_pass_done` | After game mechanics and state mutations finish, before narration is generated. | Global (omit `target_id`, or use null/empty). |
+| `on_narration_done` | After narration generation completes, before final turn persistence. | Global (omit `target_id`, or use null/empty). |
+| `on_turn_end` | When the current in-game turn ends, i.e. when the player's scene or the active sequence changed (before `on_turn_start` of the next turn). | Global (omit `target_id`, or use null/empty). |
 
 > **In-game turns vs. player messages:** An in-game turn spans all player messages within one scene and sequence. Base time (`time_per_turn`), status-effect ticks, and the `on_turn_end` / `on_turn_start` hooks only fire on a scene or sequence change. Use `on_logic_pass_done` or `on_narration_done` for logic that must run on every player message.
 
@@ -168,16 +188,23 @@ For **all assets** in TaleWeaver (Win/Loss conditions, Sequences, Quests, Awards
 ### Deterministic Guard Expressions
 
 Deterministic guards (`unlock_expression` on containers and exits, `craft_guard_expression` on constructables, `gates.expression` on switches, `completed_guard_expression` / `gameover_guard_expression` on the adventure, and `guard_expression` on sequences, sidequests, and awards) evaluate safe Python expressions against the `tw` context:
-- `tw.switches.get('POWER') == 'ON'`
+- `tw.switches.get_state('POWER') == 'ON'`
 - `tw.vars.get('has_badge', False) == True and tw.player.hp > 20`
 - `tw.player.has_item('KEYCARD_RED') or tw.switches.is_state('OVERRIDE', 'ACTIVE')`
 - `tw.vars.get('boss_defeated') == True and tw.player.has_item('MOB_LEDGER')`
-- `tw.vars.get('countdown') <= 0 or tw.vars.get('cover_blown') == True`
+- `tw.vars.get('countdown', 1) <= 0 or tw.vars.get('cover_blown', False) == True`
 
-If the expression evaluates to truthy, the guard passes; otherwise, the action or completion is blocked deterministically.
+If the expression evaluates to truthy, the guard passes; otherwise, the action or completion is blocked deterministically. `tw.switches.get(...)` returns a proxy, so compare its `.state`, call `get_state(...)`, or use `is_state(...)`; comparing the proxy itself to a string does not read its state. Initialize required variables or supply defaults before evaluating a guard.
 
 ### Priority Execution
-Scripts carry an integer `priority` (default: `100`). Scripts with **lower** priority numbers execute before scripts with higher numbers.
+The current `ScriptRunner` iterates the stored script array in order. The editor
+can store a `priority` value, but the runner does not sort by it. Do not rely on
+that UI field to establish execution dependencies. Keep dependent operations in
+one script or verify the actual stored order.
+
+Targets are exact matches. A literal `target_id: "*"` is not a wildcard in the
+current dispatcher. Omit the target for a global hook. `is_active: false` skips a
+standalone script.
 
 ---
 
@@ -192,15 +219,22 @@ The **Global Initialization Script** solves this by providing a single centraliz
 The initialization script runs under a dual lifecycle model:
 
 1. **Session Creation (Run Once)**:
-   When a player begins a new game session (`/sessions/start`), the initialization script is evaluated with the full `GameContext` before any player actions occur.
-   - Any state mutations performed via `tw.vars.set(...)`, `tw.switches.set_state(...)`, or `tw.story.show_message(...)` are committed directly into the initial session state (`__script_vars__`).
+   When a player begins a supported non-VN game session, the initialization script is evaluated before player actions occur.
+   - The current session-start adapter applies script variables, story flags,
+     HP/mana/stamina deltas and initial narrative messages. Script variables are
+     stored in `__script_vars__`; flags and vitals use their own state owners.
+     Do not rely on every other changeset operation (such as inventory transfers,
+     exit updates or NPC movement) being applied during initialization.
    - The engine automatically records `__init_script_executed__ = True` so setup logic does not re-run on subsequent turns.
    - Any standalone scripts marked with the `on_init` trigger also fire during this phase.
 
 2. **Every Turn Scope Injection (Reusable Methods & Constants)**:
    Whenever an event script fires during gameplay (`on_turn_start`, `on_interact`, `on_enter_scene`, `on_turn_end`, etc.), the engine loads function definitions (`def ...`) and top-level constants from the initialization script and injects them directly into the script's global execution scope.
    - You can call your helper functions directly from any event script without repeating code!
-   - State mutation statements in the initialization script are **not** re-evaluated during this step, ensuring deterministic performance and avoiding unwanted side-effects.
+   - Top-level expression statements are skipped during helper loading. Keep
+     constant assignments pure: only function definitions and assignments whose
+     outer value is a literal/container are selected, not arbitrary setup code.
+     Place one-time effects in the session initialization body.
 
 ### Defining Reusable Helper Functions
 
@@ -215,11 +249,13 @@ tw.vars.set("gold", DEFAULT_GOLD)
 tw.vars.set("reputation", 10)
 tw.vars.set("solved_puzzles", [])
 
+
 # --- Reusable Helper Functions ---
 def add_gold(amount):
     current = tw.vars.get("gold", 0)
     tw.vars.set("gold", current + amount)
     tw.story.show_message("You gained " + str(amount) + " gold! Total: " + str(current + amount))
+
 
 def spend_gold(amount):
     current = tw.vars.get("gold", 0)
@@ -229,6 +265,7 @@ def spend_gold(amount):
     tw.vars.set("gold", current - amount)
     tw.story.show_message("You spent " + str(amount) + " gold. Remaining: " + str(current - amount))
     return True
+
 
 def can_access_sanctum():
     rep = tw.vars.get("reputation", 0)
@@ -259,122 +296,147 @@ if not can_access_sanctum():
 The global `tw` object is injected into every script execution environment.
 
 ### `tw.player`
-Inspects and modifies the avatar's state:
-- `tw.player.hp` *(int)*: Current avatar health points.
-- `tw.player.name` *(str)*: Protagonist's name.
-- `tw.player.inventory` *(list[dict])*: List of items currently held by the avatar.
-- `tw.player.heal(amount: int)`: Restores `amount` HP (up to avatar maximum).
-- `tw.player.damage(amount: int)`: Inflicts `amount` direct damage to the avatar.
-- `tw.player.has_item(item_id: str) -> bool`: Returns `True` if `item_id` is in the inventory.
+
+The player proxy exposes `.name`, `.hp`, `.mana`, `.stamina` and `.xp` reads, with
+explicit changeset operations:
+
+- `modify_hp(delta)`, `damage(amount)`, `heal(amount)`.
+- `modify_mana(delta)`, `modify_stamina(delta)`, `modify_xp(delta)`.
+- `get_stat(name, default=0)`, `set_stat(name, value)`.
+- `has_item(item_id)`, `give_item(item_id, name=None, description=None)`,
+  `add_item(...)` (alias), `remove_item(item_id)`.
+- `has_status_effect(name)`, `add_status_effect(name)`, `remove_status_effect(name)`.
+
+These methods record supported effects; the host applies its mode and state rules.
+The proxy does not expose a general `.inventory` property.
 
 ### `tw.scene`
-Inspects the current scene:
-- `tw.scene.id` *(str)*: ID of the current scene.
-- `tw.scene.name` *(str)*: Display label of the current scene.
-- `tw.scene.description` *(str)*: Scene description text.
-- `tw.scene.entities` *(list[dict])*: List of active entities (items and NPCs) present in the scene.
+
+- `.id`: current scene key, reflecting a pending scripted teleport.
+- `.npcs`, `.items`: lists of proxies in that scene.
+- `teleport(target_scene_id)`: propose a scripted scene transition.
+- `get_attribute(name, default=None)`, `set_attribute(name, value)`: session scene
+  attributes stored through the script-variable mechanism.
+
+There are no direct `.name`, `.description` or `.entities` properties on this proxy.
 
 ### `tw.exits`
-Queries and manipulates passage exits:
-- `tw.exits.lock(exit_id: str, reason: str = "")`: Locks the exit. If the player attempts to traverse it, `reason` explains why it is blocked.
-- `tw.exits.unlock(exit_id: str)`: Unlocks a previously locked passage.
-- `tw.exits.hide(exit_id: str)`: Hides the exit from the player's map and navigation choices.
-- `tw.exits.reveal(exit_id: str)`: Reveals a hidden exit or secret door.
-- `tw.exits.is_locked(exit_id: str) -> bool`: Returns `True` if the exit is currently locked.
+
+Prefer explicit source/destination pairs:
+
+- `is_locked(from_scene_id, to_scene_id) -> bool`.
+- `unlock(from_scene_id, to_scene_id)`.
+- `lock(from_scene_id, to_scene_id, reason=None)`.
+
+`unlock("FROM:TO")` and `lock("FROM:TO", reason="...")` also support a combined
+route key. The compatibility one-argument lookup depends on existing exit-state
+keys; an arbitrary `WorldExit.id` does not guarantee a match. There are no
+`hide()`/`reveal()` methods on `tw.exits`.
 
 ### `tw.npcs`
-Inspects, dialogues with, moves, and manages Non-Player Characters:
-- `tw.npcs.say(npc_id: str, text: str)`: Makes an NPC speak dialogue text. Appears in the narrative feed as `NPC Name: "text"`. Also available as `tw.npcs.get(npc_id).say(text)`.
-- `tw.npcs.move(npc_id: str, target_scene_id: str, spatial_position: str = "")`: Moves an NPC to another scene. Accepts `"current"`, `"here"`, or `"player"` to move them into the protagonist's current location.
-- `tw.npcs.move_to_player(npc_id: str, spatial_position: str = "")`: Convenience shortcut to move an NPC directly into the player's current scene.
-- `tw.npcs.drop_item(npc_id: str, item_id: str, scene_id: str = None, spatial_position: str = "")`: Transfers an item from an NPC's inventory into a scene. If `scene_id` is omitted, it drops into the NPC's current scene; passing `"current"` drops it into the player's scene.
-- `tw.npcs.give_item(npc_id: str, item_id: str)`: Transfers an item from a scene into an NPC's inventory and conceals it from the scene view.
-- `tw.npcs.kill(npc_id: str, drop_inventory: bool = True)`: Kills the NPC, setting HP to 0 and marking `is_defeated: True`. When `drop_inventory=True` (default), all items held by the NPC are dropped into their scene.
-- `tw.npcs.attack(npc_id: str)`: Makes an NPC attack the protagonist. Turn-based combat starts right after the current turn if the NPC is in the protagonist's scene, alive and attackable (ignored while a fight is already running). Example (`on_turn_end`): `if tw.player.has_item('IDOL') and not tw.vars.get('alarm'): tw.vars.set('alarm', True); tw.npcs.attack('TEMPLE_GUARD')`.
-- `tw.npcs.get(npc_id: str) -> NPCProxy`: Returns an `NPCProxy` instance. Available properties and methods on `NPCProxy`:
-  - `.name`, `.hp`, `.is_defeated`, `.current_scene_id`, `.inventory`
-  - `.say(text: str)`
-  - `.move_to(target_scene_id: str, spatial_position: str = "")` (supports `"current"`)
-  - `.move_to_player(spatial_position: str = "")`
-  - `.drop_item(item_id: str, scene_id: str = None, spatial_position: str = "")`
-  - `.give_item(item_id: str)`
-  - `.has_item(item_id: str) -> bool`
-  - `.kill(drop_inventory: bool = True)` / `.die()`
-  - `.attack()` (see `tw.npcs.attack`)
-  - `.modify_hp(delta: int)` / `.damage(amount: int)` / `.heal(amount: int)`
+
+`get(id)` returns an NPC proxy; `all()` and `exists(id)` inspect the scoped manager.
+The manager offers `say(id, text)`, `move(id, scene_id, spatial_position=None)`,
+`move_to_player(id, spatial_position=None)`,
+`drop_item(npc_id, item_id, scene_id=None, spatial_position=None)`,
+`give_item(npc_id, item_id_or_dict)`, `kill(id, drop_inventory=True)` and `attack(id)`.
+
+An NPC proxy has `.id`, `.name`, `.hp`, `.is_defeated`, `.current_scene_id`,
+`.inventory` and `.is_hidden`, plus:
+
+- `say(text)`, `move_to(scene_id, spatial_position=None)`, `move_to_player(...)`.
+- `has_item(id)`, `give_item(item_id_or_dict)`,
+  `drop_item(id, scene_id=None, spatial_position=None)`.
+- `modify_hp(delta)`, `kill(drop_inventory=True)`, `die()`, `attack()`.
+- `set_hidden(value)`, `get_attribute(name, default=None)`, `set_attribute(name, value)`.
+
+Use `modify_hp(-amount)` rather than nonexistent NPC `.damage()`/`.heal()` methods.
+Movement shortcuts `current`, `here` and `player` resolve to the player's scene.
+Explicit scripting authority is distinct from what an autonomous NPC can perceive
+or request through its observer-scoped tools.
 
 ### `tw.objects` (or `tw.items`)
-Manages world objects and inventory items:
-- `tw.objects.move_to_scene(item_id: str, scene_id: str, spatial_position: str = "")`: Moves an object/item into a scene. Accepts `"current"` for protagonist's scene.
-- `tw.objects.give_to_npc(item_id: str, npc_id: str)`: Transfers an item into an NPC's inventory.
-- `tw.objects.add_to_scene(item_id: str, scene_id: str)`: Spawns or moves an item into a scene.
-- `tw.objects.add_to_player(item_id: str)`: Directly places an item into the avatar's inventory.
-- `tw.objects.remove_from_player(item_id: str)`: Removes an item from the player's inventory.
-- `tw.objects.hide(item_id: str)`: Hides an object in the scene until uncovered.
-- `tw.objects.reveal(item_id: str)`: Reveals a previously hidden object.
-- `tw.objects.get(item_id: str) -> ObjectProxy`: Returns an `ObjectProxy` with `.move_to_scene(scene_id)` and `.give_to_npc(npc_id)`. For switch items, `ObjectProxy` also exposes `.state`, `.switch_state`, `.get_state()`, `.set_state()`, `.is_state()`, `.flip()`, and `.toggle()`.
+
+`get(id)` returns an object proxy; `all()` and `exists(id)` inspect the manager.
+Use the object proxy for `move_to_scene(scene_id, spatial_position=None)`,
+`give_to_npc(npc_id)`, `set_hidden(value)`, `lock()` and `unlock()`.
+Shared entity properties include `.id`, `.name`, `.current_scene_id`, `.is_hidden`,
+`get_attribute(...)` and `set_attribute(...)`.
+
+Use `tw.player.give_item(...)`/`remove_item(...)` for the supported player inventory
+operations. Manager methods named `add_to_player`, `remove_from_player`,
+`add_to_scene`, `hide`, `reveal` and `move_to_scene` are not part of this API.
+
+Switch objects also offer `.state`/`.switch_state`, `get_state()`, `is_state(value)`,
+`set_state(value)`, `flip(target_state=None)` and `toggle()`. For explicit outcome
+control use the dedicated switch API below.
 
 ### `tw.switches`
-Inspects and manipulates interactive switches, levers, buttons, and puzzle mechanisms across the adventure:
-- `tw.switches.get(switch_id: str) -> SwitchProxy`: Retrieves a `SwitchProxy` for the switch entity. Also accessible via shortcut `tw.switch(switch_id)`.
-- `tw.switches.get_state(switch_id: str, default: str = "") -> str`: Returns the current state string (e.g. `"OFF"`, `"ON"`, `"ACTIVE"`).
-- `tw.switches.set_state(switch_id: str, new_state: str, apply_outcomes: bool = True) -> bool`: Deterministically transitions the switch to `new_state`, optionally triggering any associated switch outcomes (unlocking exits, containers, or setting story flags).
-- `tw.switches.is_state(switch_id: str, state: str) -> bool`: Returns `True` if the switch currently matches `state`.
-- `tw.switches.flip(switch_id: str, apply_outcomes: bool = True) -> str`: Cycles or toggles the switch to its next configured state, returning the new state.
-- `tw.switches.toggle(switch_id: str, apply_outcomes: bool = True) -> str`: Alias for `flip()`.
-- `tw.switch(switch_id: str) -> SwitchProxy`: Convenience shortcut for `tw.switches.get(switch_id)`.
 
-#### `SwitchProxy` and `ObjectProxy` Switch Attributes
-When interacting with a `SwitchProxy` or an `ObjectProxy` for a switch entity:
-- `.state` *(str)*: Gets or sets the switch state. Assigning a new state (e.g. `switch.state = "ON"`) triggers the state transition and runs configured outcomes.
-- `.switch_state` *(str)*: Alias for `.state`.
-- `.get_state() -> str`: Returns current state.
-- `.set_state(new_state: str, apply_outcomes: bool = True)`: Sets state and optionally applies outcomes.
-- `.is_state(state: str) -> bool`: Checks if the switch matches `state`.
-- `.flip(apply_outcomes: bool = True) -> str`: Cycles to the next state in sequence.
-- `.toggle(apply_outcomes: bool = True) -> str`: Alias for `flip()`.
-- `.states` *(list[str])*: List of declared switch states.
-- `.initial_state` *(str)*: Configured initial state.
-- `.is_switch` *(bool)*: `True` if the object is a switch.
+- `get(id_or_name)` (also `tw.switch(id_or_name)`) returns a `SwitchProxy`.
+- `get_state(id_or_name) -> str`, `is_state(id_or_name, state) -> bool`.
+- `set_state(id_or_name, state, apply_outcomes=True)` records a state change.
+- `flip(id_or_name, target_state=None, apply_outcomes=True) -> str` and
+  `toggle(id_or_name, apply_outcomes=True) -> str`.
+- A proxy has `.state`, `.switch_state`, `.states`, `.initial_state`, `get_state()`,
+  `is_state(value)`, `set_state(value, apply_outcomes=True)`,
+  `flip(target_state=None, apply_outcomes=True)` and `toggle(apply_outcomes=True)`.
+
+State writes and configured outcomes still depend on the receiving host path.
+A scripted switch API is not an LLM inference permission.
 
 ### `tw.vars` (Persistent State)
-A persistent key-value store saved into the session state under `__script_vars__`. State persists across turns, saves, and reloads:
-- `tw.vars.get(key: str, default: Any = None) -> Any`: Retrieves variable value.
-- `tw.vars.set(key: str, value: Any)`: Stores a value (numbers, strings, booleans, lists, dicts).
-- `tw.vars.has(key: str) -> bool`: Checks whether `key` exists.
-- `tw.vars.delete(key: str)`: Deletes `key`.
+
+`get(key, default=None)` reads and `set(key, value)` records JSON-compatible script
+variables in `__script_vars__`. The current proxy has no `has()` or `delete()` API;
+use a documented sentinel/default value where a presence distinction is needed.
+
+`tw.flags.get(key, default=False)` and `tw.flags.set(key, value=True)` operate on
+the separate story-flag projection.
 
 ### `tw.story`
-Injects narrative messages or system notifications into the turn stream:
-- `tw.story.show_message(text: str)` / `tw.story.narrate(text: str)` / `tw.narrate(text: str)`: Emits Game Master narration (`role: "assistant"`), displayed with the Game Master avatar, dialogue parsing, and styled exactly like standard storytelling turns (e.g. `tw.story.show_message('Du nimmst das Stück Schokolade. Vielleicht hilft es beim Überzeugen.')`).
-- `tw.story.system_message(text: str)` / `tw.story.system(text: str)` / `tw.system(text: str)`: Emits a technical system notification (`role: "system"`).
-- `tw.story.log(text: str)`: Appends an internal log message visible during debugging.
+
+- `show_message(text)`, `narrate(text)`, `message(text)` emit narrative messages.
+  Root aliases include `tw.narrate(text)` and `tw.show_message(text)`.
+- `system_message(text)`, `system(text)` emit system messages; `tw.system(text)`
+  is a root alias.
+- `reject_action(reason)` records a host-visible rejection.
+- `debug(...)` emits enabled debug diagnostics.
+
+Use `tw.log(...)` for server logging; `tw.story.log` does not exist.
 
 ### `tw.memories`
-Directly writes into the avatar's episodic memory bank:
-- `tw.memories.add(memory_text: str)`: Injects a factual memory into the avatar context that the Game Master LLM references in subsequent turns.
+
+`add(description, scope="global", emotion="neutral")` records a world-memory
+proposal in the script changeset. Scope is `local` or `global`; emotion is
+`positive`, `negative` or `neutral`. This is not a direct write into an avatar's
+private notebook or a guarantee that every memory enters a bounded recall prompt.
 
 ### `tw.game`
-Controls session outcome conditions:
-- `tw.game.set_victory(message: str)`: Ends the adventure in victory and displays `message`.
-- `tw.game.set_game_over(reason: str)`: Ends the adventure in defeat with `reason`.
 
-### `tw.quests`
-Directly manipulates adventure quest entries:
-- `tw.quests.complete(quest_id: str)`: Marks `quest_id` as completed.
-- `tw.quests.activate(quest_id: str)`: Activates an open quest.
-- `tw.quests.fail(quest_id: str)`: Marks a quest as failed.
+- `.time`: current in-game minute supplied to the context.
+- `win(reason=None)` and `game_over(reason=None)` request terminal outcomes.
+- `set_completed_condition(text)`, `set_gameover_condition(text)`.
+- `set_completed_guard_expression(expression)`, `set_gameover_guard_expression(expression)`.
+
+The method names are `win` and `game_over`, not `set_victory` or `set_game_over`.
+
+### `tw.quests` and `tw.sequences`
+
+Quests expose `complete(id)`, `fail(id)` and `is_completed(id)`. There is no
+`activate()` method. `tw.sequences.advance()` and `complete_current()` request
+completion of the current sequence. Mode restrictions still apply.
 
 ### `tw.awards`
-Awards achievements to the player's profile:
-- `tw.awards.grant(award_key: str)`: Immediately grants the specified trophy/badge.
+
+`grant(key)` requests an achievement grant through the host progression path.
+It is distinct from a blueprint's exported `is_earned` display field.
 
 ### `tw.dice`
-Provides deterministic, seeded random number generation:
-- `tw.dice.roll(sides: int = 20) -> int`: Rolls a die with `sides` faces (1 to `sides`).
-- `tw.dice.d6() -> int`: Convenience for a 6-sided die roll (1 to 6).
-- `tw.dice.d20() -> int`: Convenience for a 20-sided die roll (1 to 20).
-- `tw.dice.random() -> float`: Returns a pseudo-random float between `0.0` and `1.0`.
+
+`roll(dice_string)` accepts expressions such as `"2d6+1"`; `d20()` rolls one d20.
+The implementation uses pseudo-random draws and does not expose a reproducible
+seed contract, `d6()` or `random()`. Use `roll("1d6")` for one six-sided die.
 
 ### `tw.log` & `tw.debug` (Logging & Diagnostics)
 Provides simple, clean logging methods to inspect state during development and playtesting:
@@ -429,7 +491,7 @@ if not tw.vars.get("chest_trap_sprung", False):
     tw.memories.add("Triggered a poison needle trap on the gilded chest.")
     
     # Reveal a secret compartment key on the floor
-    tw.objects.reveal("KEY_BRASS")
+    tw.objects.get("KEY_BRASS").set_hidden(False)
 ```
 
 ---
@@ -442,35 +504,41 @@ Target: `SCENE_CASTLE_GATES`
 # Check if the player possesses the royal seal
 if not tw.player.has_item("ROYAL_SIGNET"):
     # Lock the inner courtyard exit
-    tw.exits.lock("EXIT_TO_COURTYARD", "The armored sentry lowers his halberd: 'Halt! Only bearers of the Royal Signet may enter.'")
+    tw.exits.lock(
+        "SCENE_CASTLE_GATES",
+        "SCENE_COURTYARD",
+        reason="Only bearers of the Royal Signet may enter.",
+    )
     tw.story.show_message("The castle guard steps forward, barring the iron gate.")
 else:
     # Unlock and allow passage
-    tw.exits.unlock("EXIT_TO_COURTYARD")
-    tw.story.show_message("The guard notices the Royal Signet ring, salutes respectfully, and raises the heavy portcullis.")
+    tw.exits.unlock("SCENE_CASTLE_GATES", "SCENE_COURTYARD")
+    tw.story.show_message(
+        "The guard notices the Royal Signet ring, salutes respectfully, and raises the heavy portcullis."
+    )
 ```
 
 ---
 
 ### Example 3: Three-Lever Puzzle with Persistent State
 Trigger: `on_interact`  
-Target: `LEVER_` *(or separate scripts for each lever)*
+Target: the exact lever ID, for example `LEVER_BLUE` (use a separate script for each lever)
 
 ```python
 # Track the state of 3 levers: lever_1, lever_2, lever_3
-lever_id = tw.scene.id # or target entity id
 tw.vars.set("lever_blue", True)
 
 b = tw.vars.get("lever_blue", False)
 r = tw.vars.get("lever_red", False)
 g = tw.vars.get("lever_gold", False)
 
-if b and r and g:
-    if not tw.vars.get("vault_unlocked", False):
-        tw.vars.set("vault_unlocked", True)
-        tw.exits.unlock("EXIT_VAULT_DOOR")
-        tw.story.show_message("With a resonant chime, all three mechanisms lock into place and the massive vault door unseals!")
-        tw.awards.grant("PUZZLE_MASTER")
+if b and r and g and not tw.vars.get("vault_unlocked", False):
+    tw.vars.set("vault_unlocked", True)
+    tw.exits.unlock("CHAMBER", "VAULT")
+    tw.story.show_message(
+        "With a resonant chime, all three mechanisms lock into place and the massive vault door unseals!"
+    )
+    tw.awards.grant("PUZZLE_MASTER")
 ```
 
 ---
@@ -487,17 +555,19 @@ if tw.player.has_item("RELIC_SUNSTONE"):
     )
     tw.quests.complete("MAIN_QUEST_SLAY_SHADOWS")
     tw.awards.grant("SAVIOR_OF_THE_REALM")
-    tw.game.set_victory("The realm is saved! The eternal darkness has been banished forever.")
+    tw.game.win("The realm is saved! The eternal darkness has been banished forever.")
 else:
     tw.player.damage(25)
-    tw.story.show_message("The Shadow Lord's aura lashes out in icy tendrils (-25 HP). You need a source of holy light!")
+    tw.story.show_message(
+        "The Shadow Lord's aura lashes out in icy tendrils (-25 HP). You need a source of holy light!"
+    )
 ```
 
 ---
 
 ### Example 5: Turn-Based Survival Countdown
 Trigger: `on_turn_end`  
-Target: `*`
+Target: omitted (global)
 
 The countdown advances once per in-game turn (scene or sequence change). For a per-message countdown use `on_narration_done` instead.
 
@@ -508,9 +578,11 @@ tw.vars.set("collapse_turn", turn)
 
 remaining = 6 - turn
 if remaining > 0:
-    tw.story.show_message("The cavern tremors intensify! " + str(remaining) + " turn(s) before total collapse.")
+    tw.story.show_message(
+        "The cavern tremors intensify! " + str(remaining) + " turn(s) before total collapse."
+    )
 else:
-    tw.game.set_game_over("The cavern roof collapsed, burying all beneath tons of solid rock.")
+    tw.game.game_over("The cavern roof collapsed, burying all beneath tons of solid rock.")
 ```
 
 ---
@@ -521,7 +593,9 @@ Trigger: `on_equip_script` (Configured directly on the `AMULET_OF_DOOM` item)
 ```python
 # Apply a curse when equipped
 tw.vars.set("cursed_hp_drain", True)
-tw.story.show_message("As the amulet touches your skin, an icy chill grips your heart. You feel your vitality draining away.")
+tw.story.show_message(
+    "As the amulet touches your skin, an icy chill grips your heart. You feel your vitality draining away."
+)
 ```
 
 Trigger: `on_unequip_script` (Configured directly on the `AMULET_OF_DOOM` item)
@@ -529,7 +603,9 @@ Trigger: `on_unequip_script` (Configured directly on the `AMULET_OF_DOOM` item)
 ```python
 # Remove the curse when unequipped
 tw.vars.set("cursed_hp_drain", False)
-tw.story.show_message("You tear the amulet from your neck, gasping for breath. The icy grip subsides.")
+tw.story.show_message(
+    "You tear the amulet from your neck, gasping for breath. The icy grip subsides."
+)
 ```
 
 ---
@@ -540,7 +616,9 @@ Trigger: `on_protagonist_enters_scene_script` (Configured directly on the `GOBLI
 ```python
 # The NPC immediately attacks the player upon entering the scene
 tw.player.damage(5)
-tw.story.show_message("The goblin leaps from the shadows, scoring a quick hit with a rusty dagger! (-5 HP)")
+tw.story.show_message(
+    "The goblin leaps from the shadows, scoring a quick hit with a rusty dagger! (-5 HP)"
+)
 tw.memories.add("A goblin ambushed me from the shadows.")
 ```
 
@@ -554,10 +632,14 @@ Target: `LEVER_POWER_GRID`
 # Check state of another mechanism before powering the main grid
 if tw.switches.is_state("VALVE_COOLANT", "OPEN"):
     tw.switches.set_state("LEVER_POWER_GRID", "ONLINE")
-    tw.exits.unlock("EXIT_VAULT_DOOR")
-    tw.story.show_message("Coolant surges into the coils. The main power grid hums online and the vault unseals!")
+    tw.exits.unlock("CHAMBER", "VAULT")
+    tw.story.show_message(
+        "Coolant surges into the coils. The main power grid hums online and the vault unseals!"
+    )
 else:
-    tw.story.show_message("The lever clicks, but nothing happens. A red warning light blinks: 'Coolant valve must be opened first!'")
+    tw.story.show_message(
+        "The lever clicks, but nothing happens. A red warning light blinks: 'Coolant valve must be opened first!'"
+    )
 ```
 
 **Using Guard Expressions (`gates.expression`):**  
@@ -578,6 +660,7 @@ tw.vars.set("investigation_stage", 1)
 tw.vars.set("clues_found", 0)
 tw.vars.set("bribe_accepted", False)
 
+
 # Reusable method available across all scene and turn scripts
 def discover_clue(clue_name):
     count = tw.vars.get("clues_found", 0) + 1
@@ -586,6 +669,7 @@ def discover_clue(clue_name):
     if count >= 3:
         tw.quests.complete("QUEST_FIND_EVIDENCE")
         tw.story.show_message("All clues uncovered! The conspiracy is exposed.")
+
 
 def advance_investigation():
     stage = tw.vars.get("investigation_stage", 1) + 1
@@ -616,7 +700,7 @@ All scripts are managed directly in the **Scripts** tab:
   - Enter a human-readable **Name** and unique **Script ID**.
   - Select the desired **Trigger** (`on_init`, `on_turn_start`, `on_enter_scene`, `on_interact`, `on_logic_pass_done`, `on_narration_done`, `on_turn_end`).
   - Optionally pick a **Target** scene or entity using the autocomplete selector.
-  - Adjust **Priority** (lower numbers execute first).
+  - The editor exposes **Priority**, but current runtime dispatch follows stored array order; see the execution-order note above.
   - Use the **Insert Snippet** dropdown to paste starter code.
 - Click **Check Syntax** to verify Python syntax, AST safety, and trigger parameters before saving.
 - Click **Create Script** or **Save Changes** to commit the script into the adventure manifest.

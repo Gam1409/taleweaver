@@ -1,23 +1,21 @@
-graph TD
-    Start([Start Import]) --> Source{Import Source}
-    Source -->|Folder Watcher| Watcher[Scan .adv / .adz in /adventures directory]
-    Source -->|UI Upload| Upload[API: POST /adventures/import]
-    
-    Watcher --> LoadFile[Read File Stream / Buffer]
-    Upload --> LoadFile
-    
-    LoadFile --> TypeCheck{File Extension?}
-    TypeCheck -->|.adz| Unzip[Extract ZIP Bundle into Temp Directory]
-    TypeCheck -->|.adv| ParseJSON[Parse JSON Manifest directly]
-    
-    Unzip --> ExtractManifest[Read and Parse adventure.adv]
-    ExtractManifest --> ParseJSON
-    
-    ParseJSON --> Validate[Validate WorldManifesto Schema & IDs]
-    Validate --> CreateTemplate[Create AdventureTemplate DB Record]
-    CreateTemplate --> LocalizeAssets[Localize / Copy Assets into /data/adventures/library/{id}/]
-    LocalizeAssets --> ApplyWorld[WorldManifestApplier: Seed Scenes, Entities, Exits, Quests & Awards]
-    ApplyWorld --> CreateAvatar[Create Avatar & Sync Protagonist Baseline Stats]
-    
-    CreateAvatar --> Cleanup[Delete Temporary Files / Source File if Folder Watcher]
-    Cleanup --> End([Import Complete: Template Ready])
+flowchart TD
+    Start["Import an authored adventure"] --> Source{"Source"}
+    Source -->|Upload or startup scan| File["Read ADV JSON or validate an ADZ archive"]
+    Source -->|Community catalog| Index["Resolve the selected entry from the configured index"]
+    Index --> Blueprint["Download and validate identity, format and supported behavior"]
+    Blueprint --> Compatible{"Compatible?"}
+    Compatible -->|No| Reject["Return a compatibility error before asset downloads"]
+    Compatible -->|Yes| Assets["Download bounded files from the configured source"]
+    Assets --> Bundle["Assemble the converted ADZ"]
+    Bundle --> File
+    File --> Validate["Check envelope, archive paths, entries and resource budgets"]
+    Validate --> Transaction["Enter the existing import transaction"]
+    Transaction --> Conflict["Apply ownership and replacement policy; catalog updates preserve old templates"]
+    Conflict --> Persist["Create a template and construct its world from authored data"]
+    Persist --> Media["Map bundled assets and prepare thumbnails"]
+    Media --> Result{"Import complete?"}
+    Result -->|Yes| Commit["Commit a ready template, then clean deferred replacements"]
+    Result -->|No| Rollback["Roll back and clean newly created assets"]
+    Commit --> Done["Available in Library; no playthrough started"]
+    Rollback --> Reject
+    File -.-> Separate["Saved sessions and single-entity bundles use their own import paths"]

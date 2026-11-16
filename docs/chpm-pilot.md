@@ -35,7 +35,7 @@ role through the existing router and shared admission queue.
 
 ## Session controls
 
-Open **Session Memory & Settings → NPC Personality**. Select up to 20
+Open **Session settings → NPC Personality**. Select up to 20
 known characters and save between turns. The active limit defaults to three; see
 [larger casts](chpm-large-casts.md) for focus, rotation and full-group processing.
 
@@ -55,13 +55,15 @@ and invalid settings remain errors; checkpoint/restore/copy validation is unchan
 
 Enabled mode conflicts with Living World private decisions only while Living World
 itself is enabled. Switching Living World off preserves its saved preferences and
-allows CHPM; switching it back on rechecks the controller conflict. Rule-based
-world movement and established mechanics remain host responsibilities. A single
-session should not have two private decision systems controlling the same NPC.
+allows CHPM; switching it back on rechecks the controller conflict. With Living
+World enabled, its private-decision switch must be off for live CHPM; the guard
+applies to the session even if the two selected rosters differ. Rules-only Living
+World can coexist with CHPM. Established mechanics remain host responsibilities.
 
-Changing mode or selection clears the pilot's private decision memory, including
-the retry baseline. It does not undo world events, inventory, or published story.
-The separate declared-agenda ledger survives mode and selection changes.
+Changing mode or selection clears cached decisions, the short quotation window
+and its retry baseline. It preserves the pinned psychological history, separate
+declared-agenda ledger and latest notebook. It does not undo world events,
+inventory or published story.
 Changing only request limits preserves current memory. Checkpoint restore restores
 the saved mode and memory along with other session state.
 
@@ -99,13 +101,15 @@ zero. Equal-rank alternatives use a stable hash of session, input-message ID and
 action kind. Candidate ordering and repeated paraphrases cannot increase a kind's
 weight. This is an explicit engineering policy, not a calibrated human model.
 
-Live VN now uses `initiative-gated-v1`. A clarification cannot win merely because
-the LLM labels it goal-supporting. It needs a concrete external fact or player's
-own intention, with two distinct proposed conditional actions. Equally useful
-independent progress wins over that question. Without a valid gate, an independent
-intention is selected; the policy fails rather than forcing goal-conflicting
-compliance to avoid asking. Acceptance, refusal, negotiation, initiative and chosen
-silence remain possible. Reasons and the proposed gate are retained in the trace.
+Live VN uses `motivated-choice-v2`: the model states its preferred eligible
+intention and supporting personal motives. `CLARIFY` needs a concrete external
+fact or player intention with two distinct proposed conditional actions; an
+unresolved dependency cannot authorize those actions. Source access, own supporting
+grounds and continuity remain hard checks. Goal tiers and motive-set dominance
+are diagnostic, not a calibrated veto over an admissible preference. The earlier
+`initiative-gated-v1` and frontier selectors remain historical policies.
+Acceptance, refusal, negotiation, initiative and chosen silence remain possible.
+Reasons and the proposed gate are retained in the trace.
 The narrator/reviewer contract rejects generic permission to continue talking or
 writing, while preserving relevant decisions that belong to the player. Semantic
 classification remains fallible; see [the appraisal guide](chpm-appraisal.md).
@@ -199,9 +203,10 @@ on the model reviewer: exact quotations do not prove their interpretation.
 The proposal sees only its owner's source-checked active entries, including the
 original quotation. This permits returning to unfinished business beyond the
 transcript window. It does not require reciting every goal every turn or treating
-promises as orders above personality. The deterministic authored-goal ranking is
-unchanged; dynamic agenda entries inform the proposed alternatives, not a new
-fixed numerical priority. Authored character/goal fields are never rewritten.
+promises as orders above personality. Dynamic agenda entries inform the proposed
+alternatives without introducing a fixed numerical priority. Current live
+preference is source-grounded rather than deterministically ranked by authored
+goal labels. Authored character/goal fields are never rewritten.
 
 The narrator and its reviewer also receive every source-checked open entry for
 each active NPC, even when that turn's selected motives do not cite it. This
@@ -276,10 +281,14 @@ No private decision is requested for absent selected NPCs.
 These counts assume at least one selected NPC is present in the input's scene.
 Cross-scene input is withheld without a perception request. For three NPCs, eight
 requests reserve one shared proposal retry and a narration repair/review pair.
-New settings default to eight, and live settings changes must reserve N + 5. Older budgets still load, but turn admission checks the
+This table describes Staged operation with agent rounds off. Configured optional
+rounds change the reserve to `N × (1 + agent_steps) + 5`; Integrated may submit
+earlier but retains that conservative allowance. The hard turn cap is 25 calls.
+New settings default to eight, and live settings changes must cover the full reserve. Older budgets still load, but turn admission checks the
 present roster before CHPM inference and requests an explicit budget adjustment.
 The system also checks that two requests remain before starting a repair.
-Exhaustion is visible, not a silent switch to standard mode. See the
+Keep playing can recover an optional-analysis failure with an explicit simplified
+RP indicator; Strict stops. No history or saved budget is silently replaced. See the
 [history and capacity policy](chpm-memory-lifecycle.md) for long-session limits.
 
 The normal narrator request is additional. The legacy social request may still
@@ -322,7 +331,9 @@ allowed IDs in its model-facing schemas, and rejects duplicate JSON keys. It sti
 rejects malformed bodies, wrong IDs, quotations absent from the source and
 unvalidated replies. A model can still misinterpret a correctly quoted passage;
 passing these gates is not proof of semantic fidelity.
-No semantic repair or implicit name-to-ID conversion is performed.
+The host does not guess an ID from a name or silently repair the meaning of a
+quotation. A completed invalid proposal may use the existing single proposal
+repair, with the original evidence and all validators applied again.
 
 Proposal responses now use unique action keys; stored decisions still contain the
 original candidate list. Review responses cite exact passage IDs which the host
@@ -383,7 +394,7 @@ pilot's unversioned Experience addition to schema 2. Activation still requires
 exact replay to match the saved projection. Unknown versions are rejected; there
 is no automatic reset. Snapshot fingerprints change with the version envelope,
 while event/source identities remain unchanged. Older readers cannot load new
-snapshots: retain a backup before downgrading the pilot branch.
+snapshots: retain a backup before downgrading to an older application reader.
 
 Perception uses one shared projection request for the selected present observers,
 with separate per-observer excerpts. Ambiguous private speech, including a whisper
@@ -403,11 +414,13 @@ prepares live evaluation across 360 synthetic cases. Local mock success is not
 psychological validation; model-specific live results require separate review.
 
 
-## Reliability revisions after live stress testing
+## Historical reliability revisions after live stress testing
 
-The envelope migrates schema 1 to 2 without changing saved budgets, identity or
-history. New fields record proposal retries and perception coverage; core Snapshot
-remains version 3. Older readers must not consume the new envelope.
+This implementation wave introduced envelope 2 and core Snapshot 3 while preserving
+budgets, identity and history. Current readers use envelope 6 and Snapshot 4/v3,
+as documented above; these earlier version numbers are historical. The following
+perception/retry changes remain part of the current pipeline unless superseded
+by a linked newer contract.
 
 Perception now classifies every numbered input fragment once, using shared observer
 IDs. Speech, attempted/claimed actions and expressed intentions are kept before
@@ -453,7 +466,10 @@ these revisions; repeat the same fixtures with each comparison model.
 
 ## Optional agent lookups
 
-See [the bounded agent guide](chpm-agent.md) for session-scoped retrieval, visible clothing, call budgets and trace semantics. The feature defaults to off; envelope versions 1/2/3 migrate to 4 without enabling it.
+See [the bounded agent guide](chpm-agent.md) for session-scoped retrieval, exact-ID
+state inspection, visible clothing, notebook tools, call budgets and trace semantics.
+The feature defaults to off. Agent rounds were introduced in envelope 4; current
+envelope 6 loads older versions without enabling optional rounds or notebooks.
 
 
 ## Explicit live preferences and continuity

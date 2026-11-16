@@ -15,22 +15,18 @@ but omitted from rendering. Ownership/equipment is checked again when projecting
 props. Session checkpoints carry these records with the rest of entity state.
 Turning staging off clears derived staging and props.
 
-Image preparation checks Latin-script literal anchors (character names, visible
-managed-clothing names and confirmed prop positions). Non-Latin source phrases
-remain in scene data but are translated, not required verbatim in English output.
-This intentionally reduces literal coverage for translated facts. Description and
-hybrid formats require a declared cast count for multiple characters. Solo scenes
-may omit the count; any explicit count must still agree with the saved cast. Tags accept counts such as `1boy,
-1girl` or `solo`; contradictory explicit counts fail. Without explicit count tags,
-count verification is skipped rather than inventing gender or requiring prose. A missing anchor triggers
-one feedback retry, then a visible failure before image submission. The checks
-prove token coverage, not semantic correctness or image accuracy. Arbitrary
-extra characters or contradictory prose cannot be ruled out by substring checks.
-For tracked scenes, the existing bounded frame extractor supplies ephemeral
-pose/expression/lighting context. A second extraction checks supported saved
-postures and character-relative placements. This model check can also be wrong;
-its diffs are recorded in opt-in visual traces. Scene-object relational semantics
-remain less well covered than actor-to-actor relations. No NSFW prompt is changed.
+Moment illustrations use the completed message's hash-verified frozen snapshot.
+Ordinary sessions prepare, audit and cache an English visual plan from confirmed
+public visual facts, then compile it for the selected image model. Mature-content
+sessions use the existing source-based preparation path instead. Their preparation
+requests and validation differ; an old snapshot is never completed with later
+clothing or hidden state.
+
+Text/atom checks and model audits establish bounded prompt consistency, not
+rendered-image accuracy. They cannot guarantee anatomy, identity, actor binding or
+that every source phrase was interpreted correctly. See the current
+[moment illustration paths](comfyui/README.md#moment-illustrations) and
+[saved visual-plan implementation](design/visual-plan-stage2-implementation.md).
 
 Background movement near the player waits while narration is recent (60 seconds,
 or up to 300 seconds with an open scene focus). A bare active sequence does not
@@ -66,5 +62,4 @@ facts. An unverifiable pose invalidates only its identified actor and stale
 relations to that actor. Unknown actors cannot invalidate the present cast.
 Malformed prop or explicit-act entries cannot discard valid poses; the complete
 response still respects the existing section limits. These counters exclude model
-failures and skipped turns, and reset on process restart. The scene `adapt_with_llm=false` addendum warning
-remains deferred; NSFW policy and prompts are unchanged.
+failures and skipped turns, and reset on process restart.

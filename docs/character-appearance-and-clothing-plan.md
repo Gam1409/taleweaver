@@ -71,19 +71,26 @@ Portraits and frozen scene snapshots use this same visible projection. Invalid o
 unknown coverage is handled conservatively. Managed image prompts do not reuse raw
 biography, old wardrobe descriptions or journal entries as outfit instructions.
 
-A manual illustration of a managed scene extracts a bounded final composition before
-model-specific prompt formatting. The two Small-model operations share one preparation
-timeout. This additional operation is not performed on every gameplay turn. Managed
-portrait pose/expression edits also use bounded extraction. Image models and img2img
-references can still fail to follow the current outfit; this is not identity or pose
-control and does not require custom ComfyUI nodes.
+Moment illustrations read frozen message-time facts. Neutral sessions use a saved
+English visual plan and deterministic format compilation, with a separately configured
+audit; exact cached artifacts need no new preparation calls. Content-enabled sessions
+retain their source-based preparation and bounded fidelity retry. Neither path runs
+an image-generation request on every ordinary gameplay turn. See the current
+[illustration preparation guide](comfyui/README.md#moment-illustrations).
+
+Managed portrait pose/expression edits use bounded extraction of the requested change.
+Portraits use current confirmed visible state; historical illustrations retain their
+snapshot state. Image models and img2img references can still ignore an outfit or
+change identity. Correct state projection does not provide pixel-level identity or
+pose control, and no custom identity nodes are installed automatically.
 
 ## Persistence and compatibility
 
 Nullable `visual_profile` JSON columns store Avatar and authored NPC profiles. NPC
 runtime changes live in session overrides. Canonical items carry `clothing` metadata;
-profiles reference their IDs. ADV/ADS export, import, session start/copy and checkpoints
-preserve the tracked state. The Alembic migration is `353aa8ad41f8`.
+profiles reference their IDs. ADV/ADZ template transfer, ADS session transfer,
+session start/copy and checkpoints preserve the tracked state. The Alembic migration
+is `353aa8ad41f8`.
 
 Legacy worlds without structured profiles retain their existing rendering path. A
 specific garment already described as currently worn can be registered during play;

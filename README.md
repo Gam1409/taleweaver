@@ -24,7 +24,11 @@ Build a world, give its characters a history, and bring each moment to life with
 <br />
 
 > [!NOTE]
-> Built on **[TaleWeaver by jschm42](https://github.com/jschm42/taleweaver)** and maintained by **[Gam1409](https://github.com/Gam1409)**. This fork expands character continuity, Visual Novel play, memory, local inference, and ComfyUI authoring while retaining the original adventure-building foundation.
+> Built on **[TaleWeaver by Jean Schmitz (jschm42)](https://github.com/jschm42/taleweaver)**. **[Anton Kuprin (Gam1409)](https://github.com/Gam1409)** creates and maintains this fork, extending character continuity, Visual Novel play, memory, local inference and ComfyUI authoring.
+
+This README and the [documentation index](docs/README.md) describe the current source
+checkout. Desktop release archives contain the code at their release tag; features
+merged into `main` later require a corresponding newer build or a source installation.
 
 ## ✨ Why This Fork?
 
@@ -70,6 +74,7 @@ Start with one model, or assign different models and endpoints to different jobs
 | Mode | The experience |
 | --- | --- |
 | **RPG** | Quests, combat, inventory, loot, progression, and deterministic world rules. |
+| **Story** | Narrative-led play with quests and progression; conflicts are resolved without RPG combat damage. |
 | **Chat** | Open-ended dialogue, exploration, and story-led interaction. |
 | **Visual Novel** | Character-focused scenes, relationships, illustrated moments, and adjustable narrative pacing. |
 
@@ -83,19 +88,20 @@ Meet NPCs, learn who they are, and build a shared history. Character cards bring
 
 Optional session features add an [emotion palette and character thoughts](docs/npc-portrait-presentation.md) to NPC portraits. Show the dominant emotion as a subtle glow, or hover for a brief fictional thought and click to open the character card. Both options start disabled.
 
-### NPC Personality · Optional · v1.0.0
+### NPC Personality · Optional · v1.2.0
 
 **NPC Personality** is the player-facing name of the CHPM module. It adds a more deliberate decision layer to VN dialogue:
 
 - **Identity and motivation:** use a character's established traits, values, goals, and commitments to guide intentions.
 - **Experience and change:** keep remembered events and their supporting evidence separate from a temporary reaction or an unsupported claim.
-- **Bounded agent lookups:** consult accessible memories, possessions, and visible clothing through session-scoped tools.
+- **Optional tool rounds:** consult accessible memories and inspect current item/character state by existing ID, including ownership, clothing and confirmed placement. Reads provide evidence; proposed actions still pass host validation.
+- **A private notebook:** optionally give each NPC its own JSON notebook, with model-chosen sections and read/edit tools. Notes are subjective; the latest notebook content survives Undo and Chronicles.
 - **An active cast:** focus detailed analysis on selected interlocutors while keeping other participants in the scene.
-- **A choice of depth:** leave it off, observe its decisions, or enable narration guidance and review. The default enabled-mode failure policy keeps RP moving through standard narration when optional analysis fails; strict mode is available for inspection.
+- **A choice of depth:** select Standard, Observe or Enabled mode. Enabled supports Staged and Integrated decision workflows, with separate tool, concurrency and request budgets. The default failure policy keeps RP moving through standard narration when optional analysis fails; Strict mode is available for inspection.
 
 Results depend on the models you choose. More active characters and deeper checks mean more requests and longer turns.
 
-[Player guide](docs/chpm-continuation.md) · [Technical guide](docs/chpm-pilot.md) · [Module releases](docs/chpm-changelog.md)
+[Player guide](docs/chpm-continuation.md) · [Decision workflows](docs/npc-decision-workflows.md) · [Current-state tools](docs/npc-observable-state.md) · [Private notebooks](docs/npc-notebook.md) · [Module releases](docs/chpm-changelog.md)
 
 ### Clothing, Belongings & Continuity
 
@@ -116,15 +122,26 @@ Detailed clothing and mature-content preferences are configurable; inner garment
 
 Optional **Living World** lets NPCs follow bounded routines, move through connected locations, and interact beyond the protagonist's immediate reply. Configure activity limits, away-time catch-up, and the decision engine in adventure defaults or an individual session.
 
-Use the built-in engine or the optional **Concordia 2.4** integration. NPC intentions still pass through world rules before becoming actions. NPC Personality and Living World's private-decision mode are alternative decision paths; the [Living World guide](docs/living-world-usage.md) and [NPC Personality guide](docs/chpm-continuation.md) explain their controls.
+Use the built-in engine or the optional **Concordia 2.4.0** integration. NPC intentions still pass through world rules before becoming actions. NPC Personality can coexist with Living World's scheduler; live NPC Personality control and Living World's private deliberation are alternative decision paths. The [Living World guide](docs/living-world-usage.md) explains the compatibility gates.
 
 ### Memory & Relevant Recall
 
-Persistent journals focus on meaningful facts, promises, decisions, and relationship changes. Optional **LanceDB-backed retrieval** uses an embedding model to find relevant older dialogue and summaries. Recall is scoped to the adventure/session; character tools respect the information available to that NPC.
+Persistent journals focus on meaningful facts, promises, decisions, and relationship changes. Optional **LanceDB-backed retrieval** uses an embedding model to find relevant older dialogue and summaries. Recall follows the session and its current timeline; character tools also apply observer-specific visibility and recorded knowledge.
 
-The authoritative story and game state stay in SQLite. The search index can be rebuilt separately. Configure embeddings under **Administration → Memory & recall** when you want this extra layer.
+The authoritative story and game state stay in SQLite. The search index can be rebuilt separately. Configure embeddings under **Administration → Intelligence (LLM) → Memory & recall** when you want this extra layer.
 
 [Memory guide](docs/memory-rag.md)
+
+### World Info · Session Knowledge
+
+Open **Session → World Info** to upload Markdown/JSON or enter text for model-assisted
+processing. Review grouped, tagged entries, search or filter a large collection, and
+open a separate detail editor before publishing selected entries to session memory.
+Facts, rumors and other record types retain their interpretation and source context.
+Different playthroughs can develop different knowledge; importing an adventure does
+not initialize this mutable memory from a shared live template.
+
+[World Info guide](docs/session-world-info.md) · [Portable authored configuration](docs/specs/agent_runtime.md)
 
 ### Explore, Revisit & Share
 
@@ -248,7 +265,7 @@ SQLite, RAG, and media use separate persistent directories: **`sqlite-docker/`**
 
 ### Run From Source
 
-The regular terminal workflow remains available. Recommended development setup: **Python 3.12, Poetry 2.x, Node.js 22, and Git**. The backend package requires Python 3.11 or later. Current macOS installations require Apple Silicon to match the available LanceDB wheels.
+The regular terminal workflow remains available. Recommended development setup: **Python 3.12, Poetry 2.x, Node.js 22.12 or later, and Git**. The backend declares Python `>=3.11,<3.14`; Python 3.12 matches CI and supports the optional Concordia extra. Current macOS installations require Apple Silicon to match the available LanceDB wheels.
 
 **Windows · PowerShell**
 
@@ -279,7 +296,7 @@ For later starts, use `bash run.sh`. Add `--no-update` to skip the launcher's Gi
 <details>
 <summary><b>Manual setup and prebuilt frontend</b></summary>
 
-From the repository root, install the dependencies and prepare `.env`:
+For a fresh checkout, install the dependencies and prepare `.env` from the repository root:
 
 ```bash
 poetry install
@@ -287,7 +304,9 @@ cp .env.example .env
 poetry run python scripts/generate_keys.py
 ```
 
-Copy both generated key values into `.env`, then continue:
+Copy both generated key values into `.env`, then continue. For an existing
+installation, retain its `.env`, original keys and data, and run the dependency,
+migration and frontend-build steps with that configuration.
 
 ```bash
 poetry run alembic upgrade head
@@ -306,10 +325,10 @@ Open `http://127.0.0.1:8000`. This starts the backend serving the built frontend
 
 1. Open the application locally and create the initial administrator account.
 2. Configure your text providers and role models in **Administration**. Test the endpoints before generating a world.
-3. Create an adventure or import an existing one, select RPG, Chat, or VN, and begin a new session.
+3. Create an adventure, import one, or install a compatible release from **Community Catalog**. Select RPG, Story, Chat or VN and begin a new session.
 4. Add images, voice, memory recall, Living World, or NPC Personality when you want them. Optional layers have their own setup and request budgets.
 
-For **Concordia**, use Python 3.12+ and install `poetry install --extras concordia` before selecting it. The setup scripts also accept `-Concordia` on Windows and `--concordia` on Linux/macOS. Living World additionally requires `INFERENCE_SERIALIZATION_ENABLED=true`; see its guide for activation and limits.
+For **Concordia**, use Python 3.12 or 3.13 and install `poetry install --extras concordia` before selecting it. The setup scripts also accept `-Concordia` on Windows and `--concordia` on Linux/macOS. Living World private model decisions additionally require `INFERENCE_SERIALIZATION_ENABLED=true`; rules-only scheduling can run without model calls. See its guide for activation and limits.
 
 > [!TIP]
 > Start with a small adventure and one active NPC when trying the optional personality layer. A strong structured-output model for utility tasks and your preferred prose model for narration are a useful pairing. Local-model compatibility, RP quality, image consistency, and latency depend on your chosen models and workflows.
@@ -333,15 +352,16 @@ In Docker, `localhost` refers to the container. Use an address reachable from th
 
 ## 📚 Guides
 
-[Community adventure catalog and compatible exports](docs/adventure-catalog.md)
+[Complete documentation index](docs/README.md) · [Community catalog and compatible exports](docs/adventure-catalog.md)
 
 | Explore | Read more |
 | --- | --- |
 | Visual Novel play | [VN mode](docs/visual-novel-mode.md) · [Session language](docs/session-content-language.md) |
+| How a turn works | [Scene, belongings, conditions and emotions, with and without NPC Personality](docs/engineering/turn-lifecycle.md) |
 | NPCs and shared history | [Character introductions and journals](docs/npc-introductions.md) |
-| Optional personality | [Player controls and fallback](docs/chpm-continuation.md) · [Technical guide](docs/chpm-pilot.md) |
+| Optional personality | [Player controls and fallback](docs/chpm-continuation.md) · [Workflows](docs/npc-decision-workflows.md) · [Private notebooks](docs/npc-notebook.md) |
 | World simulation | [Living World and Concordia](docs/living-world-usage.md) |
-| Long-term recall | [Memory and retrieval](docs/memory-rag.md) |
+| Long-term recall | [Memory and retrieval](docs/memory-rag.md) · [World Info](docs/session-world-info.md) |
 | Clothing and item continuity | [Narrated items and recovery](docs/narrated-item-reconciliation.md) · [Repair](docs/item-repair.md) |
 | ComfyUI | [Task presets and model layouts](docs/comfyui-task-templates.md) · [Prompt presets](docs/comfyui/presets.md) |
 | Local text inference | [OpenAI-compatible APIs](docs/custom-openai-compatible.md) · [Ollama role settings](docs/ollama-roles.md) |
@@ -350,13 +370,13 @@ In Docker, `localhost` refers to the container. Use an address reachable from th
 
 ## 🤝 Credits & License
 
-**Original author:** [jschm42](https://github.com/jschm42), creator of [TaleWeaver](https://github.com/jschm42/taleweaver). This fork builds on the original author's and contributors' work.
+**Original developer:** [Jean Schmitz (jschm42)](https://github.com/jschm42), creator of [TaleWeaver](https://github.com/jschm42/taleweaver). This fork builds on the original author's and contributors' work.
 
-**Fork maintainer:** [Gam1409](https://github.com/Gam1409). Issues and contributions for this version belong in [this repository](https://github.com/Gam1409/taleweaver).
+**Fork creator and maintainer:** [Anton Kuprin (Gam1409)](https://github.com/Gam1409). Issues and contributions for this version belong in [this repository](https://github.com/Gam1409/taleweaver).
 
 - **Code:** [MIT](LICENSE).
 - **Adventures and story content:** [CC-BY-NC 4.0](LICENSE-CC-BY-NC-4.0), unless a file declares a different license, such as the MIT-licensed combat test adventure.
-- **Bundled fonts and assets:** see the [font licenses](frontend/public/assets/fonts/licenses/README.txt) and individual asset notices.
+- **Bundled fonts and assets:** see [asset attribution](ASSETS.md), the [font license index](frontend/public/assets/fonts/licenses/README.txt) and individual notices.
 - **Community adventures:** the [upstream adventure repository](https://github.com/jschm42/taleweaver-adventures) remains available for shared creations.
 
 ---

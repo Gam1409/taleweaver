@@ -1,23 +1,17 @@
-graph TD
-    A[Client: POST /adventures] --> B[Backend: Create Placeholder Adventure & Avatar]
-    B --> C[Backend: Start Background Generation Task]
-    CAT[(Style & Tone Catalog)] -.-> D
-    C --> D[WorldGenerator: generate_world]
-    D --> E[LLM: Analyze Story Prompt & Tone]
-    E --> F[Generate WorldManifesto<br/>(Plot, Rules, Walkthrough, Win/Loss Conditions,<br/>Scenes, Exits, NPCs, Objects, Switches, Containers, Quests, Awards)]
-    F --> V{Validate Manifest Schema & Graph}
-    V -- Invalid --> E
-    V -- Valid --> G[WorldManifestApplier: apply_manifest]
-    G --> H[Clear Existing World Baseline]
-    H --> I[Sync Protagonist to Avatar]
-    I --> J[Generate Cover & Protagonist Visuals]
-    J --> K[Iterate & Create WorldScenes]
-    K --> L[Generate Scene Backgrounds]
-    L --> M[Iterate & Create NPCs with Voices]
-    M --> N[Generate NPC Character Portraits]
-    N --> O[Iterate & Create Objects: Containers, Switches & Items]
-    O --> P[Generate Object Concept Art]
-    P --> Q[Initialize Quests & Awards]
-    Q --> R[Connect WorldExits with Lock Gates]
-    R --> S[Update Adventure Status: Ready]
-    S --> T[End Background Task]
+flowchart TD
+    Request["Authenticated creation or regeneration request"] --> Check["Check configuration, requested mode and generation ownership"]
+    Check --> Shell["Create or select the template shell and generation job"]
+    Shell --> Context["Build bounded story, tone, style and optional blueprint context"]
+    Context --> Restore["Validate the input fingerprint and restore staged checkpoints"]
+    Restore --> Plan["Reuse a valid plan or request and validate a bounded world plan"]
+    Plan --> Details["Generate small detail batches; save valid checkpoints"]
+    Details --> Assemble["Assemble and validate the completed draft"]
+    Assemble --> Validate["Apply schema, constraints and mode-specific validation"]
+    Validate --> Valid{"Valid after bounded per-stage correction?"}
+    Valid -->|No| Failed["Report failure or retain a resumable checkpoint"]
+    Valid -->|Yes| Apply["Apply through the existing world-persistence owner"]
+    Apply --> Visuals["Reuse or generate configured assets; respect generation revision guards"]
+    Visuals --> Finish["Run configured final validation and update job status"]
+    Finish --> Ready["Publish ready status when the job completes"]
+    Failed -.-> Resume["Explicit retry or staged resume"]
+    Resume -.-> Check

@@ -32,21 +32,26 @@ node names and installed model filenames are not rewritten by the storage-ID
 change. Existing explicit catalog IDs are preserved; previously saved duplicate
 IDs cannot be automatically disambiguated without changing references.
 
+An adventure's `origin_id` is a separate portable story identity. Catalog
+comparison canonicalizes UUID spelling but preserves the case and spelling of
+legacy non-UUID keys. Existing template/session storage IDs are not rewritten.
+See [catalog installation and identity](adventure-catalog.md#installing-an-adventure)
+for the incoming catalog bounds and update behavior.
+
 ## Verification
 
-The follow-up ran 231 backend regression cases, including export/import APIs,
-ownership, traversal rejection, session snapshots, cloning, media, ComfyUI, TTS
-and world manifests. Fixtures include Russian, Japanese, Arabic and Spanish
-titles and a data directory named `Данные игры`. Three frontend service tests
-cover separate IDs for localized/repeated labels and stable IDs across generation,
-upload, rename and reload. External LLM/image/audio providers are mocked; this is
-not a live GPU or Windows execution test.
+`tests/test_language_independent_ids.py` and
+`tests/test_unicode_storage_routes.py` cover generated identifiers, legacy paths,
+ownership and traversal boundaries. Catalog identity tests additionally exercise
+legacy keys, Unicode and differently cased UUID spellings. Frontend catalog tests
+cover distinct IDs for repeated/localized labels and stable IDs across generation,
+upload, rename and reload.
 
-The production frontend build and targeted ESLint checks pass. TypeScript retains
-the same 129 normalized baseline diagnostics. Fifteen changed/new Python files
-pass full Ruff checks and formatting. Four older modules retain 56 existing Ruff
-diagnostics (58 before these changes), with no new diagnostics; their unrelated
-complexity and formatting are outside this storage fix.
+Fixtures include several scripts and a Unicode data-directory name. External
+LLM/image/audio providers are mocked; these checks do not establish live GPU quality
+or execution on every operating system. Current lint, types, tests and builds are
+defined in [CI](../.github/workflows/ci.yml), rather than the old branch's diagnostic
+counts.
 
-After updating the branch, restart the backend before retrying a failed export.
-An existing save does not need to be renamed or restarted.
+Restart the backend after updating before retrying a failed export. Existing
+saves do not need to be renamed or restarted.
