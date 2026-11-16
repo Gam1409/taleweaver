@@ -1,6 +1,11 @@
 """Static recovery hints for unavailable observer-local handles; no capability lookup."""
 
 _HINTS = {
+    ("inspect_entity", "unavailable_entity"): (
+        "Use an exact accessible ID from observable_entities or the current host context. "
+        "The view may be unavailable or stale. This does not prove absence and does not "
+        "authorize creating a replacement item."
+    ),
     ("read_belief_basis", "unavailable_belief"): (
         "Use a belief_id returned by inspect_beliefs in this investigation. "
         "Notebook text is not a belief handle; inspect your own beliefs first if needed."

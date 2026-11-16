@@ -29,6 +29,19 @@ def _covered(garment: Garment, worn: WornItem) -> set[Region]:
     return set(garment.coverage) - set(worn.uncovered_regions)
 
 
+def known_worn_item_ids(
+    raw_profile: Any, inventory: Any, *, equipment: Any = None
+) -> set[str] | None:
+    """Known wear IDs include legacy equipped garments, independently of occlusion."""
+    profile = load_profile(raw_profile)
+    items = owned_items(inventory, equipment=equipment)
+    if profile is None or any(row.item_id not in items for row in profile.worn):
+        return None
+    return {row.item_id for row in profile.worn} | {
+        row.item_id for row in _worn_items(profile, items, equipment)
+    }
+
+
 def visible_character(
     raw_profile: Any,
     inventory: Any,

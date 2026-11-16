@@ -100,11 +100,11 @@ def request_sizes(model, protocol):
     ]
 
 
-def recovery_model(protocol, failure):
+def recovery_model(protocol, failure, *, first_value=None):
     missing_parent = failure == "missing_path"
     first = {
         "path": "/missing/child" if missing_parent else "/private",
-        "value": NOTE,
+        "value": NOTE if first_value is None else first_value,
         "expected_revision": 4 if missing_parent else 3,
     }
     return model_for(
@@ -171,7 +171,9 @@ async def test_three_rounds_correct_an_error_then_read_the_latest_staged_value(p
 async def test_8k_budget_rejects_oversized_recovery_before_dispatch_and_disables_commit(
     protocol, failure
 ):
-    model = recovery_model(protocol, failure)
+    # Ensure recovery is oversized independently of instruction wording. The first
+    # invalid operation still cannot change the notebook; its value fits the tool quota.
+    model = recovery_model(protocol, failure, first_value={**NOTE, "budget_padding": "x" * 4000})
     draft, usage = NotebookDraft(NotebookWorkspace(ORIGINAL, revision=4)), Usage()
 
     with pytest.raises(RecoverableChpmError, match="input exceeds its configured size limit"):

@@ -24,6 +24,7 @@ from backend.engine.chpm import (
     host_observations,
     memory,
     narrative_context,
+    observable_state,
     passages,
     perception,
     prompts,
@@ -72,6 +73,7 @@ class Turn:
     deferred_names: dict[str, str] = field(default_factory=dict)
     reply_character_budget: int | None = None
     agent_clothing: dict[str, dict] = field(default_factory=dict)
+    observable_views: dict[str, observable_state.View] = field(default_factory=dict)
     simplified: bool = False
     fallback_identities: dict = field(default_factory=dict)
     fallback_issues: list[str] = field(default_factory=list)
@@ -298,6 +300,7 @@ async def _prepare(manager: Any, turn: Turn, message: str, actors: list[Any]) ->
     )
     if turn.initial.settings.mode == "live" and turn.initial.settings.agent_steps:
         turn.agent_clothing = await agent_views.capture(manager)
+        turn.observable_views = await observable_state.capture(manager, active_ids, observed)
     await semantic_recall.prepare(manager, turn, active_ids, observed)
     from backend.engine.chpm import parallel
 

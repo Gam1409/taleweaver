@@ -37,6 +37,7 @@ _LOOKUPS = {
     "search_memory": "Search this observer's source-checked prior turns. A miss proves nothing.",
     "read_memory": "Read an ID returned by search_memory in this turn.",
     "inspect_self": "Inspect current host facts about this NPC's own location and possessions.",
+    "inspect_entity": "Read current recorded conditions, ownership and wear/placement of an accessible exact entity ID. Omitted facts are unknown; this never performs an action.",
     "visible_clothing": "Read visible clothing of an accessible actor ID, using argument.",
     "inspect_beliefs": "Inspect this NPC's own subjective beliefs about the subject in argument.",
     "read_belief_basis": "Read grounds for an ID returned by inspect_beliefs.",
