@@ -23,6 +23,9 @@ Please adhere to the following rules for all implementations to ensure high code
     * When introducing new features, refactoring, or extending functionality in these domains, extract logic into dedicated sub-packages, service classes, or handler modules (e.g., `backend/api/routes/adventures/services/`, `backend/engine/handlers/`).
     * Separate route definitions (HTTP mapping, input validation) from business logic, database queries, and external service calls.
 
+* **Subsystem Responsibilities and Contracts:**
+  * Follow the [project standard](../docs/engineering/subsystem-contracts.md) for state ownership, permitted effects, integration contracts and change validation. It is the shared reference for both human contributors and coding agents. Local changes must retain their integration contract; changes to that contract must update the affected owners and consumers together.
+
 * **Control Flow & Anti-Nesting Guidelines (No Deep `if` Pyramids):**
   * **Maximum Nesting Depth:** Strict limit of **2 nesting levels** (at most 3 in rare algorithmic scenarios). Deeply nested code is a primary source of bugs and poor maintainability.
   * **Guard Clauses / Early Returns:** Always invert conditions and exit early rather than wrapping the rest of the function in an indented block.

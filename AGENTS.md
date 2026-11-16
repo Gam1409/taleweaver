@@ -79,6 +79,19 @@ and historical reports. Local agent tooling is optional.
    - Prefer the smallest coherent change that satisfies the requirement. A new
      framework, service or registry is not the default solution.
 
+7. **Subsystem Ownership and Contracts (Owner Requirement)**:
+   - Follow the [subsystem responsibility standard](docs/engineering/subsystem-contracts.md).
+     Identify the producer, consumers, authoritative state owner and permitted
+     side effects before changing an integration.
+   - Use the existing owner's validated operations and audience-specific views.
+     Shared SQL storage or a mutable Python object does not authorize another
+     subsystem to rewrite its state. Model proposals and generated assets do not
+     become world facts by themselves.
+   - Preserve input/output, failure, budget and lifecycle contracts for local
+     changes. When a contract changes, update affected producers, consumers,
+     documentation and meaningful boundary tests together. Do not hide a breaking
+     change in a provider, prompt, UI or helper refactor.
+
 ---
 
 ## 1. Portable project references
@@ -88,6 +101,7 @@ Python, TypeScript, testing, security and migration rules. They are authoritativ
 on every machine; an ignored `.agents/` directory is optional local tooling.
 
 - [Turn pipeline](docs/diagrams/game_session_loop.mermaid)
+- [Subsystem responsibilities and contracts](docs/engineering/subsystem-contracts.md)
 - [Adventure format](docs/specs/adventure_format.md)
 - [Living World architecture](docs/living-world-architecture.md)
 - [NPC Personality pilot](docs/chpm-pilot.md)

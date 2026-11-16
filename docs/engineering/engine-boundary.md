@@ -1,5 +1,10 @@
 # Turn services and the API boundary
 
+The [subsystem responsibility standard](subsystem-contracts.md) defines the shared
+rules for state ownership, integration contracts and local changes. This page
+describes the existing engine/API separation; the
+[complete turn lifecycle](turn-lifecycle.md) traces runtime ordering and recovery.
+
 Gameplay implementation lives in `backend/engine/gameplay/`: the turn manager,
 world/session resolution, combat, guardrails, play-agent and turn handlers.
 HTTP routes import these services. Engine modules must not import API routes,
