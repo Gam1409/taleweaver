@@ -55,7 +55,7 @@ runtime hierarchy. Their detailed limits and gates remain in their linked guides
 | Speech | Provider-specific [synthesis](../../backend/engine/tts_engine.py) and [recognition](../../backend/api/routes/stt_api.py) through their existing paths. | Recognized text enters the ordinary authorized input path. An audio provider does not directly execute a game action. |
 | [Authoring and portability](../specs/adventure_format.md) | Adventure creation/editing, validated import/export and the applicable session/archive lifecycle. | Preserve identities, supported formats, attribution and scoped runtime state. Carrying an extension is not permission to activate an unwired adapter. |
 | [Recovery and checkpoints](../session-checkpoints.md) | Existing turn receipts, recovery snapshots, replay, copy/restore and derived-state invalidation. | Other subsystems preserve these fences. Each owner declares retention semantics; private notebooks intentionally retain their latest content across story rewind. |
-| [Inference](../inference-queue.md), [configuration](../llm-sampling.md) and [diagnostics](system-diagnostics.md) | Shared role routing, admission, budgets, settings and observable execution outcomes. | A local feature must not silently rewrite shared provider settings, bypass queue admission or expose private prompts in ordinary logs. |
+| [Inference](../inference-queue.md), [configuration](../llm-sampling.md) and [diagnostics](system-diagnostics.md) | Shared role routing, admission, budgets, settings and observable execution outcomes. | A local feature must not silently rewrite shared provider settings, bypass applicable queue admission or expose private prompts in ordinary logs. |
 
 ## 3. Contract required at an integration
 
@@ -122,8 +122,11 @@ For a local sampler, checkpoint adapter, prompt-format or reference-workflow cha
   clothing, physical conditions, relationships and clocks are outside that effect.
 - Retain existing failure, cancellation and stale-result behavior, including
   preservation of the prior image where the existing path promises it.
-- Use existing router/queue and role budgets. Do not compensate for a bad image
-  by changing shared NPC/narrator configuration or adding undisclosed retries.
+- Use the applicable existing routing, admission and job controls. Model-backed
+  prompt preparation uses text-role budgets; ComfyUI has its own provider queue
+  and is outside current text/embedding admission. Extending coordination across
+  these paths changes a shared contract. Do not compensate for a bad image by
+  changing shared NPC/narrator configuration or adding undisclosed retries.
 - Verify task/reference selection, ownership and stale-source rejection, failure
   preservation and relevant image consumers. Extend an existing integration test
   when the changed behavior crosses that seam.
