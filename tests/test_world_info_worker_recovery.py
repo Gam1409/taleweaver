@@ -5,10 +5,11 @@ import json
 import sqlite3
 import time
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 from sqlalchemy import text, update
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from backend.engine.memory_rag import persistence, scheduling
@@ -87,11 +88,56 @@ async def pending_source(recovery_store, monkeypatch):
 async def wait_for_review(sessions, revision_id):
     async with asyncio.timeout(3):
         while True:
-            async with sessions() as db:
-                revision = await db.get(WorldInfoRevision, revision_id)
-                if revision.status == "review":
-                    return revision
+            try:
+                async with sessions() as db:
+                    revision = await db.get(WorldInfoRevision, revision_id)
+                    if revision.status == "review":
+                        return revision
+            except OperationalError as error:
+                if not is_sqlite_busy(error):
+                    raise
             await asyncio.sleep(0.01)
+
+
+def polling_session(*, error=None, result=None):
+    session = AsyncMock()
+    session.__aenter__.return_value = session
+    session.__aexit__.return_value = False
+    session.get = AsyncMock(side_effect=error, return_value=result)
+    return session
+
+
+async def test_review_poll_recovers_busy_read_with_a_fresh_session():
+    original = sqlite3.OperationalError("database is locked")
+    original.sqlite_errorcode = sqlite3.SQLITE_BUSY
+    failure = OperationalError("SELECT world_info_revisions", {}, original)
+    blocked = polling_session(error=failure)
+    revision = SimpleNamespace(status="review")
+    ready = polling_session(result=revision)
+    sessions = Mock(side_effect=[blocked, ready])
+
+    assert await wait_for_review(sessions, "poll-revision") is revision
+
+    assert sessions.call_count == 2
+    blocked.__aexit__.assert_awaited_once()
+    ready.__aexit__.assert_awaited_once()
+    for session in (blocked, ready):
+        session.get.assert_awaited_once_with(WorldInfoRevision, "poll-revision")
+
+
+async def test_review_poll_propagates_nonbusy_database_failure():
+    original = sqlite3.OperationalError("disk I/O error")
+    original.sqlite_errorcode = sqlite3.SQLITE_IOERR
+    failure = OperationalError("SELECT world_info_revisions", {}, original)
+    blocked = polling_session(error=failure)
+    sessions = Mock(return_value=blocked)
+
+    with pytest.raises(OperationalError) as caught:
+        await wait_for_review(sessions, "poll-revision")
+
+    assert caught.value is failure
+    sessions.assert_called_once_with()
+    blocked.__aexit__.assert_awaited_once()
 
 
 async def test_exhausted_claim_contention_reschedules_without_replaying_completed_work(
