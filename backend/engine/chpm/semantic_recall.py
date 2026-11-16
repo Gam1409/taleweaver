@@ -18,6 +18,7 @@ from backend.engine.memory_rag.embeddings import embed_texts
 from backend.engine.memory_rag.retrieval import VECTOR_SEARCH_GRACE
 from backend.engine.memory_rag.settings import embedding_signature, read_settings
 from backend.engine.memory_rag.store import LanceMemoryStore, Scope
+from backend.engine.narrated_movement.outcomes import evidence_size
 from backend.models.game_session import GameSession
 from backend.models.memory_rag import MemoryIndexState
 
@@ -267,7 +268,9 @@ def merge(
             continue
         if (
             len(pins) >= MAX_PINNED_SOURCES
-            or sum(len(item[2]) for item in pins.values()) + len(hit.text) > MAX_PINNED_CHARS
+            or sum(evidence_size(item[2], item[1]) for item in pins.values())
+            + evidence_size(hit.text, source)
+            > MAX_PINNED_CHARS
         ):
             continue
         pins[f"v{len(pins) + 1}"] = (hit.record_id, source, hit.text)

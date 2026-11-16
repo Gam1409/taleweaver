@@ -110,6 +110,11 @@ def _valid(source: Any, row: Any, hashes: dict[str, str], session_id: str) -> bo
         and row.revision_id == source.revision_id
         and hashes[row.id] == source.content_hash
         and (not source.reported or source.text in row.content)
+        and (source.action_span is None or source.action_span.matches(row.content, source.text))
+        and all(
+            outcome.evidence_span.matches(row.content, outcome.evidence)
+            for outcome in source.movement_outcomes
+        )
         and (
             source.history is None
             or source.history.scene_id == row.scene_id

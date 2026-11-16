@@ -215,7 +215,9 @@ async def _review(manager: Any, turn: Turn, text: str, resolution: str) -> Verdi
             issues=raw.issues or ["The dialogue validator rejected this candidate."],
         )
     try:
-        verdict = passages.resolve(raw, available) if isinstance(raw, passages.Review) else raw
+        verdict = (
+            passages.resolve(raw, available, text=text) if isinstance(raw, passages.Review) else raw
+        )
     except ChpmError as exc:
         _reject_review(turn, text, resolution, [str(exc)], raw, payload)
         raise RecoverableChpmError(str(exc)) from exc

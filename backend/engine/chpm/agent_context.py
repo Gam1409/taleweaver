@@ -9,6 +9,7 @@ from backend.engine.chpm.schema import (
     Observation,
     validate_agent_evidence,
 )
+from backend.engine.narrated_movement.outcomes import descriptor
 
 
 def collect(
@@ -27,6 +28,8 @@ def collect(
             speaker_id=source.speaker_id,
             kind="reported" if source.reported else "witnessed",
             text=text,
+            movement_outcomes=source.movement_outcomes,
+            action_span=source.action_span,
             current_turn=source.message_id == observed.message_id,
             context=(contexts or {}).get(key),
         )
@@ -59,7 +62,10 @@ def present(decision: Decision, mind: Mind) -> list[dict]:
         ):
             raise ChpmError("Retrieved episode order differs from its observer ledger.")
     return [
-        entry.model_dump(exclude={"source_hash", "source_revision_id"}, exclude_none=True)
+        {
+            **entry.model_dump(exclude={"source_hash", "source_revision_id"}, exclude_none=True),
+            **descriptor(entry),
+        }
         for entry in decision.agent_evidence
     ]
 
@@ -71,6 +77,8 @@ def _matches(entry: AgentEvidence, source: Source, observed: Observation) -> boo
         and entry.source_hash == source.content_hash
         and entry.speaker_id == source.speaker_id
         and entry.text in source.text
+        and entry.movement_outcomes == source.movement_outcomes
+        and entry.action_span == source.action_span
         and entry.kind == ("reported" if source.reported else "witnessed")
         and entry.current_turn == (source.message_id == observed.message_id)
     )

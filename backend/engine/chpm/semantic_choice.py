@@ -2,7 +2,7 @@
 
 from backend.engine.chpm import choice_grounds, initiative, preference
 from backend.engine.chpm.appraisal_context import Window
-from backend.engine.chpm.host_state import Mind
+from backend.engine.chpm.host_state import Mind, Source
 from backend.engine.chpm.kernel import ChpmError
 from backend.engine.chpm.motivation_contracts import ResolvedMotive
 from backend.engine.chpm.schema import (
@@ -28,20 +28,32 @@ def previous_context(
     ) or previous.observation.message_id == observed.message_id:
         return None
 
-    def retained(quote: str, kind: str) -> bool:
-        return bool(quote) and any(
-            source.message_id == previous.reply_id
-            and source.content_hash == previous.reply_hash
-            and source.revision_id == previous.reply_revision
-            and source.speaker_id == previous.actor_id
-            and source.role == "assistant"
-            and source.kind == kind
-            and quote in source.text
-            for source in mind.sources.values()
+    def retained(quote: str, kind: str) -> Source | None:
+        return next(
+            (
+                source
+                for source in mind.sources.values()
+                if quote
+                and source.message_id == previous.reply_id
+                and source.content_hash == previous.reply_hash
+                and source.revision_id == previous.reply_revision
+                and source.speaker_id == previous.actor_id
+                and source.role == "assistant"
+                and source.kind == kind
+                and quote in source.text
+                and (
+                    kind != "narration"
+                    or previous.action_evidence_span is None
+                    or source.action_span == previous.action_evidence_span
+                )
+            ),
+            None,
         )
 
-    speech = previous.spoken_evidence if retained(previous.spoken_evidence, "speech") else ""
-    action = previous.action_evidence if retained(previous.action_evidence, "narration") else ""
+    speech_source = retained(previous.spoken_evidence, "speech")
+    action_source = retained(previous.action_evidence, "narration")
+    speech = previous.spoken_evidence if speech_source else ""
+    action = previous.action_evidence if action_source else ""
     if not speech and not action:
         return None
     return PreviousIntention(
@@ -52,6 +64,8 @@ def previous_context(
         source_revision_id=previous.reply_revision,
         spoken_evidence=speech,
         action_evidence=action,
+        movement_outcomes=action_source.movement_outcomes if action_source else (),
+        action_span=action_source.action_span if action_source else None,
     )
 
 

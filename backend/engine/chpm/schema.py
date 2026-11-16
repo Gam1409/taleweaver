@@ -4,6 +4,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, model_validator
 
+from backend.core.text_evidence import EvidenceSpan, WithEvidenceSpan
 from backend.engine.chpm.agent_limits import MAX_AGENT_ROUNDS, MAX_PINNED_CHARS, MAX_PINNED_SOURCES
 from backend.engine.chpm.causal_audit import MAX_NOTES
 from backend.engine.chpm.causal_contracts import Memory as CausalMemory
@@ -12,6 +13,7 @@ from backend.engine.chpm.memory_contracts import MemoryEntry
 from backend.engine.chpm.motivation_contracts import ResolvedMotive
 from backend.engine.chpm.performance import RequestTiming
 from backend.engine.chpm.recovery_contracts import RecoveryState
+from backend.engine.narrated_movement.outcomes import WithMovementOutcomes, evidence_size
 
 
 class Contract(BaseModel):
@@ -191,7 +193,7 @@ class EpisodeContext(Contract):
     evidence_order: int = Field(ge=0)
 
 
-class AgentEvidence(Contract):
+class AgentEvidence(Contract, WithMovementOutcomes):
     source_id: str = Field(min_length=1, max_length=100)
     record_id: str = Field(min_length=1, max_length=100)
     source_message_id: str = Field(min_length=1, max_length=100)
@@ -207,13 +209,13 @@ class AgentEvidence(Contract):
 def validate_agent_evidence(entries: list[AgentEvidence]) -> None:
     if len(entries) > MAX_PINNED_SOURCES:
         raise ValueError("Agent evidence exceeds its source count limit.")
-    if sum(len(source.text) for source in entries) > MAX_PINNED_CHARS:
+    if sum(evidence_size(source.text, source) for source in entries) > MAX_PINNED_CHARS:
         raise ValueError("Agent evidence exceeds its combined text budget.")
     if len({source.record_id for source in entries}) != len(entries):
         raise ValueError("Agent evidence repeats a source.")
 
 
-class PreviousIntention(Contract):
+class PreviousIntention(Contract, WithMovementOutcomes):
     selected: Candidate
     scene_id: str
     source_message_id: str
@@ -253,6 +255,7 @@ class Decision(Contract):
     reply_hash: str | None = None
     spoken_evidence: str = ""
     action_evidence: str = Field(default="", max_length=2000)
+    action_evidence_span: EvidenceSpan | None = None
     interpretation_ids: list[str] = Field(default_factory=list, max_length=2)
     experience_ids: list[str] = Field(default_factory=list, max_length=2)
     development_ids: list[str] = Field(default_factory=list, max_length=2)
@@ -365,7 +368,7 @@ class SpokenEvidence(Contract):
     quote: str = Field(max_length=2000)
 
 
-class ActionEvidence(Contract):
+class ActionEvidence(Contract, WithEvidenceSpan):
     actor_id: str
     quote: str = Field(max_length=2000)
 

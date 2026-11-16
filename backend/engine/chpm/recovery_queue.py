@@ -28,6 +28,8 @@ class Batch:
 
 
 def stamp(manager: Any, turn: Any, reply: Any) -> None:
+    from backend.engine.chpm.movement_feedback import read
+
     if not turn.fallback_identities:
         return
     audit = RecoveryAudit(
@@ -37,6 +39,7 @@ def stamp(manager: Any, turn: Any, reply: Any) -> None:
         game_minute=max(0, int(getattr(manager.state, "in_game_time", 0) or 0)),
         actors={actor: 0 for actor in turn.fallback_identities},
         speakers=dict(list(sorted(turn.present_names.items()))[:128]),
+        movement_outcomes=read(manager.state, reply),
     )
     reply.npc_recovery = audit.model_dump()
 

@@ -32,6 +32,14 @@ def finish_decision(turn: Any, decision: Decision, reply: Any) -> None:
     decision.action_evidence = next(
         (entry.quote for entry in turn.verdict.actions if entry.actor_id == decision.actor_id), ""
     )
+    decision.action_evidence_span = next(
+        (
+            entry.evidence_span
+            for entry in turn.verdict.actions
+            if entry.actor_id == decision.actor_id
+        ),
+        None,
+    )
 
 
 def new_memories(turn: Any, decision: Decision, reply: Any) -> list[MemoryEntry]:
@@ -59,7 +67,10 @@ def new_memories(turn: Any, decision: Decision, reply: Any) -> list[MemoryEntry]
         ("own_action", decision.action_evidence),
     ):
         if quote:
-            additions.append(memory.from_source(reply, actor, actor, quote, kind))
+            entry = memory.from_source(reply, actor, actor, quote, kind)
+            if kind == "own_action":
+                entry.action_span = decision.action_evidence_span
+            additions.append(entry)
     additions.extend(
         memory.from_source(reply, actor, heard.speaker_id, heard.quote, "heard_speech")
         for heard in turn.verdict.heard

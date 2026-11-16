@@ -352,12 +352,15 @@ def finish(manager: Any, reply: Any, *, completed: bool) -> None:
         raise ChpmError("CHPM completed reply belongs to another session.")
     result = turn.initial.model_copy(deep=True)
     result.usage = turn.usage
+    from backend.engine.chpm import movement_feedback
+
+    outcomes = movement_feedback.read(manager.state, reply)
     for actor, decision in turn.decisions.items():
         _finish_decision(turn, decision, reply)
         result.actors[actor] = decision
         result.last_active[actor] = turn.initial.revision + 1
         result.memories[actor] = turn.memories.get(actor, [])
-        additions = _new_memories(turn, decision, reply)
+        additions = movement_feedback.qualify(outcomes, reply, _new_memories(turn, decision, reply))
         memory.append(result, actor, additions)
         if actor in turn.minds:
             result.minds[actor] = host_adapter.finish(
@@ -367,7 +370,9 @@ def finish(manager: Any, reply: Any, *, completed: bool) -> None:
         retained_agenda = [entry for entry in result.agenda if entry.actor_id not in turn.agendas]
         retained_agenda.extend(entry for entries in turn.agendas.values() for entry in entries)
         result.agenda = agenda.apply(retained_agenda, turn.decisions, turn.verdict, reply)
-        causal_memory.apply(turn, result, reply, passages.index(reply.content))
+        causal_memory.apply(
+            turn, result, reply, passages.index(reply.content), movement_outcomes=outcomes
+        )
         result.recovery.gap_cursors = turn.gap_cursors
         continuation.mark_verified(result)
     save(manager.state, result, expected_revision=turn.initial.revision)

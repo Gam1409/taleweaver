@@ -59,6 +59,8 @@ def bind(batch: Batch, result: Any) -> None:
 
 
 def _fragment(batch: Batch, key: str, fragment: Fragment, proposed: dict) -> None:
+    from backend.engine.narrated_movement.outcomes import for_quote
+
     observers = set(fragment.observers)
     eligible = {actor for actor, cursor in batch.offsets.items() if int(key[1:]) >= cursor}
     if not observers <= eligible or len(observers) != len(fragment.observers):
@@ -86,6 +88,18 @@ def _fragment(batch: Batch, key: str, fragment: Fragment, proposed: dict) -> Non
                 speaker_id=str(fragment.speaker_id) if fragment.kind == "speech" else actor,
                 kind="speech" if fragment.kind == "speech" else "narration",
                 text=passage.text,
+                action_span=EvidenceSpan(start=passage.start, end=passage.end)
+                if fragment.kind != "speech"
+                else None,
+                movement_outcomes=for_quote(
+                    batch.audit.movement_outcomes,
+                    batch.message.content,
+                    passage.text,
+                    None,  # An eligible witness can observe another actor's movement.
+                    EvidenceSpan(start=passage.start, end=passage.end),
+                )
+                if fragment.kind != "speech"
+                else (),
                 history=HistoricalObservation(
                     scene_id=batch.audit.scene_id,
                     game_minute=batch.audit.game_minute,

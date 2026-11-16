@@ -2,7 +2,7 @@
 
 from collections import Counter
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from hashlib import sha256
 from typing import Any
 
@@ -15,6 +15,7 @@ from backend.core.text_evidence import require_span
 from backend.engine.clothing.visuals import session_objects
 from backend.engine.gameplay.turn_state_applier import TurnStateApplier
 from backend.engine.narrated_movement.context import context
+from backend.engine.narrated_movement.outcomes import MovementBlockedError, MovementOutcome, receipt
 from backend.engine.narrated_movement.schema import MovementProposal
 from backend.engine.rule_engine import EntityMovement, GameEvent, WorldEntityUpdate
 from backend.engine.scene_continuity.runtime import follow_transition
@@ -30,6 +31,8 @@ class Pending:
     player_message: str
     proposals: list[Any] | None = None
     denied: frozenset[str] = frozenset()
+    outcomes: list[MovementOutcome] = field(default_factory=list)
+    confirmed: bool = True
 
 
 async def prepare(manager: Any, rows: list[Any], narration: str) -> dict:
@@ -65,9 +68,10 @@ def complete(
             player_message=pending.player_message,
             denied=denied,
         )
-    if isinstance(pending, Pending) and confirmed:
+    if isinstance(pending, Pending):
         pending.proposals = deepcopy(proposals)
         pending.denied = frozenset(denied or ())
+        pending.confirmed = confirmed
 
 
 @step("movement.narration.commit")
@@ -76,6 +80,8 @@ async def finish(manager: Any, message: Any) -> list[str]:
     manager._pending_narrated_movement = None
     if not isinstance(pending, Pending) or pending.proposals is None:
         return []
+    if not pending.confirmed:
+        return await _review(manager, message, [], [], _unconfirmed(pending))
     if not pending.proposals:
         return await _review(manager, message, [], [])
     rows = await session_objects(manager.db, manager.state.session_id)
@@ -95,18 +101,23 @@ async def finish(manager: Any, message: Any) -> list[str]:
             current_context=current_context,
         )
         return await _review(
-            manager, message, [], ["The movement source state changed during extraction."]
+            manager,
+            message,
+            [],
+            ["The movement source state changed during extraction."],
+            _unconfirmed(pending),
         )
     event, accepted, errors = _event(pending)
     applied = await TurnStateApplier(manager).apply_narrated_movement(event) if accepted else []
     if manager.state.current_scene_id != pending.before["scene_id"]:
         message.scene_id = manager.state.current_scene_id
         await follow_transition(manager)
-    return [*applied, *await _review(manager, message, accepted, errors)]
+    return [*applied, *await _review(manager, message, accepted, errors, pending.outcomes)]
 
 
 def _event(pending: Pending) -> tuple[GameEvent, list[dict], list[str]]:
     event, accepted, errors = GameEvent(), [], []
+    pending.outcomes.clear()
     entries = pending.proposals or []
     if len(entries) > MAX_MOVEMENTS:
         reject(
@@ -119,7 +130,7 @@ def _event(pending: Pending) -> tuple[GameEvent, list[dict], list[str]]:
         )
         return event, [], ["Too many movement proposals; no movement in this batch was applied."]
     counts = Counter(
-        row.get("actor_id")
+        row["actor_id"].strip()
         for row in entries
         if isinstance(row, dict) and isinstance(row.get("actor_id"), str)
     )
@@ -131,6 +142,9 @@ def _event(pending: Pending) -> tuple[GameEvent, list[dict], list[str]]:
             _validate(proposal, pending)
             _append(event, proposal, pending.before["scene_id"])
             accepted.append(proposal.model_dump())
+            outcome = receipt(proposal.model_dump(), pending.narration, "applied")
+            if outcome is not None:
+                pending.outcomes.append(outcome)
         except ValidationError as exc:
             reject(
                 "movement",
@@ -147,6 +161,9 @@ def _event(pending: Pending) -> tuple[GameEvent, list[dict], list[str]]:
             errors.append(
                 f"Movement proposal {index + 1}: Invalid movement fields or source reference."
             )
+            outcome = receipt(raw, pending.narration, "unconfirmed")
+            if outcome is not None:
+                pending.outcomes.append(outcome)
         except ValueError as exc:
             reject(
                 "movement",
@@ -160,7 +177,24 @@ def _event(pending: Pending) -> tuple[GameEvent, list[dict], list[str]]:
                 denied=pending.denied,
             )
             errors.append(f"Movement proposal {index + 1}: {exc}")
+            outcome = receipt(
+                raw,
+                pending.narration,
+                "blocked" if isinstance(exc, MovementBlockedError) else "unconfirmed",
+            )
+            if outcome is not None:
+                pending.outcomes.append(outcome)
     return event, accepted, errors
+
+
+def _unconfirmed(pending: Pending) -> list[MovementOutcome]:
+    if len(pending.proposals or []) > MAX_MOVEMENTS:
+        return []
+    return [
+        outcome
+        for raw in pending.proposals or []
+        if (outcome := receipt(raw, pending.narration, "unconfirmed")) is not None
+    ]
 
 
 def _validate(proposal: MovementProposal, pending: Pending) -> None:
@@ -171,14 +205,14 @@ def _validate(proposal: MovementProposal, pending: Pending) -> None:
     if actor is None or proposal.actor_id in pending.denied:
         raise ValueError("Actor is unavailable or the action was rejected.")
     if not actor["can_move"]:
-        raise ValueError("This actor cannot move.")
+        raise MovementBlockedError("This actor cannot move.")
     destination = proposal.destination_scene_id
     if (
         destination
         and destination != pending.before["scene_id"]
         and destination not in actor["allowed_destinations"]
     ):
-        raise ValueError("Destination is not an open permitted adjacent location.")
+        raise MovementBlockedError("Destination is not an open permitted adjacent location.")
     if proposal.actor_id == "__player__" and (
         not proposal.player_evidence or proposal.player_evidence not in pending.player_message
     ):
@@ -200,7 +234,13 @@ def _append(event: GameEvent, proposal: MovementProposal, scene_id: str) -> None
         ]
 
 
-async def _review(manager: Any, message: Any, accepted: list[dict], errors: list[str]) -> list[str]:
+async def _review(
+    manager: Any,
+    message: Any,
+    accepted: list[dict],
+    errors: list[str],
+    outcomes: list[MovementOutcome] | None = None,
+) -> list[str]:
     from backend.engine.narrated_items.runtime import KEY
 
     states = manager.state.entity_states or {}
@@ -208,9 +248,11 @@ async def _review(manager: Any, message: Any, accepted: list[dict], errors: list
     if isinstance(check, dict):
         audit = {
             "message_id": message.id,
+            "revision_id": message.revision_id,
             "content_hash": sha256(message.content.encode()).hexdigest(),
             "accepted": accepted,
             "rejected": errors,
+            "outcomes": [entry.model_dump(mode="json") for entry in outcomes or ()],
         }
         manager.state.entity_states = {
             **states,

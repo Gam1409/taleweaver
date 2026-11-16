@@ -131,6 +131,8 @@ def finish(turn: Any, reply: Any, additions: list[Any], actor_id: str, *, minute
                 speaker_id=entry.speaker_id,
                 kind="narration" if action else "speech",
                 text=entry.quote,
+                movement_outcomes=getattr(entry, "movement_outcomes", ()),
+                action_span=getattr(entry, "action_span", None),
                 report=None if action else reports.lineage(turn, actor_id, entry),
             )
         )

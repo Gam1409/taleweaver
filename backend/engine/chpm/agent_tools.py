@@ -17,6 +17,7 @@ from backend.engine.chpm.observable_state import View
 from backend.engine.chpm.schema import EpisodeContext, Observation
 from backend.engine.memory_rag.documents import MemoryDocument
 from backend.engine.memory_rag.ranking import rank_documents, tokens
+from backend.engine.narrated_movement.outcomes import descriptor, evidence_size
 
 
 def covering_excerpt(whole: str, previous: str, current: str) -> str:
@@ -145,8 +146,8 @@ class Tools:
         if alias in self.pins:
             previous = self.pins[alias][2]
             text = covering_excerpt(source.text, previous, text)
-        used = sum(len(item[2]) for a, item in self.pins.items() if a != alias)
-        if used + len(text) > MAX_PINNED_CHARS:
+        used = sum(evidence_size(item[2], item[1]) for a, item in self.pins.items() if a != alias)
+        if used + evidence_size(text, source) > MAX_PINNED_CHARS:
             return {"status": "evidence_budget_exhausted"}
         self.pins[alias] = (key, source, text)
         self.exposed[key] = (key, source)
@@ -159,6 +160,7 @@ class Tools:
             "kind": "reported" if source.reported else "witnessed",
             "current_turn": source.message_id == self.observation.message_id,
             "text": text,
+            **descriptor(source),
             "excerpted": text != source.text,
             **(
                 {"context": self.episode_contexts[key].model_dump(exclude_none=True)}

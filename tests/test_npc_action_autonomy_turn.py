@@ -8,6 +8,7 @@ from sqlalchemy import select
 
 from backend.engine.chpm import inference, rendering
 from backend.engine.chpm.schema import KernelState, Settings
+from backend.engine.chpm.semantic_choice import previous_context
 from backend.engine.chpm.state import KEY, load
 from backend.engine.gameplay.manager import GameTurnManager
 from backend.engine.narrated_items.schema import ItemExtraction
@@ -214,3 +215,17 @@ async def test_autonomous_departure_uses_access_rules_and_never_takes_player_alo
         assert destination == (origin if locked else "ANNEX")
         assert state.current_scene_id == origin and avatar.inventory == inventory
         assert len(roles.calls) == (2 if mode == "live" else 3)
+        if mode == "live":
+            saved = load(state)
+            decision = saved.actors["LINA"]
+            mind = saved.minds["LINA"]
+            action = next(source for source in mind.sources.values() if source.kind == "narration")
+            # The original transcript survives even when the canonical move is blocked.
+            assert action.text == text
+            assert [entry.status for entry in action.movement_outcomes] == [
+                "blocked" if locked else "applied"
+            ]
+            following = decision.observation.model_copy(update={"message_id": "next-input"})
+            prior = previous_context(mind, decision, following)
+            assert prior is not None and prior.action_evidence == text
+            assert prior.movement_outcomes == action.movement_outcomes

@@ -33,24 +33,39 @@ def index(text: str) -> dict[str, str]:
     return text_passages.index(text)
 
 
-def resolve(review: Review, available: dict[str, str]) -> Verdict:
+def resolve(review: Review, available: dict[str, str], *, text: str | None = None) -> Verdict:
+    occurrences = text_passages.spans(text) if text is not None else {}
     return Verdict.model_validate(
         {
             "matches": review.matches,
             "issues": review.issues,
             "causal_updates": review.causal_updates,
             **{
-                field: [_resolve_entry(entry, available) for entry in getattr(review, field)]
+                field: [
+                    _resolve_entry(
+                        entry,
+                        available,
+                        occurrences.get(entry.passage_id or "") if field == "actions" else None,
+                    )
+                    for entry in getattr(review, field)
+                ]
                 for field in ("evidence", "actions", "heard", "agenda_evidence")
             },
         }
     )
 
 
-def _resolve_entry(entry: Reference, available: dict[str, str]) -> dict:
+def _resolve_entry(
+    entry: Reference, available: dict[str, str], occurrence: text_passages.Passage | None = None
+) -> dict:
     quote = ""
     if entry.passage_id is not None:
         quote = available.get(entry.passage_id, "")
         if not quote:
             raise ChpmError("CHPM reviewer supplied an unknown passage reference.")
-    return {**entry.model_dump(exclude={"passage_id"}), "quote": quote}
+    result = {**entry.model_dump(exclude={"passage_id"}), "quote": quote}
+    if occurrence is not None:
+        if occurrence.text != quote:
+            raise ChpmError("CHPM reviewer passage differs from its source occurrence.")
+        result["evidence_span"] = {"start": occurrence.start, "end": occurrence.end}
+    return result

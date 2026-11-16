@@ -43,6 +43,14 @@ def from_messages(mind: Mind, messages: dict[str, Any]) -> Mind:
             or hashes[source.message_id] != source.content_hash
             or (source.reported and source.evidence_quote not in row.content)
             or (
+                source.action_span is not None
+                and not source.action_span.matches(row.content, source.text)
+            )
+            or any(
+                not outcome.evidence_span.matches(row.content, outcome.evidence)
+                for outcome in source.movement_outcomes
+            )
+            or (
                 source.history is not None
                 and (
                     source.history.scene_id != row.scene_id

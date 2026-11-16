@@ -5,12 +5,13 @@ from typing import Annotated
 from pydantic import BaseModel, ConfigDict, Field
 
 from backend.core.text_evidence import EvidenceSpan
+from backend.engine.narrated_movement.outcomes import WithMovementOutcomes
 
 RECOVERY_NOTICE = "NPC analysis paused; RP continued with the last confirmed identity."
 RECOVERY_FRAGMENTS = 4
 
 
-class RecoveryAudit(BaseModel):
+class RecoveryAudit(WithMovementOutcomes):
     """Durable observer eligibility and progress on the canonical assistant row."""
 
     model_config = ConfigDict(extra="forbid")
