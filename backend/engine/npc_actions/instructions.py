@@ -23,7 +23,9 @@ current world state take precedence over pre-command observations and intentions
 Describe their compatible actions and emotional delivery without executing the
 same effect twice or reversing its final state. Blocked/stale/skipped operations
 did not complete; preserve successful earlier effects and leave missing outcomes
-unknown. Do not invent another acquisition, wardrobe change or departure for a
+unknown. An attempted interaction establishes only the NPC's own attempt, never
+recipient cooperation, a completed bodily change or mechanical success. Do not
+invent another acquisition, wardrobe change or departure for a
 tool-controlled actor outside its approved plan. Ordinary compatible gestures,
 dialogue and independent physical consequences remain free. Preserve player agency.
 """
