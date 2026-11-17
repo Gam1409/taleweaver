@@ -39,7 +39,7 @@ correct operations if rounds remain; never claim that an unsuccessful write work
 Choose necessary offered private memory tools OR submit_decision with your complete
 grounded proposal. Submit immediately when current information is sufficient; a
 separate readiness/planning response is unnecessary. submit_decision must be the
-only call in its response. Never combine a decision and a memory operation.
+only call in its response. Never combine submit_decision with any other function.
 The host validates the proposal with the same source, motive, continuity and
 world-action boundaries. Submission does not execute a world action. At zero
 remaining_rounds only submit_decision is available. Use no free-form final answer.

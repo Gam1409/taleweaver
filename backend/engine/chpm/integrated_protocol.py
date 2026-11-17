@@ -29,7 +29,8 @@ HINTS = {
     ),
     "too_many_requests": (
         "At most two function calls are allowed per response. submit_decision must be alone. "
-        "Split necessary memory operations across the available rounds."
+        "Action and memory calls share that limit. Split nonfinal calls across available "
+        "rounds and read their results before submitting a decision alone."
     ),
     "invalid_structure": (
         "Return only the offered function-call format. In portable JSON use an object "
@@ -37,12 +38,14 @@ HINTS = {
         "inside submit_decision.arguments, without commentary or extra top-level fields."
     ),
     "mixed_submission": (
-        "Submit a decision separately from memory operations. Send submit_decision alone, "
-        "or send necessary memory operations and submit in a later remaining round."
+        "Submit a decision separately from all action and memory functions. While nonfinal "
+        "functions are still offered, send at most two and read their results before "
+        "submitting alone. At final-only stage, submit a grounded decision without claiming "
+        "unperformed actions."
     ),
     "invalid_call_envelope": (
         "Use at most two calls with distinct valid IDs and bounded arguments. "
-        "Do not reuse a previous call ID. Submit a decision separately from memory operations."
+        "Do not reuse a previous call ID. Submit a decision separately from all other functions."
     ),
     "unavailable_function": (
         "The response requested an unavailable function. Use only the currently offered "
