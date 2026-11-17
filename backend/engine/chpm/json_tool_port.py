@@ -9,7 +9,7 @@ from uuid import uuid4
 
 from backend.core.llm_completion_capture import Completion, capture_completions
 from backend.core.llm_tool_turn import InvalidToolTurnError, ToolCall, ToolTurn
-from backend.engine.chpm import json_contract
+from backend.engine.chpm import json_contract, json_tool_output
 from backend.engine.chpm.native_tool_contracts import canonical_tool_name
 from backend.engine.chpm.notebook.codec import decode, preflight
 
@@ -369,7 +369,7 @@ def _calls(raw: str) -> tuple[ToolCall, ...]:
                 "The portable function response has unexpected top-level fields.",
                 code="unexpected_fields",
             )
-        if len(requests) > 2:
+        if len(requests) > json_tool_output.MAX_REQUESTS:
             raise InvalidToolTurnError(
                 "The portable function response needs at most two requests.",
                 code="too_many_requests",
@@ -456,7 +456,8 @@ class JsonToolPort:
         self.inner.request_timeout = value
 
     def input_size(self, messages: list[dict], tools: list[dict]) -> int:
-        return input_size(messages, tools)
+        response_format = json_tool_output.selected(self.inner, tools)
+        return input_size(messages, tools) + json_tool_output.size(response_format)
 
     async def aexecute_tool_turn(
         self,
@@ -488,6 +489,9 @@ class JsonToolPort:
             if value is not None
         }
         method = self.inner.aexecute_simple_task
+        response_format = json_tool_output.selected(self.inner, tools, model=model)
+        if response_format is not None:
+            options["response_format"] = response_format
         if "single_attempt" in inspect.signature(method).parameters:
             options["single_attempt"] = True
         with capture_completions() as completions:

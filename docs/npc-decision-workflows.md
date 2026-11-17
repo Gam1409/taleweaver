@@ -52,6 +52,16 @@ failures and truncated output do not acquire another retry. The role's output
 limit still applies; integrated responses use the decision-token budget because
 they may contain a complete proposal.
 
+JSON compatibility uses the configured provider's structured-output policy when
+its text port supports that option. Schema-capable modes receive an outer envelope
+for the currently offered functions: submission alone, or up to two nonfinal calls.
+Memory-only investigation still permits an empty ready reply. Arguments remain
+ordinary JSON objects validated by their existing owners. Provider fallbacks and
+prompt-only ports remain available; requesting a format does not establish remote
+enforcement. The selected format counts against the existing input budget, and a
+rejection or timeout never triggers a retry without it. Local envelope, argument,
+source and world checks still run even if the server ignores its output format.
+
 Corrected protocol errors appear as `invalid_envelope` audit entries with bounded
 technical codes. Failed requests count against call and round limits. A second
 protocol error or an error on the final available round ends preparation; failed
