@@ -79,6 +79,10 @@ may include feasible physical actions, resolved by the existing world-state owne
 Speech and actions are reviewed separately; a performed action needs no invented
 dialogue or per-action player approval. Selected dialogue may explicitly
 create or close declared goals and commitments through the ledger below.
+An action-only review may omit speech. The host also tolerates an empty speech
+placeholder when the same NPC has independently validated exact action evidence.
+Original actor coverage and duplicate checks still apply; an empty placeholder
+creates no spoken memory and cannot support an agenda change or heard speech.
 
 The cognitive input contains the selected NPC's authored character/goal/profile,
 projected observable excerpts from the player request, and a bounded window of
