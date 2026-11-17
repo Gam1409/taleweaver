@@ -332,6 +332,7 @@ async def _prepare(manager: Any, turn: Turn, message: str, actors: list[Any]) ->
         from backend.engine.npc_actions.runtime import publish_turn
 
         await publish_turn(manager, turn)
+        preflight(turn)
 
 
 async def _prepare_actor(manager: Any, turn: Turn, actor: Any, observed: Observation) -> None:
