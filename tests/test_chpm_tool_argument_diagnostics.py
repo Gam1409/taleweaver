@@ -105,8 +105,9 @@ class CorrectingModel:
     max_tokens = 1200
     request_timeout = 1
 
-    def __init__(self, protocol):
+    def __init__(self, protocol, first_value=True):
         self.protocol, self.requests, self.feedback = protocol, [], []
+        self.first_value = first_value
         self.sizes = []
 
     def response(self, results):
@@ -114,7 +115,7 @@ class CorrectingModel:
             return [
                 (
                     "notebook_write",
-                    {"path": "/must-not-run", "expected_revision": 0, "value": True},
+                    {"path": "/must-not-run", "expected_revision": 0, "value": self.first_value},
                 ),
                 ("notebook_write", {"expected_revision": False}),
             ]
@@ -187,7 +188,8 @@ async def test_aggregated_feedback_cannot_bypass_8k_admission_or_publish_an_inva
     original = b'{"existing":"Keep this earlier thought."}'
     draft, model, usage = (
         NotebookDraft(NotebookWorkspace(original)),
-        CorrectingModel(protocol),
+        # Keep the recovery over budget independently of instruction compression.
+        CorrectingModel(protocol, first_value={"budget_padding": "x" * 4000}),
         Usage(),
     )
 

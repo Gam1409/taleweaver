@@ -79,6 +79,9 @@ async def test_tool_results_rebuild_bound_sources_before_final_decision():
     context = json.loads(model.requests[1][0][1]["content"])
     assert context["remaining_rounds"] == 0
     assert context["agent_lookup_status"] == [{"tool": "inspect_self", "status": "ok"}]
+    feedback = next(row for row in model.requests[1][0] if row["role"] == "tool")
+    assert feedback["tool_call_id"] == "inspect" and feedback["name"] == "inspect_self"
+    assert json.loads(feedback["content"])["status"] == "ok"
 
 
 async def test_mixed_decision_and_memory_write_never_executes_the_write():

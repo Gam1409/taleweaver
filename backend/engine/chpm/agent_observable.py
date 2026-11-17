@@ -77,6 +77,12 @@ def inspect(tools: "Tools", entity_id: str) -> dict:
         **deepcopy(view.entities[entity_id]),
         "omitted": {},
     }
+    return publish(tools, body)
+
+
+def publish(tools: "Tools", body: dict) -> dict:
+    """Pin a previously projected, bounded current observation without world mutation."""
+    body = deepcopy(body)
     text = _pack(body)
     if text is None:
         return {"status": "view_budget_exhausted"}
@@ -101,7 +107,18 @@ def _pack(body: dict) -> str | None:
         if len(text) <= MAX_VIEW_CHARS:
             return text
         key = next(
-            (name for name in ("recorded_conditions", "visible_clothing") if body.get(name)), None
+            (
+                name
+                for name in (
+                    "recorded_conditions",
+                    "visible_clothing",
+                    "scene_facts",
+                    "visible_actors",
+                    "routes",
+                )
+                if body.get(name)
+            ),
+            None,
         )
         if key is None:
             return None

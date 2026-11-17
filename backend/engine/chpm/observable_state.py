@@ -1,7 +1,7 @@
 """Transient observer-scoped views of existing state owners, never another world store."""
 
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from backend.engine.chpm.kernel import ChpmError
@@ -26,6 +26,7 @@ class View:
     content_hash: str
     scene_id: str
     entities: dict[str, dict]
+    scene: dict = field(default_factory=dict)
 
 
 def _actor_id(identifier: str) -> str:
@@ -242,5 +243,16 @@ def _add_items(
 async def capture(
     manager: Any, observer_ids: list[str], observation: Observation
 ) -> dict[str, View]:
+    from dataclasses import replace
+
+    from backend.engine.chpm import observable_scene
+
     rows = await session_objects(manager.db, manager.game_id)
-    return {key: project(manager, rows, key, observation) for key in observer_ids}
+    routes = await observable_scene.capture(manager, rows)
+    return {
+        key: replace(
+            project(manager, rows, key, observation),
+            scene=observable_scene.project(manager, routes, key),
+        )
+        for key in observer_ids
+    }

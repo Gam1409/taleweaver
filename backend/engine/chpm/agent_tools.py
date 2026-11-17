@@ -5,7 +5,7 @@ import re
 from copy import deepcopy
 from dataclasses import dataclass, field
 
-from backend.engine.chpm import agent_beliefs, agent_observable, host_observations
+from backend.engine.chpm import agent_beliefs, agent_discovery, agent_observable, host_observations
 from backend.engine.chpm.agent_contracts import Lookup
 from backend.engine.chpm.agent_limits import MAX_PINNED_CHARS, MAX_PINNED_SOURCES
 from backend.engine.chpm.core.contracts import Belief
@@ -66,6 +66,8 @@ class Tools:
             "search_memory": self.search,
             "inspect_self": lambda _argument: self.inspect_self(),
             "inspect_entity": lambda argument: agent_observable.inspect(self, argument),
+            "find_entity": lambda argument: agent_discovery.find(self, argument),
+            "inspect_scene": lambda _argument: agent_discovery.scene(self),
             "inspect_beliefs": lambda argument: agent_beliefs.inspect(self, argument),
             "read_belief_basis": lambda argument: agent_beliefs.basis(self, argument),
             "visible_clothing": self.visible_clothing,

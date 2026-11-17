@@ -11,6 +11,7 @@ from backend.engine.chpm import (
     inference,
     integrated_protocol,
     json_contract,
+    offered_tools,
     parallel_budget,
     proposal_attempt,
     wire_normalization,
@@ -18,7 +19,6 @@ from backend.engine.chpm import (
 from backend.engine.chpm.agent_tools import Tools
 from backend.engine.chpm.errors import RecoverableChpmError
 from backend.engine.chpm.host_state import Mind
-from backend.engine.chpm.native_tool_contracts import tool_definitions
 from backend.engine.chpm.proposal_draft import Draft
 from backend.engine.chpm.schema import Decision, Settings, Usage
 
@@ -50,7 +50,7 @@ response did not run; earlier successful operations must not be repeated.
 
 
 def _definitions(prepared: cognitive_proposal.Prepared, tools: Tools, remaining: int) -> list[dict]:
-    offered = tool_definitions(notebook_enabled=tools.notebook is not None) if remaining else []
+    offered = offered_tools.definitions(tools) if remaining else []
     return [
         *offered,
         {
@@ -148,6 +148,7 @@ def _feedback(history: list[dict], tools: Tools, calls: tuple, results: list[dic
             {
                 "role": "tool",
                 "tool_call_id": call.id,
+                "name": call.name,
                 "content": json.dumps(feedback, ensure_ascii=False, separators=(",", ":")),
             }
         )

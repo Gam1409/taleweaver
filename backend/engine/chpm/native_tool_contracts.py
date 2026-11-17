@@ -38,7 +38,9 @@ _LOOKUPS = {
     "read_memory": "Read an ID returned by search_memory in this turn.",
     "inspect_self": "Inspect current host facts about this NPC's own location and possessions.",
     "inspect_entity": "Read current recorded conditions, ownership and wear/placement of an accessible exact entity ID. Omitted facts are unknown; this never performs an action.",
-    "visible_clothing": "Read visible clothing of an accessible actor ID, using argument.",
+    "find_entity": "Find accessible actors/items by name or ID, including omitted index entries. Returns exact IDs; a miss proves nothing.",
+    "inspect_scene": "Read the current room's public facts, actors and known routes. No arguments or movement.",
+    "visible_clothing": "Read a listed visible_clothing_actors NPC's clothing. For the player use inspect_entity(argument='@player').",
     "inspect_beliefs": "Inspect this NPC's own subjective beliefs about the subject in argument.",
     "read_belief_basis": "Read grounds for an ID returned by inspect_beliefs.",
 }
@@ -110,10 +112,19 @@ def _parameters(name: str) -> dict:
 
 
 def _lookup_parameters(name: str, parameters: dict) -> dict:
-    if name == "inspect_self":
+    if name in {"inspect_self", "inspect_scene"}:
         parameters.update(properties={}, required=[])
         return parameters
     parameters["properties"]["argument"]["minLength"] = 1
+    descriptions = {
+        "find_entity": "Name fragment or existing ID. Use returned IDs unchanged.",
+        "inspect_entity": "Exact observable_entities/find_entity ID, observer_id for yourself, or @player. Never invent IDs.",
+        "visible_clothing": "NPC ID from visible_clothing_actors; never @player.",
+    }
+    if name in descriptions:
+        parameters["properties"]["argument"]["description"] = descriptions[name]
+    parameters["properties"]["argument"].pop("title", None)
+    parameters["properties"]["argument"].pop("default", None)
     parameters["required"] = ["argument"]
     return parameters
 
@@ -139,9 +150,14 @@ def _operation_schema(original: dict) -> dict:
     return {"anyOf": [valued, removed]}
 
 
-def tool_definitions(notebook_enabled: bool = True) -> list[dict]:
+def tool_definitions(
+    notebook_enabled: bool = True, *, available_lookups: set[str] | None = None
+) -> list[dict]:
     """Return distinct native functions; only argument envelopes have closed schemas."""
-    names = [*_LOOKUPS, *(_NOTEBOOKS if notebook_enabled else {})]
+    names = [
+        *(name for name in _LOOKUPS if available_lookups is None or name in available_lookups),
+        *(_NOTEBOOKS if notebook_enabled else {}),
+    ]
     return [
         {
             "type": "function",

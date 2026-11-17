@@ -193,6 +193,7 @@ Plans, original research, dated audits, experiment reports and release announcem
 - [Final pilot validation before merge](chpm-final-validation.md)
 - [Cast and history evaluation matrix](chpm-matrix-evaluation.md)
 - [NPC analysis performance](chpm-performance.md)
+- [NPC tool calling: implementation review, templates and action interface](research/npc-tool-calling.md)
 - [CHPM research implementation map](chpm-research-roadmap.md)
 - [Clothing integration audit](clothing-audit.md)
 - [Default ComfyUI workflow validation](comfyui-default-validation.md)

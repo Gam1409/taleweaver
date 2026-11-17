@@ -14,6 +14,8 @@ class Lookup(Contract):
         "read_memory",
         "inspect_self",
         "inspect_entity",
+        "find_entity",
+        "inspect_scene",
         "visible_clothing",
         "inspect_beliefs",
         "read_belief_basis",
@@ -22,9 +24,9 @@ class Lookup(Contract):
 
     @model_validator(mode="after")
     def valid_argument(self) -> "Lookup":
-        if (self.tool == "inspect_self") != (self.argument == ""):
+        if (self.tool in {"inspect_self", "inspect_scene"}) != (self.argument == ""):
             raise ValueError(
-                "inspect_self takes an empty argument; other tools need a query or ID."
+                "inspect_self/inspect_scene take an empty argument; other tools need a query or ID."
             )
         return self
 

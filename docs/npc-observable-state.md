@@ -14,6 +14,19 @@ The bounded `observable_entities` index supplies IDs, names and kinds before too
 selection. It prioritizes the observer and owned items. The player uses the
 existing CHPM alias `@player`. No fuzzy match creates or renames an item.
 
+`find_entity(argument="name fragment or ID")` searches the complete accessible
+view, including entries omitted from the initial index. It returns at most eight
+exact handles within 2,000 serialized characters and reports total/omitted
+matches. Ambiguous names keep distinct IDs. Search matches are discovery metadata;
+use `inspect_entity` for citable current state. A miss does not prove absence.
+
+`inspect_self()` reads the current host frame. For a detailed technical view of
+the observer's conditions and clothing, `inspect_entity` accepts its observer ID.
+`visible_clothing` is limited to NPCs listed in `visible_clothing_actors`; inspect
+the player with `inspect_entity(argument="@player")` instead. Its error feedback
+explains this distinction. Native tools without an available target/projection
+are omitted where possible; their scope guards still apply at execution.
+
 The view includes the following where known:
 
 - Canonical item identity and inventory owner.
@@ -28,6 +41,17 @@ can be observed without becoming portable or transferable. Public placed objects
 retain their established owner when placed on a bench or elsewhere in the room.
 Raw biographies, object descriptions, scripts and arbitrary extension metadata are
 not copied into these views.
+
+## Read the current room
+
+`inspect_scene()` returns the recorded observer-visible room facts, present actors
+and available route information. Route direction, effective lock state and the
+observer's movement permissions come from the movement owner. Lock codes, scripts
+and other private metadata are excluded. The already prepared public room
+description is capped at 600 characters with a truncation flag. A room view fits
+2,000 characters and declares omitted list entries. Missing route or room-fact
+knowledge is explicitly unavailable, rather than proof of no exits or an empty
+room. A read cannot unlock a door or move anyone.
 
 ## Freshness and bounds
 
