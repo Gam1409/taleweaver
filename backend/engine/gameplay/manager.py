@@ -48,8 +48,8 @@ from backend.engine.visual_novel.continuity import prepare_intent
 from backend.engine.visual_novel.concurrency import SessionLease, guard_session_turn
 from backend.engine.visual_novel.intent import (
     VNProgressionIntent,
-    VN_PROGRESSION_PROMPT,
     build_progression_context,
+    progression_prompt as vn_progression_prompt,
 )
 from backend.engine.gameplay.turn_helpers import (
     TurnCombatStateHelper,
@@ -1770,7 +1770,7 @@ class GameTurnManager:
                     self,
                     llm,
                     (
-                        VN_PROGRESSION_PROMPT
+                        vn_progression_prompt(self.state)
                         if policy.vn
                         else prompts.GM_CHAT_PROGRESSION_RULES_PROMPT
                     )

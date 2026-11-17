@@ -1,6 +1,7 @@
 """Adventure Personality defaults must not overwrite already-started sessions."""
 
 import importlib.util
+from copy import deepcopy
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -11,9 +12,9 @@ from alembic.operations import Operations
 from sqlalchemy import select
 
 from backend.engine.adventure_exporter import AdventureExporter
-from backend.engine.chpm.schema import Settings
-from backend.engine.chpm.state import load
-from backend.engine.chpm.template_settings import initial_states
+from backend.engine.chpm.schema import KernelState, Settings
+from backend.engine.chpm.state import KEY, load
+from backend.engine.chpm.template_settings import initial_states, stored_defaults
 from backend.engine.import_build_archive_template import build_archive_template
 from backend.engine.import_build_blueprint_template import build_blueprint_template
 from backend.engine.import_build_session_template import build_session_template
@@ -113,6 +114,105 @@ def test_non_vn_defaults_remain_inactive_and_input_dictionary_is_not_mutated():
         rule_enforcement_mode="rpg", npc_personality_settings=Settings().model_dump()
     )
     assert initial_states(adventure, states) == states
+
+
+def legacy_defaults(mode="live"):
+    values = Settings(
+        mode=mode,
+        actor_ids=["NPC_NEW"],
+        workflow="integrated",
+        notebook_enabled=True,
+        semantic_memory=True,
+        agent_steps=2,
+        tool_protocol="json",
+        memory_limit=17,
+        max_calls_per_turn=12,
+    ).model_dump(mode="json")
+    values.pop("control_scope")
+    values.pop("action_tools")
+    return values
+
+
+@pytest.mark.parametrize("host_mode", ["rpg", "story", "chat"])
+@pytest.mark.parametrize("mode", ["live", "shadow"])
+def test_legacy_non_vn_dialogue_defaults_stay_dormant_without_replacing_saved_state(
+    host_mode, mode
+):
+    prefs = legacy_defaults(mode)
+    states = {KEY: KernelState().model_dump(mode="json"), "existing": {"hp": 12}}
+    before = deepcopy(states)
+    adventure = SimpleNamespace(
+        rule_enforcement_mode=host_mode,
+        npc_personality_settings=prefs,
+        living_world_settings={"living_world_enabled": True, "deliberation_enabled": True},
+    )
+    assert initial_states(adventure, states) is states
+    assert states == before
+    assert adventure.npc_personality_settings == prefs
+
+
+@pytest.mark.parametrize("builder", ["blueprint", "archive", "session"])
+@pytest.mark.parametrize("mode", ["live", "shadow"])
+def test_import_keeps_dormant_rpg_dialogue_preferences_without_enabling_actions(builder, mode):
+    prefs = legacy_defaults(mode)
+    raw = {
+        "title": "Legacy dormant defaults",
+        "rule_enforcement_mode": "rpg",
+        "npc_personality_settings": prefs,
+    }
+    if builder == "blueprint":
+        copied = build_blueprint_template({}, raw, raw, "owner", None, "rpg", False)
+    elif builder == "archive":
+        copied = build_archive_template("copy", "owner", raw, raw, None, "rpg", False, None, None)
+    else:
+        copied = build_session_template({"adventure": raw}, SimpleNamespace(id="owner"), None)
+    expected = {**prefs, "control_scope": "dialogue", "action_tools": False}
+    assert copied.npc_personality_settings == expected
+    states = {"existing": {"hp": 12}}
+    assert initial_states(copied, states) is states
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"actor_ids": ["NPC_NEW", "NPC_NEW"]},
+        {"max_calls_per_turn": 2},
+        {"mode": "unknown"},
+        {"control_scope": "combat_actions"},
+        {"action_tools": True, "workflow": "staged"},
+    ],
+)
+def test_dormant_import_compatibility_does_not_accept_invalid_stored_defaults(changes):
+    with pytest.raises(ValueError):
+        stored_defaults({**legacy_defaults(), **changes}, mode="rpg", preserve_saved=True)
+
+
+def test_new_authoring_does_not_silently_treat_active_rpg_defaults_as_legacy():
+    with pytest.raises(ValueError, match="Combat action control"):
+        stored_defaults(legacy_defaults(), mode="rpg")
+
+
+async def test_living_world_only_update_preserves_existing_dormant_rpg_preferences(
+    auth_client, chpm_world
+):
+    prefs = legacy_defaults()
+    async with TestSessionLocal() as db:
+        adventure = await db.get(AdventureTemplate, "portrait-template")
+        adventure.rule_enforcement_mode = "rpg"
+        adventure.npc_personality_settings = prefs
+        await db.commit()
+    response = await auth_client.patch(
+        PATH,
+        json={
+            "living_world_settings": {"living_world_enabled": True, "deliberation_enabled": True}
+        },
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["npc_personality_settings"] == {
+        **prefs,
+        "control_scope": "dialogue",
+        "action_tools": False,
+    }
 
 
 def test_additive_column_migration_preserves_rows_and_can_be_reversed():

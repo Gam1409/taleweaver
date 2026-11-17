@@ -37,10 +37,36 @@ def settings_for_mode(raw: Any, mode: str | None) -> Settings:
     return settings
 
 
-def stored_defaults(raw: Any, *, mode: str | None, living_world: dict | None = None) -> dict | None:
+def _dormant_defaults(raw: Any, mode: str) -> Defaults | None:
+    """Older non-VN templates could retain inactive dialogue preferences."""
+    values = raw.model_dump() if isinstance(raw, Settings) else raw
+    if (
+        mode == "vn"
+        or not isinstance(values, dict)
+        or values.get("control_scope", "dialogue") != "dialogue"
+        or values.get("action_tools", False)
+    ):
+        return None
+    return Defaults.model_validate(values)
+
+
+def stored_defaults(
+    raw: Any,
+    *,
+    mode: str | None,
+    living_world: dict | None = None,
+    preserve_saved: bool = False,
+) -> dict | None:
+    """Keep saved opt-ins and budgets; explicit authoring requires current admission."""
     if raw is None:
         return None
-    settings = Defaults.model_validate(settings_for_mode(raw, mode).model_dump())
+    host_mode = mode_policy(mode).mode
+    dormant = _dormant_defaults(raw, host_mode) if preserve_saved else None
+    if dormant is not None:
+        return dormant.model_dump(mode="json")
+    settings = settings_for_mode(raw, host_mode)
+    if not preserve_saved or host_mode != "rpg":
+        settings = Defaults.model_validate(settings.model_dump())
     ensure_compatible(settings, living_world)
     return settings.model_dump(mode="json")
 
@@ -50,10 +76,14 @@ def initial_states(adventure: Any, entity_states: dict) -> dict:
     if raw is None:
         return entity_states
     mode = mode_policy(getattr(adventure, "rule_enforcement_mode", None)).mode
+    if _dormant_defaults(raw, mode) is not None:
+        return entity_states
     if mode != "vn" and isinstance(raw, dict) and raw.get("mode", "off") == "off":
         Settings.model_validate(raw)
         return entity_states
-    settings = Defaults.model_validate(settings_for_mode(raw, mode).model_dump())
+    settings = settings_for_mode(raw, mode)
+    if mode != "rpg":
+        settings = Defaults.model_validate(settings.model_dump())
     ensure_compatible(settings, getattr(adventure, "living_world_settings", None))
     return configure_actions(
         {**entity_states, KEY: KernelState(settings=settings).model_dump(mode="json")},
@@ -94,17 +124,19 @@ async def validate_update(db: AsyncSession, adventure: Any, updates: dict) -> No
     if not triggers & updates.keys():
         return
     raw = updates.get("npc_personality_settings", adventure.npc_personality_settings)
+    authoring = {"npc_personality_settings", "rule_enforcement_mode"} & updates.keys()
     try:
         normalized = stored_defaults(
             raw,
             mode=updates.get("rule_enforcement_mode", adventure.rule_enforcement_mode),
             living_world=updates.get("living_world_settings", adventure.living_world_settings),
+            preserve_saved=not authoring,
         )
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
     if normalized is not None or "npc_personality_settings" in updates:
         updates["npc_personality_settings"] = normalized
-    settings = Defaults.model_validate(normalized) if normalized is not None else None
+    settings = Settings.model_validate(normalized) if normalized is not None else None
     if settings is None or settings.mode == "off":
         return
     ids = set(

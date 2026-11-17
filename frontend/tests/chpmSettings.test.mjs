@@ -356,16 +356,37 @@ test('combat tool budgets track active selection and rounds without dialogue res
     control_scope: 'combat_actions', workflow: 'integrated', action_tools: true, agent_steps: 3, max_calls_per_turn: 5 })
   const f = fixture(t, async () => Response.json(saved))
   await tick()
-  assert.equal(f.minimumCalls.value, 6)
+  assert.equal(f.minimumCalls.value, 18)
   assert.equal(f.budgetWarning.value, true)
   assert.deepEqual(f.historyWarnings.value, [])
   assert.equal(await f.save(), false)
   assert.match(f.error.value, /combat tool rounds/)
   assert.doesNotMatch(f.error.value, /perception|review|narration/)
   f.draft.value.agent_steps = 1
-  assert.equal(f.minimumCalls.value, 2)
+  assert.equal(f.minimumCalls.value, 6)
   f.draft.value.max_active_npcs = 3
-  assert.equal(f.minimumCalls.value, 3)
+  assert.equal(f.minimumCalls.value, 9)
   f.selectStandard()
   assert.equal(f.minimumCalls.value, 0)
+})
+
+test('combat budget reserves crossing initiative turns within the 25-call cap', async t => {
+  const saved = { ...state(), host_mode: 'rpg' }
+  Object.assign(saved.settings, { mode: 'live', actor_ids: Array.from({ length: 9 }, (_, index) => `NPC-${index}`),
+    max_active_npcs: 8, workflow: 'integrated', action_tools: true, agent_steps: 1, max_calls_per_turn: 25 })
+  const f = fixture(t, async () => Response.json(saved))
+  await tick()
+  assert.equal(f.minimumCalls.value, 24)
+  assert.equal(f.budgetWarning.value, false)
+  f.draft.value.max_active_npcs = 9
+  assert.equal(f.minimumCalls.value, 27)
+  assert.equal(await f.save(), false)
+  f.draft.value.max_active_npcs = 4
+  f.draft.value.agent_steps = 2
+  assert.equal(f.minimumCalls.value, 24)
+  assert.equal(f.budgetWarning.value, false)
+  f.draft.value.max_active_npcs = 2
+  f.draft.value.agent_steps = 3
+  assert.equal(f.minimumCalls.value, 18)
+  assert.equal(f.draft.value.max_calls_per_turn, 25)
 })

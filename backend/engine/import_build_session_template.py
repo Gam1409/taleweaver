@@ -23,6 +23,7 @@ def build_session_template(
             old_adv.get("npc_personality_settings"),
             mode=enforcement_mode,
             living_world=old_adv.get("living_world_settings"),
+            preserve_saved=True,
         ),
         living_world_settings=stored_defaults(old_adv.get("living_world_settings")),
         id=generate_adventure_id(old_adv["title"]),

@@ -78,7 +78,7 @@ export function useChpmSettings(sessionId: () => string) {
   const minimumCalls = computed(() => {
     if (!draft.value || draft.value.mode === 'off') return 0
     const actors = Math.min(draft.value.actor_ids.length, draft.value.max_active_npcs ?? 3)
-    if (isCombatControl.value) return actors * (draft.value.agent_steps ?? 0)
+    if (isCombatControl.value) return 3 * actors * (draft.value.agent_steps ?? 0)
     return actors * (1 + (draft.value.mode === 'live' ? (draft.value.agent_steps ?? 0) : 0)) + (draft.value.mode === 'live' ? 5 : 1)
   })
   const budgetWarning = computed(() => !!draft.value && draft.value.max_calls_per_turn < minimumCalls.value)

@@ -96,6 +96,15 @@ property ownership does not override physical custody or scene placement.
 
 Plans are transient and are not loaded or replayed as executable data. Recent
 duplicate publication on the same approved draft returns its existing results.
+While live integrated dialogue action control is enabled, the earlier VN world
+pass also checks direct portable-object placement proposals. It reuses the
+optional movement source and the exact saved current-player passage; only a
+resolved external player effect is eligible. Missing, stale, attempted or
+intentional placements defer to the command and completed-narration owners,
+preserving independent fields. Direct object travel additionally needs the
+existing confirmed player traversal to that destination. Inventory transfers
+retain their existing owner. These checks bind source identity and scope; the
+model's classification of a physical effect remains fallible.
 The existing recovery snapshot restores command effects after cancellation, and
 Undo restores their canonical owner state. Session copies remap condition input
 anchors; a missing source becomes explicitly unavailable while the saved fact
@@ -136,13 +145,26 @@ targeting or new abilities.
 The existing combat driver validates the encounter frame, available resources,
 costs, hits, scripts and casualties. A choice cannot create an extra turn or bypass
 ability rules. `keep_default` explicitly delegates to baseline AI; it is not a
-wait action. No authored ability means no selection request. Uncertain transport
+wait action. No available authored ability means no selection request. Uncertain transport
 failure is not retried as a potentially duplicated command.
 
-Combat request admission reserves selected active NPCs × configured rounds.
-It does not add VN perception/reviewer reservations. The controller requires the
-existing recoverable command turn, and cancellation/retry use that owner. Timings
-and call usage use the existing diagnostics, without a separate event ledger.
+Combat admission applies the active NPC limit as eligible selected participants
+reach their initiative turns. Absent NPCs and those without an available ability
+do not consume a slot. An admitted NPC keeps its controller for subsequent turns
+in the same command.
+
+The request budget reserves **3 × selected active NPCs × configured rounds**.
+Initiative rerolls can give an NPC two turns before the player's next turn;
+resuming an unfinished enemy turn before the submitted player action can require
+three. This reserve preserves all existing initiative turns and does not add
+requests when fewer are needed. The call cap remains 25; configurations whose
+reserve exceeds it require fewer active NPCs or rounds. VN perception/reviewer
+reservations do not apply. Previously saved budgets remain readable and are not
+raised automatically; an insufficient budget pauses combat selection before any
+model request so the owner can explicitly update it in session settings.
+The controller requires the existing recoverable
+command turn, and cancellation/retry use that owner. Timings and call usage use
+the existing diagnostics, without a separate event ledger.
 
 ## Validation
 

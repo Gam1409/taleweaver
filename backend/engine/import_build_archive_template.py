@@ -25,6 +25,7 @@ def build_archive_template(
             living_world=adv_data.get(
                 "living_world_settings", manifest_data.get("living_world_settings")
             ),
+            preserve_saved=True,
         ),
         living_world_settings=stored_defaults(
             adv_data.get("living_world_settings", manifest_data.get("living_world_settings"))

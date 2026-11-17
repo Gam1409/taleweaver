@@ -2,9 +2,15 @@
 
 from typing import Any
 
+from pydantic import ValidationError
+
 from backend.engine.narrated_items import independent_state
+from backend.engine.narrated_items.participants import resolve_participants
 from backend.engine.narrated_items.schema import ItemExtraction
+from backend.engine.narrated_movement.schema import MovementProposal
 from backend.engine.physical_conditions.ledger import read
+from backend.engine.physical_conditions.schema import ConditionProposal, Ledger
+from backend.engine.physical_conditions.update_identity import normalize
 
 INSTRUCTIONS = """
 When npc_command_control is supplied, inventory, wardrobe and room travel for
@@ -65,16 +71,12 @@ def protect(
         if (action.source_owner in controlled or action.destination_owner in controlled)
         and not _echo(action, effects)
     ]
-    movements = [
-        row
-        for row in extraction.movements
-        if not isinstance(row, dict) or row.get("actor_id") not in controlled
-    ]
+    movement_pairs = [(raw, _movement(raw)) for raw in extraction.movements]
+    movements = [raw for raw, row in movement_pairs if row.get("actor_id") not in controlled]
     errors.extend(
         "A narrated movement outside the approved NPC plan was preserved for review."
-        for row in extraction.movements
-        if isinstance(row, dict)
-        and row.get("actor_id") in controlled
+        for _, row in movement_pairs
+        if row.get("actor_id") in controlled
         and not any(
             effect.get("destination_scene_id") == row.get("destination_scene_id")
             and effect["actor_id"] == row.get("actor_id")
@@ -101,8 +103,34 @@ def unpack(
     extraction, failures, denied, indices = independent_state.unpack(
         result, actors, original_actions=original_actions
     )
+    if context(manager):
+        extraction = extraction.model_copy(
+            update={"actions": [_participants(action, actors) for action in extraction.actions]}
+        )
     guarded, indices, errors = protect(manager, extraction, indices)
     return guarded, failures, denied, indices, errors
+
+
+def _participants(action: Any, actors: dict) -> Any:
+    try:
+        return resolve_participants(action, actors)
+    except ValueError:
+        return action
+
+
+def _movement(raw: Any) -> dict:
+    try:
+        return MovementProposal.model_validate(raw).model_dump()
+    except ValidationError:
+        return {}
+
+
+def _condition(raw: Any, ledger: Ledger) -> Any:
+    candidate, _ = normalize(raw, ledger, {row.target_id for row in ledger.conditions.values()})
+    try:
+        return ConditionProposal.model_validate(candidate).model_dump()
+    except ValidationError:
+        return raw
 
 
 def _echo(action: Any, effects: list[dict]) -> bool:
@@ -151,7 +179,8 @@ def _conditions(manager: Any, updates: list, effects: list[dict]) -> tuple[list,
         if row.kind == "item_state" and row.status != "resolved"
     }
     retained, errors = [], []
-    for raw in updates:
+    for original in updates:
+        raw = _condition(original, ledger)
         key = raw.get("condition_id") if isinstance(raw, dict) else None
         known = ledger.conditions.get(key) if isinstance(key, str) else None
         identity = (
@@ -165,7 +194,7 @@ def _conditions(manager: Any, updates: list, effects: list[dict]) -> tuple[list,
             else None
         )
         if identity not in protected:
-            retained.append(raw)
+            retained.append(original)
             continue
         fact = current.get(identity)
         if (

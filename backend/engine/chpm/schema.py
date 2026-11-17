@@ -20,7 +20,9 @@ class Contract(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
 
-class Settings(Contract):
+class SettingsFields(Contract):
+    """Closed scalar settings input, before deriving controller scope from the host."""
+
     control_scope: Literal["dialogue", "combat_actions"] = "dialogue"
     workflow: Literal["staged", "integrated"] = "staged"
     npc_concurrency: int = Field(default=1, ge=1, le=4, strict=True)
@@ -38,6 +40,10 @@ class Settings(Contract):
     tool_protocol: Literal["auto", "native", "json"] = "auto"
     semantic_memory: StrictBool = False
     failure_policy: Literal["continue", "strict"] = "continue"
+
+
+class Settings(SettingsFields):
+    """Readable saved settings; full request reserves are checked on writes and admission."""
 
     @model_validator(mode="after")
     def valid_selection(self) -> "Settings":
@@ -68,7 +74,10 @@ class Settings(Contract):
             else actors + (1 if self.mode == "live" else 0)
         )
         if self.mode != "off" and self.max_calls_per_turn < minimum:
-            raise ValueError("The call budget must cover the selected NPCs and live validation.")
+            raise ValueError(
+                f"The call budget must be at least {minimum} to cover the selected NPCs "
+                "and their host turns."
+            )
         return self
 
 

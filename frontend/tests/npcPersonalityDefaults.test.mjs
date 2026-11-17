@@ -169,6 +169,17 @@ test('RPG defaults expose authored combat actions and compatible controls withou
   assert.equal(f.value.value.max_input_chars, 48000)
   assert.equal(f.value.value.control_scope, undefined)
   assert.match(text(f.root), /Agent tool compatibility/)
-  assert.match(text(f.root), /Minimum request budget: 1,/)
+  assert.match(text(f.root), /Minimum request budget: 3,/)
   assert.doesNotMatch(text(f.root), /repair reserve/)
+})
+
+test('RPG defaults reserve up to three initiative turns without increasing the saved budget', async t => {
+  const f = fixture(t, { ...settings(), actor_ids: Array.from({ length: 9 }, (_, index) => `NPC-${index}`),
+    max_active_npcs: 8, action_tools: true, workflow: 'integrated', agent_steps: 1, max_calls_per_turn: 25 }, { hostMode: 'rpg' })
+  assert.match(text(f.root), /Minimum request budget: 24,/)
+  const rounds = descendants(f.root).find(node => node.props?.name === 'npc-agent-tool-rounds')
+  rounds.props.onChange({ target: { value: '2' } })
+  await nextTick()
+  assert.match(text(f.root), /Minimum request budget: 48,/)
+  assert.equal(f.value.value.max_calls_per_turn, 25)
 })

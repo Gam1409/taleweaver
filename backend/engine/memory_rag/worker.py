@@ -310,9 +310,13 @@ async def _maybe_observer(enabled: bool, claim: Claim, user: User, state: Sessio
     from backend.engine.chpm.control_settings import read
     from backend.engine.chpm.state import KEY
 
+    if not enabled:
+        return False
+    settings = read((getattr(state, "entity_states", None) or {}).get(KEY))
     if (
-        not enabled
-        or not read((getattr(state, "entity_states", None) or {}).get(KEY)).semantic_memory
+        not settings.semantic_memory
+        or settings.mode != "live"
+        or settings.control_scope != "dialogue"
     ):
         return False
     from backend.engine.chpm.semantic_index import index_batch

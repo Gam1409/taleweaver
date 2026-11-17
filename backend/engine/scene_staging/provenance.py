@@ -1,5 +1,6 @@
 """Bind extracted facts to a narration revision and retract replacements."""
 
+from collections.abc import Callable
 from copy import deepcopy
 from datetime import datetime, timezone
 from typing import Any
@@ -44,6 +45,25 @@ def _unconfirm(data: dict, actor_ids: set[str]) -> None:
         data["status"] = "unconfirmed"
 
 
+def _prune_actor(actor: dict, invalid: Callable[[dict], bool]) -> bool:
+    affected = [
+        field
+        for field in ("posture", "placement", "command")
+        if isinstance(actor.get(field), dict) and invalid(actor[field])
+    ]
+    for field in affected:
+        actor.pop(field)
+    return bool(affected) and not _actor_facts(actor)
+
+
+def _prune(data: dict, invalid: Callable[[dict], bool]) -> None:
+    """Sources own individual fields; an unrelated fact can retain the actor."""
+    removed = {
+        actor_id for actor_id, actor in _actors(data).items() if _prune_actor(actor, invalid)
+    }
+    _unconfirm(data, removed)
+
+
 def stamp(state: Any, message: Any) -> None:
     data = deepcopy((state.entity_states or {}).get(KEY))
     if not isinstance(data, dict) or data.get("source_hash") != digest(message.content):
@@ -68,17 +88,12 @@ def retract(state: Any, message_id: str) -> None:
     data = deepcopy((state.entity_states or {}).get(KEY))
     if not isinstance(data, dict):
         return
-    affected = {
-        actor_id
-        for actor_id, actor in _actors(data).items()
-        if any(
-            not fact.get("source_message_id") or fact.get("source_message_id") == message_id
-            for fact in _actor_facts(actor)
-        )
-    }
     if not data.get("source_message_id") or data.get("source_message_id") == message_id:
         _remove_frame(data)
-    _unconfirm(data, affected)
+    _prune(
+        data,
+        lambda fact: not fact.get("source_message_id") or fact["source_message_id"] == message_id,
+    )
     state.entity_states = {**state.entity_states, KEY: data}
 
 
@@ -87,12 +102,7 @@ def remap(entity_states: dict, message_ids: dict[str, str]) -> dict:
     data = result.get(KEY)
     if not isinstance(data, dict):
         return result
-    affected = {
-        actor_id
-        for actor_id, actor in _actors(data).items()
-        if any(fact.get("source_message_id") not in message_ids for fact in _actor_facts(actor))
-    }
-    _unconfirm(data, affected)
+    _prune(data, lambda fact: fact.get("source_message_id") not in message_ids)
     for source in _facts(data):
         source["source_message_id"] = message_ids[source["source_message_id"]]
     source_id = message_ids.get(data.get("source_message_id", ""))

@@ -86,3 +86,29 @@ def context_fields(supplied: dict, observer_id: str) -> dict:
     if not isinstance(view, dict) or view.get("actor_id") != observer_id:
         raise ChpmError("Authored capability knowledge belongs to another observer.")
     return {KEY: deepcopy(view)}
+
+
+def lookup_fields(supplied: dict, observer_id: str) -> dict:
+    """Keep exact self-knowledge and warnings, without repeating explanatory/default metadata."""
+    selected = context_fields(supplied, observer_id)
+    if not selected:
+        return {}
+    view = selected[KEY]
+    compact = {
+        key: view[key]
+        for key in ("actor_id", "description", "catalog_status", "mechanical_execution")
+        if key in view
+    }
+    compact.update(
+        {
+            key: view[key]
+            for key in ("description_omitted_characters", "omitted_abilities")
+            if view.get(key)
+        }
+    )
+    if view.get("abilities"):
+        compact["abilities"] = [
+            {key: value for key, value in item.items() if key != "omitted_characters" or value}
+            for item in view["abilities"]
+        ]
+    return {KEY: compact}

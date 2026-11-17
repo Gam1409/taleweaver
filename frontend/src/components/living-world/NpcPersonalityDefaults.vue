@@ -31,7 +31,7 @@ const minimum = computed(() =>
   draft.value.mode === 'off'
     ? 0
     : isCombatControl.value
-      ? Math.min(draft.value.actor_ids.length, draft.value.max_active_npcs) * (draft.value.agent_steps ?? 0)
+      ? 3 * Math.min(draft.value.actor_ids.length, draft.value.max_active_npcs) * (draft.value.agent_steps ?? 0)
     : Math.min(draft.value.actor_ids.length, draft.value.max_active_npcs) *
         (1 + (draft.value.mode === 'live' ? (draft.value.agent_steps ?? 0) : 0)) +
       (draft.value.mode === 'live' ? 5 : 1)
@@ -215,7 +215,7 @@ function selectActor(id: string, selected: boolean) {
           <span v-if="isCombatControl" class="mt-2 block text-slate-400">Choose JSON compatibility for a server without native tools. Both modes keep the same ability catalog and request limits.</span>
           <span v-else class="mt-2 block text-slate-400">Choose JSON compatibility for a server without native tools. Both modes keep the same private notebook and request limits; uncertain requests are never automatically repeated.</span>
         </label>
-        <p v-if="isCombatControl && draft.mode === 'live'" class="mt-3 text-xs text-slate-400">Each round allows one request to choose an available ability or keep standard combat AI. Invalid choices can be corrected within remaining rounds; the model can finish early.</p>
+        <p v-if="isCombatControl && draft.mode === 'live'" class="mt-3 text-xs text-slate-400">Each tool round allows one request per NPC combat turn to choose an available ability or keep standard combat AI. Invalid choices can be corrected within remaining rounds; the model can finish early.</p>
         <p v-else-if="draft.mode === 'live'" class="mt-3 text-xs text-slate-400">
           Each round adds one model request per active NPC and up to two local tool operations.
           Tools read this NPC's witnessed history and host observations; enabled notebooks also allow
@@ -228,7 +228,7 @@ function selectActor(id: string, selected: boolean) {
           class="mt-4 text-xs"
           :class="draft.max_calls_per_turn < minimum ? 'text-amber-200' : 'text-slate-400'"
         >
-          Minimum request budget: {{ minimum }}<span v-if="isCombatControl">, covering selected active NPCs multiplied by tool rounds. Unused rounds are not spent.</span><span v-else>, including repair reserve.</span> Ordinary narration is
+          Minimum request budget: {{ minimum }}<span v-if="isCombatControl">, reserving up to three combat turns per selected active NPC per player command, multiplied by tool rounds. Unused turns and rounds are not spent.</span><span v-else>, including repair reserve.</span> Ordinary narration is
           additional. Several active NPCs can take minutes on local models.
         </p>
       </details>

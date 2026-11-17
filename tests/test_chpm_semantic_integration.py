@@ -16,6 +16,7 @@ from backend.engine.memory_rag.scheduling import IdleScheduler
 from backend.engine.memory_rag.settings import embedding_signature, read_settings
 from backend.engine.memory_rag.store import LanceMemoryStore, Scope
 from backend.engine.memory_rag.worker import Claim
+from backend.models.adventure_template import AdventureTemplate
 from backend.models.chat import ChatMessage
 from backend.models.game_session import GameSession
 from backend.models.memory_rag import MemoryIndexState
@@ -51,6 +52,8 @@ async def semantic_world(portrait_world, tmp_path, monkeypatch):
     monkeypatch.setattr(semantic_recall, "embed_texts", embed)
     async with TestSessionLocal() as db:
         session = await db.get(GameSession, "portrait-session")
+        template = await db.get(AdventureTemplate, session.template_id)
+        template.rule_enforcement_mode = "vn"
         owner = session.user_id
         user = await db.get(User, owner)
         user.llm_settings = {

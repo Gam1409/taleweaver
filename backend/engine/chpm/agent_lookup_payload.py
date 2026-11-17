@@ -24,8 +24,12 @@ def build(
     facts = host_observations.previous(mind)
     return {
         "observer_id": mind.genesis.scope.observer_id,
-        "identity": mind.genesis.identity.model_dump(mode="json"),
-        **authored_capabilities.context_fields(supplied, mind.genesis.scope.observer_id),
+        # Lookup tools do not consume identity revision hashes or implicit schema defaults.
+        # Canonical identity and the complete final decision context remain unchanged.
+        "identity": mind.genesis.identity.model_dump(
+            mode="json", exclude_defaults=True, exclude={"source_revision"}
+        ),
+        **authored_capabilities.lookup_fields(supplied, mind.genesis.scope.observer_id),
         "observation": observation.model_dump(),
         "current_state": {
             key: value

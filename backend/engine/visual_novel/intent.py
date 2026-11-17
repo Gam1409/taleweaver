@@ -11,6 +11,7 @@ from backend.engine.clothing.actions import CLOTHING_PROMPT, GarmentCreation, Wa
 from backend.engine.clothing.context import actor_records, build_clothing_context
 from backend.engine.llm_intents import ChatProgressionIntent
 from backend.engine.memory_rag.prompts import recall_block, recall_enabled
+from backend.engine.npc_actions import prepass
 from backend.engine.npc_presence import PRESENCE_INSTRUCTION, presence_context
 from backend.engine.physical_conditions.presentation import context as physical_context
 from backend.engine.physical_conditions.presentation import targets_from_actors
@@ -83,7 +84,13 @@ VNEntityUpdate = create_model(
     __config__=ConfigDict(extra="ignore"),
     **_fields(WorldEntityUpdate, _ENTITY_FIELDS),
     inventory=(GenericAlias(list, VNInventoryItem) | None, None),
-    movement_source=(SourceReference, None),
+    movement_source=(
+        SourceReference,
+        Field(
+            default=None,
+            description="Supplied source for NPC physical updates. When npc_command_control is supplied, portable OBJECT placements also require a current_player_action resolved_external_effect source; an NPC request is not a completed player effect.",
+        ),
+    ),
 )
 VNProgressionIntent = create_model(
     "VNProgressionIntent",
@@ -205,6 +212,10 @@ story from resolved facts; no prose draft is requested here. Leave uncertain cha
 )
 
 
+def progression_prompt(state: Any) -> str:
+    return VN_PROGRESSION_PROMPT + prepass.instructions(state)
+
+
 def to_chat_progression_intent(intent: BaseModel | dict[str, Any]) -> ChatProgressionIntent:
     """Revalidate even mocked/legacy responses before passing the full builder its defaults."""
     raw = intent.model_dump(exclude_none=True) if isinstance(intent, BaseModel) else intent
@@ -286,6 +297,8 @@ def build_progression_context(
         "historical_recall_untrusted": recall_block(manager, "vn_continuity"),
         "story_direction": direction_context(manager, entities or [], exits),
     }
+    if control := prepass.context(state):
+        payload["npc_command_control"] = control
     return "CURRENT STATE (internal continuity data):\n" + json.dumps(
         payload, ensure_ascii=False, separators=(",", ":")
     )

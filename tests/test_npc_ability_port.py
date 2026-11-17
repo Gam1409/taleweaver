@@ -81,7 +81,7 @@ def settings(protocol="native", **changes):
         action_tools=True,
         agent_steps=3,
         tool_protocol=protocol,
-        **changes,
+        **{"max_calls_per_turn": 9, **changes},
     )
 
 
@@ -254,15 +254,15 @@ async def test_stale_recovery_flags_cannot_replace_actual_durable_backup(combat_
 
 async def test_shared_command_budget_applies_across_selection_frames(combat_world):
     model = ScriptModel(turn(call()), turn(call(identifier="call_2")))
-    usage = Usage(calls=2)
+    usage = Usage(calls=8)
     combat, selector = await bound(
-        combat_world, model, usage=usage, configured=settings(max_calls_per_turn=3)
+        combat_world, model, usage=usage, configured=settings(max_calls_per_turn=9)
     )
     await selector(await prepare(combat_world.manager.combat, combat, "GUARD"))
     combat["round"] = 2
     with pytest.raises(RecoverableChpmError, match="budget exhausted"):
         await selector(await prepare(combat_world.manager.combat, combat, "GUARD"))
-    assert len(model.calls) == 1 and usage.calls == 3
+    assert len(model.calls) == 1 and usage.calls == 9
 
 
 @pytest.mark.parametrize("violation", ["recovery", "scope", "vn", "actor"])

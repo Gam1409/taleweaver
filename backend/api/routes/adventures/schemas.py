@@ -5,6 +5,8 @@ from pydantic import AliasChoices, AliasPath, BaseModel, Field, field_validator,
 
 from backend.core.content_language import normalize_language
 from backend.engine.blueprint.brief import WorldBrief
+from backend.engine.chpm.schema import Settings as NpcPersonalitySettings
+from backend.engine.chpm.schema import SettingsFields as NpcPersonalityInput
 from backend.engine.chpm.template_settings import Defaults as NpcPersonalityDefaults
 from backend.engine.chpm.template_settings import ensure_compatible
 from backend.engine.chpm.template_settings import stored_defaults as personality_defaults
@@ -332,7 +334,7 @@ class AdventureTemplateResponse(BaseModel):
     """Full adventure details returned to the client."""
 
     living_world_settings: Optional[LivingWorldSettings] = None
-    npc_personality_settings: Optional[NpcPersonalityDefaults] = None
+    npc_personality_settings: Optional[NpcPersonalitySettings] = None
 
     id: str
     title: str
@@ -673,7 +675,7 @@ class AdventureTemplateUpdate(BaseModel):
     """Payload for partial updates to an adventure template."""
 
     living_world_settings: Optional[LivingWorldSettings] = None
-    npc_personality_settings: Optional[NpcPersonalityDefaults] = None
+    npc_personality_settings: Optional[NpcPersonalityInput] = None
 
     detailed_clothing: Optional[bool] = None
     nsfw_enabled: Optional[bool] = None

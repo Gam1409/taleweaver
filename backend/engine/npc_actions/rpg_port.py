@@ -8,7 +8,7 @@ from typing import Any
 
 from backend.core.game_modes import mode_policy
 from backend.core.llm_tool_turn import ToolCall
-from backend.engine.chpm import agent_native, inference, json_contract
+from backend.engine.chpm import agent_native, capacity, inference, json_contract
 from backend.engine.chpm.agent_limits import MAX_AGENT_ROUNDS, MAX_TOOL_ARGUMENT_CHARS
 from backend.engine.chpm.errors import RecoverableChpmError
 from backend.engine.chpm.schema import Settings, Usage
@@ -257,6 +257,7 @@ def make_selector(
     async def select(turn: AbilityTurn) -> Choice | None:
         nonlocal llm
         _check_scope(manager, configured, turn)
+        capacity.ensure_combat_budget(configured)
         if turn.frame in consumed:
             raise RecoverableChpmError("This combat selection frame has already been used.")
         consumed.add(turn.frame)

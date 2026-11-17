@@ -44,10 +44,15 @@ def bind(manager: Any, command: str) -> None:
         return
     usage = Usage(workflow="integrated")
     selector = make_selector(manager, settings, usage=usage)
+    admitted: set[str] = set()
 
     async def choose(turn: Any) -> Any:
         if not any(row.get("available") for row in turn.context["abilities"]):
             return None
+        actor_id = turn.frame.actor_id
+        if actor_id not in admitted and len(admitted) >= settings.max_active_npcs:
+            return None
+        admitted.add(actor_id)
         token = performance.actor_id.set(turn.frame.actor_id)
         try:
             result = await selector(turn)
@@ -70,7 +75,7 @@ def bind(manager: Any, command: str) -> None:
                 usage=usage.model_dump(mode="json"),
             )
 
-    manager.npc_ability_actor_ids = set(sorted(settings.actor_ids)[: settings.max_active_npcs])
+    manager.npc_ability_actor_ids = set(settings.actor_ids)
     manager.npc_ability_selector = choose
     manager._npc_ability_usage = usage
 

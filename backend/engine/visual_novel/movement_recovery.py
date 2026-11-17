@@ -18,6 +18,7 @@ from backend.engine.mutation_targets import TargetIndex
 from backend.engine.narrated_movement.context import context
 from backend.engine.narrated_movement.schema import MAX_MOVEMENTS, MovementProposal
 from backend.engine.narrated_movement.validation import validate
+from backend.engine.npc_actions.prepass import resolve_placements
 from backend.engine.visual_novel.movement_sources import current_input, resolve
 from backend.models.chat import ChatMessage
 from backend.models.world_entity import WorldScene
@@ -245,7 +246,7 @@ async def resolve_event(manager: Any, event: Any) -> list[str]:
     )
     before = await context(manager, rows, exit_updates=event.updated_exits or [])
     destinations = await _destinations(manager)
-    rejected = []
+    rejected = await resolve_placements(manager, event, rows, before)
     actors = sorted(set(moves) | set(updates) | set(raw_moves) | set(raw_updates))
     for actor in actors:
         try:
@@ -273,7 +274,7 @@ async def resolve_event(manager: Any, event: Any) -> list[str]:
     if not rejected:
         return []
     manager._vn_movement_resolution = (
-        "MOVEMENT REVIEW: The following NPC physical proposals were not applied: "
+        "MOVEMENT REVIEW: The following physical proposals were not applied: "
         + json.dumps(rejected)
         + ". Current canonical locations and presence are authoritative. Unconfirmed is not a "
         "fictional failure: do not invent a failed attempt, obstacle, departure or return. "

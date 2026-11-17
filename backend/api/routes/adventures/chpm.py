@@ -15,7 +15,7 @@ from backend.core.auth import get_current_user
 from backend.core.database import get_db
 from backend.engine.chpm import capacity, control_settings, failure_report
 from backend.engine.chpm.continuation import public_status
-from backend.engine.chpm.schema import Contract, Settings, Usage
+from backend.engine.chpm.schema import Contract, Settings, SettingsFields, Usage
 from backend.engine.chpm.state import KEY, load
 from backend.engine.chpm.template_settings import settings_for_mode
 from backend.engine.chpm.version import VERSION
@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 
 
 class Change(Contract):
-    settings: Settings
+    settings: SettingsFields
     expected_revision: int = Field(ge=0, strict=True)
 
 
@@ -116,15 +116,15 @@ async def patch(
     mode = await session_mode(db, state)
     _validate_mode(mode, payload.settings)
     try:
-        payload.settings = settings_for_mode(payload.settings, mode)
+        settings = settings_for_mode(payload.settings.model_dump(), mode)
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
     current = load(state)
     if current.revision != payload.expected_revision:
         raise HTTPException(409, "CHPM settings or state changed. Reload before saving.")
-    if current.settings == payload.settings:
+    await _validate_change(db, state, settings)
+    if current.settings == settings:
         return await _view(db, state, user)
-    await _validate_change(db, state, payload.settings)
     replay = await db.get(TurnReplay, game_id)
     if replay is not None and replay.status in {"executing", "replaying"}:
         raise HTTPException(409, "Recover the unfinished turn before changing CHPM settings.")
@@ -133,13 +133,14 @@ async def patch(
         current.settings.mode,
         current.settings.actor_ids,
     ) != (
-        payload.settings.control_scope,
-        payload.settings.mode,
-        payload.settings.actor_ids,
+        settings.control_scope,
+        settings.mode,
+        settings.actor_ids,
     )
     warm_semantic = (
-        payload.settings.semantic_memory
-        and payload.settings.mode == "live"
+        settings.control_scope == "dialogue"
+        and settings.semantic_memory
+        and settings.mode == "live"
         and (not current.settings.semantic_memory or roster_changed)
     )
     if roster_changed:
@@ -151,7 +152,7 @@ async def patch(
     current.recovery.cooldown_remaining = 0
     current.recovery.consecutive_failures = 0
     previous_input_limit = current.settings.max_input_chars
-    current.settings = payload.settings
+    current.settings = settings
     current.revision += 1
     value = current.model_dump(mode="json")
     changed = await db.execute(
@@ -160,9 +161,9 @@ async def patch(
         .values(
             entity_states=configure_actions(
                 {**(state.entity_states or {}), KEY: value},
-                enabled=payload.settings.control_scope == "dialogue"
-                and payload.settings.action_tools
-                and payload.settings.mode == "live",
+                enabled=settings.control_scope == "dialogue"
+                and settings.action_tools
+                and settings.mode == "live",
             )
         )
         .returning(SessionState.id)
@@ -176,12 +177,12 @@ async def patch(
 
         await mark_dirty(db, game_id, user.id, state.template_id)
     await db.commit()
-    if payload.settings.max_input_chars > previous_input_limit:
+    if settings.max_input_chars > previous_input_limit:
         logger.warning(
             "CHPM input budget increased: %d -> %d characters; workflow=%s",
             previous_input_limit,
-            payload.settings.max_input_chars,
-            payload.settings.workflow,
+            settings.max_input_chars,
+            settings.workflow,
         )
     if warm_semantic:
         from backend.engine.memory_rag.worker import schedule
@@ -200,7 +201,10 @@ async def _validate_change(db: AsyncSession, state: SessionState, settings: Sett
     if settings.max_calls_per_turn < required:
         raise HTTPException(
             422,
-            f"The request budget must be at least {required}: perception, selected NPCs, "
+            f"The request budget must be at least {required} to cover selected NPC combat turns "
+            "and their tool rounds."
+            if settings.control_scope == "combat_actions"
+            else f"The request budget must be at least {required}: perception, selected NPCs, "
             "and in live mode agent rounds, proposal retry, review, narration repair and repeat review.",
         )
     ids = {row["id"] for row in await _characters(db, state)}
@@ -223,7 +227,7 @@ async def _validate_change(db: AsyncSession, state: SessionState, settings: Sett
         )
 
 
-def _validate_mode(mode: str, settings: Settings) -> None:
+def _validate_mode(mode: str, settings: SettingsFields) -> None:
     if settings.mode == "off" or mode == "vn":
         return
     if mode == "rpg" and settings.mode == "live" and settings.action_tools:

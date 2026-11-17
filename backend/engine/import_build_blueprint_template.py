@@ -26,6 +26,7 @@ def build_blueprint_template(
             living_world=adv_meta.get(
                 "living_world_settings", manifest.get("living_world_settings")
             ),
+            preserve_saved=True,
         ),
         living_world_settings=stored_defaults(
             adv_meta.get("living_world_settings", manifest.get("living_world_settings"))
