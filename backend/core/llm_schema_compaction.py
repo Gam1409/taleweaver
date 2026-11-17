@@ -186,7 +186,7 @@ def share_schema(schema: dict) -> dict:
             key = _signature(node)
             _, count = counts.get(key, (node, 0))
             counts[key] = node, count + 1
-        name = f"__shared_{index}"
+        name = f"_s{index:x}"
         while name in result.get("$defs", {}):
             name += "_"
         reference = {"$ref": f"#/$defs/{name}"}

@@ -29,10 +29,11 @@ def repeated_schema():
     }
 
 
-def test_exact_subtree_sharing_preserves_validation_and_existing_definitions():
+@pytest.mark.parametrize("reserved_name", ["__shared_0", "_s0"])
+def test_exact_subtree_sharing_preserves_validation_and_existing_definitions(reserved_name):
     repeated = repeated_schema()
     schema = {
-        "$defs": {"__shared_0": {"type": "null"}, "a/~": repeated},
+        "$defs": {reserved_name: {"type": "null"}, "a/~": repeated},
         "type": "object",
         "properties": {
             "": repeated,
@@ -47,8 +48,9 @@ def test_exact_subtree_sharing_preserves_validation_and_existing_definitions():
     compacted = share_schema(schema)
     Draft202012Validator.check_schema(compacted)
     assert len(json.dumps(compacted)) < len(json.dumps(schema))
-    assert compacted["$defs"]["__shared_0"] == {"type": "null"}
-    assert "__shared_0_" in compacted["$defs"]
+    assert compacted["$defs"][reserved_name] == {"type": "null"}
+    generated = set(compacted["$defs"]) - set(schema["$defs"])
+    assert ("_s0_" if reserved_name == "_s0" else "_s0") in generated
     assert schema == original
     witness = {"": {"code": "OK"}, "a/~": {"code": "OK"}, "by_ref": {"code": "OK"}}
     witnesses = [
@@ -146,6 +148,7 @@ def test_literal_json_and_schema_property_names_are_opaque_to_both_compactors():
         "$id": "literal identity",
         "$ref": "not a schema reference",
         "type": "object",
+        "_s0": {"__shared_0": "Literal keys must not be renamed."},
         "properties": {"title": {"title": "Nested literal title."}},
     }
     schema = {
