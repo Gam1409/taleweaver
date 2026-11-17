@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useChpmSettings } from '@/composables/useChpmSettings'
+import { NPC_TOOL_PROFILES, NPC_TOOL_PROFILE_REQUIREMENTS, NPC_TOOL_PROTOCOL_HELP, findNpcToolProfile } from '@/utils/npcToolProfiles'
+import type { NpcToolProfile } from '@/utils/npcToolProfiles'
 
 const props = defineProps<{ sessionId: string }>()
-const { status, draft, busy, error, minimumCalls, budgetWarning, historyWarnings, selectStandard, setNotebookEnabled, setActionToolsEnabled, setWorkflow, load, save } = useChpmSettings(() => props.sessionId)
+const { status, draft, busy, error, minimumCalls, budgetWarning, historyWarnings, selectStandard, setNotebookEnabled, setToolProfile, setActionToolsEnabled, setWorkflow, load, save } = useChpmSettings(() => props.sessionId)
+const selectedToolProfile = computed(() => findNpcToolProfile(draft.value?.tool_profile))
 const isCombatControl = computed(() => status.value?.host_mode === 'rpg')
 const lastFailure = computed(() => status.value?.last_analysis_failure ?? status.value?.last_proposal_failure)
 const unlistedActors = computed(() => draft.value?.actor_ids.filter(id => !status.value?.characters.some(actor => actor.id === id)) ?? [])
@@ -110,15 +113,24 @@ defineExpose({ save })
           <span v-else class="mt-2 block text-slate-400">For VN sessions, NPCs choose their own actions; the engine validates changes to the world. The player's choices stay theirs. Enabling selects Integrated and at least one tool round.</span>
         </label>
         <p v-if="isCombatControl && (!draft.action_tools || draft.workflow !== 'integrated' || !draft.agent_steps)" role="alert" class="text-xs text-amber-200">Enable combat action control before saving, or select Standard.</p>
-        <label v-if="draft.mode === 'live' && (draft.notebook_enabled || draft.workflow === 'integrated')" class="block text-xs text-slate-300">{{ draft.action_tools ? 'Agent tool compatibility' : 'Memory tool compatibility' }}
-          <select name="npc-memory-tool-protocol" :value="draft.tool_protocol ?? 'auto'" class="mt-1 w-full rounded-lg border border-slate-600 bg-slate-800 p-2" @change="draft.tool_protocol = ($event.target as HTMLSelectElement).value as 'auto' | 'native' | 'json'">
-            <option value="auto">Automatic</option>
-            <option value="native">Native function calls</option>
-            <option value="json">JSON compatibility</option>
-          </select>
-          <span v-if="isCombatControl" class="mt-2 block text-slate-400">Automatic uses native functions when supported. Choose JSON compatibility for a server without native tools. Both use the same ability catalog, limits and request budget.</span>
-          <span v-else class="mt-2 block text-slate-400">Automatic uses native functions when the provider adapter supports them. Choose JSON compatibility for a server without native tools. Both use the same private notebook, limits and request budget. An uncertain request is never automatically repeated.</span>
-        </label>
+        <div v-if="draft.mode === 'live' && ((draft.agent_steps ?? 0) > 0 || draft.notebook_enabled || draft.workflow === 'integrated')" class="grid gap-4 sm:grid-cols-2">
+          <label class="block text-xs text-slate-300">{{ draft.action_tools ? 'Agent tool compatibility' : 'Memory tool compatibility' }}
+            <select name="npc-memory-tool-protocol" :value="draft.tool_protocol ?? 'auto'" class="mt-1 w-full rounded-lg border border-slate-600 bg-slate-800 p-2" @change="draft.tool_protocol = ($event.target as HTMLSelectElement).value as 'auto' | 'native' | 'json'">
+              <option value="auto">Automatic</option>
+              <option value="native">Native function calls</option>
+              <option value="json">JSON compatibility</option>
+            </select>
+            <span v-if="isCombatControl" class="mt-2 block text-slate-400">{{ NPC_TOOL_PROTOCOL_HELP }} Both use the same ability catalog, limits and request budget.</span>
+            <span v-else class="mt-2 block text-slate-400">{{ NPC_TOOL_PROTOCOL_HELP }} Both use the same private notebook, limits and request budget. An uncertain request is never automatically repeated.</span>
+          </label>
+          <label class="block text-xs text-slate-300">Tool-calling profile
+            <select name="npc-tool-profile" :value="draft.tool_profile ?? 'auto'" aria-describedby="npc-session-tool-profile-help" class="mt-1 w-full rounded-lg border border-slate-600 bg-slate-800 p-2" @change="setToolProfile(($event.target as HTMLSelectElement).value as NpcToolProfile)">
+              <option v-if="draft.tool_profile && !selectedToolProfile" :value="draft.tool_profile" disabled>Saved unsupported profile: {{ draft.tool_profile }}</option>
+              <option v-for="profile in NPC_TOOL_PROFILES" :key="profile.id" :value="profile.id">{{ profile.label }}</option>
+            </select>
+            <span id="npc-session-tool-profile-help" class="mt-2 block text-slate-400">{{ selectedToolProfile?.help ?? 'Choose a supported profile before saving.' }} {{ NPC_TOOL_PROFILE_REQUIREMENTS }}</span>
+          </label>
+        </div>
         <p v-if="budgetWarning" role="alert" class="text-xs text-amber-200">Increase Requests per turn to at least {{ minimumCalls }} before saving. <span v-if="isCombatControl">This covers the selected NPCs and their combat tool rounds.</span><span v-else>Enabled mode reserves agent rounds, one shared proposal retry plus two requests for narration repair and repeat review.</span></p>
         <details class="rounded-lg border border-slate-700 p-3">
           <summary class="cursor-pointer text-xs text-slate-300">Request limits</summary>

@@ -39,11 +39,13 @@ Available tools:
 | `inspect_beliefs` | subject actor ID | Up to two recent own beliefs about that person, marked tentative/challenged and subjective; never that person's private thoughts |
 | `read_belief_basis` | belief ID returned by inspection in this investigation | Up to two recent interpretations, each with up to two exact source quotes, preserving support/challenge of the proposition |
 
-Staged without notebooks retains its legacy JSON lookup planner. With notebooks,
-Staged offers the selected native/JSON port; Integrated can use either port with
-or without notebooks. **Automatic** native support depends on the provider adapter
-and server chat template; unsupported native tools are not retried over another
-protocol after uncertain dispatch.
+With the Auto tool profile, Staged without notebooks retains its legacy JSON
+lookup planner. Non-Auto profiles use the selected native/JSON port for Staged
+lookup even without notebooks. With notebooks, Staged also uses that port;
+Integrated can use either port with or without notebooks. The
+[tool-calling profile](npc-tool-profiles.md) and compatibility selection determine
+the port before dispatch. Native support also depends on the provider adapter,
+runtime and chat template; uncertain requests are not retried over another protocol.
 
 `inspect_entity` is available without private notebooks. Its bounded index and
 snapshot freshness contract are described in [observable state tools](npc-observable-state.md).

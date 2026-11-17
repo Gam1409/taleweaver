@@ -19,6 +19,60 @@ const state = (revision = 0) => ({
   characters: [{ id: 'NPC', name: 'Lina' }], usage: { calls: 0, input_chars: 0, output_chars: 0, repairs: 0, status: 'idle', detail: '' }, trace: [],
 })
 
+test('legacy missing tool profile loads as Auto without making settings dirty or saving', async t => {
+  const methods = []
+  const saved = state()
+  const f = fixture(t, async (_url, options) => {
+    methods.push(options.method)
+    return Response.json(saved)
+  })
+  await tick()
+  assert.equal(f.draft.value.tool_profile, 'auto')
+  assert.equal(f.status.value.settings.tool_profile, 'auto')
+  assert.equal(saved.settings.tool_profile, undefined)
+  assert.equal(f.dirty.value, false)
+  assert.equal(await f.save(), true)
+  assert.deepEqual(methods, ['GET'])
+})
+
+for (const profile of ['auto', 'anthropic', 'openai', 'mistral', 'gemma', 'deepseek', 'qwen']) {
+  test(`tool profile ${profile} persists independently of saved protocol and dormant preferences`, async t => {
+    const saved = state(7)
+    Object.assign(saved.settings, {
+      tool_profile: 'openai', tool_protocol: 'json', workflow: 'integrated',
+      notebook_enabled: true, semantic_memory: true, agent_steps: 3,
+      max_calls_per_turn: 25, max_input_chars: 64000, future_preference: 'retained',
+    })
+    const f = fixture(t, async (_url, options) => {
+      if (options.method === 'GET') return Response.json(saved)
+      const body = JSON.parse(options.body)
+      assert.equal(body.expected_revision, 7)
+      assert.deepEqual(body.settings, { ...saved.settings, tool_profile: profile })
+      return Response.json({ ...saved, revision: 8, settings: body.settings })
+    })
+    await tick()
+    assert.equal(f.draft.value.tool_profile, 'openai')
+    const budget = f.minimumCalls.value
+    f.setToolProfile(profile)
+    assert.equal(f.minimumCalls.value, budget)
+    assert.equal(f.status.value.settings.tool_profile, 'openai')
+    assert.equal(await f.save(), true)
+    assert.equal(f.draft.value.tool_profile, profile)
+    assert.equal(f.dirty.value, false)
+  })
+}
+
+test('unrecognized saved profile preferences are retained without a silent rewrite or save loop', async t => {
+  const saved = state(), methods = []
+  saved.settings.tool_profile = 'future-profile'
+  const f = fixture(t, async (_url, options) => { methods.push(options.method); return Response.json(saved) })
+  await tick()
+  assert.equal(f.draft.value.tool_profile, 'future-profile')
+  assert.equal(f.dirty.value, false)
+  assert.equal(await f.save(), true)
+  assert.deepEqual(methods, ['GET'])
+})
+
 test('twenty-person roster budgets active participants and explicitly supports all present', async t => {
   const f = fixture(t, async () => new Response(JSON.stringify(state())))
   await tick()

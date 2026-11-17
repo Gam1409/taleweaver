@@ -13,6 +13,10 @@ in **Session settings → NPC Personality → Action tools**. Enabling actions s
 Integrated and at least one tool round without enabling private notebooks.
 Adventure defaults apply only when creating a session.
 
+The same [tool-calling profile](npc-tool-profiles.md) applies to VN action rounds
+and RPG ability selection. Profile and native/JSON compatibility are independent
+controls; neither grants new actions or changes their canonical publication rules.
+
 The host derives the control scope from the actual game mode. VN uses `dialogue`,
 with the full existing psychology and narration review. RPG uses `combat_actions`
 for authored ability choices during actual combat initiative. It does not run VN

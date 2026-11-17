@@ -4,11 +4,13 @@ import { readFileSync } from 'node:fs'
 import { createRenderer, h, nextTick, ref } from 'vue'
 import { compileScript, parse } from '@vue/compiler-sfc'
 import ts from 'typescript'
+import { npcToolProfilesModuleUrl } from './npcToolProfilesModule.mjs'
 
 const { descriptor } = parse(readFileSync(new URL('../src/components/living-world/NpcPersonalityDefaults.vue', import.meta.url), 'utf8'))
 const compiled = ts.transpileModule(compileScript(descriptor, { id: 'npc-personality-defaults', inlineTemplate: true }).content, {
   compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext },
 }).outputText.replace(/from ['"]vue['"]/g, `from '${import.meta.resolve('vue')}'`)
+  .replace(/from ['"]@\/utils\/npcToolProfiles['"]/g, `from '${npcToolProfilesModuleUrl}'`)
 const component = (await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`)).default
 const descendants = node => [node, ...(node.children ?? []).flatMap(descendants)]
 const text = node => [node.text ?? '', ...(node.children ?? []).map(text)].join('')
@@ -42,6 +44,26 @@ function fixture(t, initial = settings(), props = {}) {
   return { value, changes, root, checkbox }
 }
 
+test('template tool profiles offer seven choices, emit only explicit changes and preserve other preferences', async t => {
+  const original = { ...settings(), workflow: 'integrated', tool_protocol: 'native',
+    notebook_enabled: true, semantic_memory: true, agent_steps: 3, max_input_chars: 64000,
+    max_calls_per_turn: 25, future_preference: 'retained' }
+  const f = fixture(t, original)
+  const select = () => descendants(f.root).find(node => node.props?.name === 'npc-tool-profile')
+  assert.equal(select()?.props.value, 'auto')
+  assert.deepEqual(select().children.filter(node => node.tag === 'option').map(node => node.props.value),
+    ['auto', 'anthropic', 'openai', 'mistral', 'gemma', 'deepseek', 'qwen'])
+  assert.equal(f.changes.length, 0)
+  for (const profile of ['auto', 'anthropic', 'openai', 'mistral', 'gemma', 'deepseek', 'qwen']) {
+    select().props.onChange({ target: { value: profile } })
+    await nextTick()
+    assert.deepEqual(f.value.value, { ...original, tool_profile: profile })
+    assert.notEqual(f.value.value.actor_ids, original.actor_ids)
+  }
+  assert.equal(f.changes.length, 7)
+  assert.equal(original.tool_profile, undefined)
+})
+
 test('template notebook opt-in emits one draft update with an agent round and unchanged budget', async t => {
   const original = settings(), f = fixture(t, original)
   assert.equal(f.checkbox()?.props.checked, false)
@@ -56,6 +78,21 @@ test('template notebook opt-in emits one draft update with an agent round and un
   assert.match(text(f.root), /16,000,000 UTF-8 bytes/)
   assert.match(text(f.root), /Undo or Chronicles restore/)
   assert.doesNotMatch(text(f.root), /Read-only agent rounds/)
+})
+
+test('template staged lookup-only tools expose the saved profile and change only its explicit preference', async t => {
+  const original = { ...settings(), workflow: 'staged', notebook_enabled: false,
+    action_tools: false, agent_steps: 1, tool_profile: 'gemma', tool_protocol: 'auto' }
+  const f = fixture(t, original)
+  const profile = descendants(f.root).find(node => node.props?.name === 'npc-tool-profile')
+  assert.ok(profile)
+  assert.equal(profile.props.value, 'gemma')
+  assert.equal(f.changes.length, 0)
+  profile.props.onChange({ target: { value: 'qwen' } })
+  await nextTick()
+  assert.equal(f.changes.length, 1)
+  assert.deepEqual(f.value.value, { ...original, tool_profile: 'qwen' })
+  assert.equal(original.tool_profile, 'gemma')
 })
 
 test('template notebook controls retain two agent rounds and keep the off option unavailable', async t => {
@@ -91,6 +128,7 @@ test('new adventure defaults leave notebooks and tool rounds off', async t => {
   assert.equal(f.value.value.notebook_enabled, false)
   assert.equal(f.value.value.action_tools, false)
   assert.equal(f.value.value.agent_steps, 0)
+  assert.equal(f.value.value.tool_profile, 'auto')
   assert.equal(f.checkbox().props.checked, false)
 })
 

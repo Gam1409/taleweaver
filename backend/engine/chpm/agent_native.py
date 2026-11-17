@@ -6,7 +6,13 @@ from hashlib import sha256
 from typing import Any
 
 from backend.core.llm_tool_turn import NativeToolsUnsupportedError, ToolCall, ensure_tools_supported
-from backend.engine.chpm import agent_lookup_payload, inference, offered_tools, tool_feedback
+from backend.engine.chpm import (
+    agent_lookup_payload,
+    inference,
+    offered_tools,
+    tool_feedback,
+    tool_profiles,
+)
 from backend.engine.chpm.agent_limits import MAX_TOOL_ARGUMENT_CHARS
 from backend.engine.chpm.agent_tools import Tools
 from backend.engine.chpm.errors import RecoverableChpmError
@@ -36,7 +42,7 @@ describing calls does not execute them. Stop without calls when ready.
 def select_model(manager: Any, settings: Settings) -> Any | None:
     """Select compatibility before inference; never retry an uncertain native call."""
     llm = inference.model_for(manager, settings.model_role, inference.GameMasterLLM)
-    if settings.tool_protocol == "json":
+    if tool_profiles.prefers_json(settings.tool_profile, settings.tool_protocol):
         from backend.engine.chpm.json_tool_port import JsonToolPort
 
         return JsonToolPort(llm)
@@ -134,7 +140,10 @@ def _audit(
 
 
 def _feedback(
-    messages: list[dict], notebook: NotebookDraft, calls: tuple[ToolCall, ...], results: list[dict]
+    messages: list[dict],
+    notebook: NotebookDraft | None,
+    calls: tuple[ToolCall, ...],
+    results: list[dict],
 ) -> None:
     for call, result in zip(calls, results, strict=True):
         name = canonical_tool_name(call.name)
@@ -147,7 +156,20 @@ def _feedback(
                 "content": json.dumps(feedback, ensure_ascii=False, separators=(",", ":")),
             }
         )
-        notebook.remember_feedback(name, feedback)
+        if notebook is not None:
+            notebook.remember_feedback(name, feedback)
+
+
+def _invalidate_notebook(notebook: NotebookDraft | None, status: str | None = None) -> None:
+    if notebook is None:
+        return
+    notebook.committable = False
+    if status is None:
+        return
+    notebook.remember_feedback(
+        "memory_tools",
+        {"status": status, "message": "No changes from this investigation will be saved."},
+    )
 
 
 async def investigate(
@@ -159,7 +181,7 @@ async def investigate(
     supplied: dict,
     *,
     tools: Tools,
-    notebook: NotebookDraft,
+    notebook: NotebookDraft | None,
     llm: Any | None = None,
 ) -> tuple[Tools, list[dict]]:
     if manager.game_id != observation.session_id or mind.genesis.scope.world_id != manager.game_id:
@@ -188,7 +210,7 @@ async def investigate(
                         {
                             "host_context_update": {
                                 "remaining_rounds": settings.agent_steps - index,
-                                "personal_notebook": notebook.metadata(),
+                                **({"personal_notebook": notebook.metadata()} if notebook else {}),
                             }
                         }
                     ),
@@ -199,14 +221,7 @@ async def investigate(
                 manager, settings, usage, messages, offered_tools.definitions(tools), llm=llm
             )
         except (inference.InvalidResponseError, inference.OutputBudgetError) as exc:
-            notebook.committable = False
-            notebook.remember_feedback(
-                "memory_tools",
-                {
-                    "status": "invalid_response",
-                    "message": "No changes from this investigation will be saved.",
-                },
-            )
+            _invalidate_notebook(notebook, "invalid_response")
             audit.append(
                 {
                     **_audit((), [], [], "invalid_plan", protocol=protocol),
@@ -215,17 +230,10 @@ async def investigate(
             )
             break
         except BaseException:
-            notebook.committable = False
+            _invalidate_notebook(notebook)
             raise
         if not _valid_envelope(turn.calls, seen_ids):
-            notebook.committable = False
-            notebook.remember_feedback(
-                "memory_tools",
-                {
-                    "status": "invalid_call_envelope",
-                    "message": "No changes from this investigation will be saved.",
-                },
-            )
+            _invalidate_notebook(notebook, "invalid_call_envelope")
             audit.append(_audit((), [], [], "invalid_plan", protocol=protocol))
             break
         if not turn.calls:

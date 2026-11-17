@@ -19,6 +19,7 @@ function evaluate(code, dependencies = {}) {
   return module.exports
 }
 const load = (path, dependencies) => evaluate(source(path), dependencies)
+const toolProfiles = load('utils/npcToolProfiles.ts')
 function component(path, dependencies = {}, expose = '') {
   const text = source(path).replace('</script>', `${expose}\n</script>`)
   const { descriptor } = parse(text)
@@ -53,7 +54,7 @@ test('session mode gates notebook controls while legacy Unicode labels remain es
         load() {}, save() {}, selectStandard() {}, setNotebookEnabled() {},
       }
     },
-  } })
+  }, '@/utils/npcToolProfiles': toolProfiles })
   const frame = { setup(_props, { slots }) { return () => h('main', Object.values(slots).flatMap(slot => slot())) } }
   const children = Object.fromEntries([
     'SessionMemorySettings', 'VnNarrationSettings', 'SessionContentSettings', 'DynamicLocationSettings',
@@ -79,8 +80,8 @@ test('session mode gates notebook controls while legacy Unicode labels remain es
 })
 
 test('legacy notebook defaults survive template controls and generic adventure PATCH in every mode', async t => {
-  const original = preferences(), value = ref(original)
-  const defaults = component('components/living-world/NpcPersonalityDefaults.vue', {}, 'defineExpose({ setNotebookEnabled })')
+  const original = { ...preferences(), tool_profile: 'deepseek', tool_protocol: 'json' }, value = ref(original)
+  const defaults = component('components/living-world/NpcPersonalityDefaults.vue', { '@/utils/npcToolProfiles': toolProfiles }, 'defineExpose({ setNotebookEnabled })')
   defaults.render = () => null
   const renderer = createRenderer({
     createElement: () => ({}), createText: () => ({}), createComment: () => ({}),
@@ -111,6 +112,8 @@ test('legacy notebook defaults survive template controls and generic adventure P
     assert.equal(saved.npc_personality_settings.notebook_enabled, true)
     assert.equal(saved.npc_personality_settings.semantic_memory, true)
     assert.equal(saved.npc_personality_settings.npc_concurrency, 2)
+    assert.equal(saved.npc_personality_settings.tool_profile, 'deepseek')
+    assert.equal(saved.npc_personality_settings.tool_protocol, 'json')
   }
   assert.equal(calls.length, 4)
   assert.ok(calls.every(call => call.init.timeoutMs === 60_000 && call.init.method === 'PATCH'))

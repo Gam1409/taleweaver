@@ -6,6 +6,7 @@ import { createSSRApp, h, ref } from 'vue'
 import { renderToString } from '@vue/server-renderer'
 import { parse, compileScript } from '@vue/compiler-sfc'
 import ts from 'typescript'
+import { npcToolProfilesModuleUrl } from './npcToolProfilesModule.mjs'
 
 const source = readFileSync(new URL('../src/components/game/ChpmSettings.vue', import.meta.url), 'utf8')
 const { descriptor } = parse(source)
@@ -13,6 +14,7 @@ const script = compileScript(descriptor, { id: 'chpm-settings', inlineTemplate: 
 const compiled = ts.transpileModule(script, {
   compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext },
 }).outputText.replace(/from ['"]vue['"]/g, `from '${import.meta.resolve('vue')}'`)
+  .replace(/from ['"]@\/utils\/npcToolProfiles['"]/g, `from '${npcToolProfilesModuleUrl}'`)
   .replace(/import .* from ['"]@\/composables\/useChpmSettings['"];?/, 'const useChpmSettings = () => globalThis.__chpmSettingsFixture;')
 const component = (await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`)).default
 
@@ -59,6 +61,22 @@ test('notebook compatibility is selectable without changing the tool round limit
   assert.match(html, /<select name="npc-memory-tool-protocol" value="json"[^>]*>/)
   assert.match(html, /same private notebook, limits and request budget/)
   assert.doesNotMatch(await render(1, [], {}, { notebook_enabled: false }), /Memory tool compatibility/)
+})
+
+test('session tool profile catalog is separate from protocol and explains compatibility requirements', async () => {
+  const html = await render(1, [], {}, { workflow: 'integrated', tool_protocol: 'json', tool_profile: 'qwen' })
+  assert.match(html, /Tool-calling profile/)
+  const profile = html.match(/<select name="npc-tool-profile"[\s\S]*?<\/select>/)?.[0] ?? ''
+  assert.match(profile, /value="qwen"/)
+  assert.deepEqual([...profile.matchAll(/<option value="([^"]+)"/g)].map(match => match[1]),
+    ['auto', 'anthropic', 'openai', 'mistral', 'gemma', 'deepseek', 'qwen'])
+  assert.match(html, /name="npc-memory-tool-protocol" value="json"/)
+  assert.match(html, /Automatic protocol, prefers JSON compatibility/)
+  assert.match(html, /Automatic considers the selected profile and provider support/)
+  assert.match(html, /compatible model and server/)
+  assert.match(html, /Native tools also require a compatible tool-aware chat template/)
+  assert.match(html, /Support varies by model version/)
+  assert.doesNotMatch(await render(1, [], {}, { mode: 'off', tool_profile: 'qwen' }), /npc-tool-profile/)
 })
 
 test('session tools offer a third recovery round and explain its cast budget', async () => {

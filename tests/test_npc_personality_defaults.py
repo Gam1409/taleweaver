@@ -22,15 +22,19 @@ from backend.models.adventure_template import AdventureTemplate
 from backend.models.session_state import SessionState
 from tests.conftest import TestSessionLocal
 from tests.test_chpm_api import chpm_world, portrait_world
+from tests.test_chpm_tool_profiles import PROFILES
 
 __all__ = ["chpm_world", "portrait_world"]
 PATH = "/api/adventures/portrait-template"
 
 
+@pytest.mark.parametrize("profile", ["auto", "gemma"])
 async def test_new_sessions_copy_defaults_while_existing_minds_are_untouched(
-    auth_client, chpm_world
+    auth_client, chpm_world, profile
 ):
-    settings = Settings(mode="live", actor_ids=["NPC_NEW"]).model_dump(mode="json")
+    settings = Settings(mode="live", actor_ids=["NPC_NEW"], tool_profile=profile).model_dump(
+        mode="json"
+    )
     response = await auth_client.patch(PATH, json={"npc_personality_settings": settings})
     assert response.status_code == 200, response.text
     assert response.json()["npc_personality_settings"] == settings
@@ -77,10 +81,13 @@ async def test_invalid_defaults_are_rejected_without_changing_template(
     assert (await auth_client.get(PATH)).json()["npc_personality_settings"] is None
 
 
+@pytest.mark.parametrize("profile", PROFILES)
 async def test_defaults_round_trip_in_each_adventure_bundle_without_private_minds(
-    auth_client, chpm_world
+    auth_client, chpm_world, profile
 ):
-    prefs = Settings(mode="live", actor_ids=["NPC_NEW"]).model_dump(mode="json")
+    prefs = Settings(mode="live", actor_ids=["NPC_NEW"], tool_profile=profile).model_dump(
+        mode="json"
+    )
     assert (
         await auth_client.patch(PATH, json={"npc_personality_settings": prefs})
     ).status_code == 200
@@ -125,6 +132,7 @@ def legacy_defaults(mode="live"):
         semantic_memory=True,
         agent_steps=2,
         tool_protocol="json",
+        tool_profile="qwen",
         memory_limit=17,
         max_calls_per_turn=12,
     ).model_dump(mode="json")

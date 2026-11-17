@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { ChpmSettings } from '@/composables/useChpmSettings'
+import { NPC_TOOL_PROFILES, NPC_TOOL_PROFILE_REQUIREMENTS, NPC_TOOL_PROTOCOL_HELP, findNpcToolProfile } from '@/utils/npcToolProfiles'
+import type { NpcToolProfile } from '@/utils/npcToolProfiles'
 
 const props = defineProps<{
   modelValue?: ChpmSettings | null
@@ -21,11 +23,13 @@ const defaults: ChpmSettings = {
   notebook_enabled: false,
   action_tools: false,
   tool_protocol: 'auto',
+  tool_profile: 'auto',
   workflow: 'staged',
   semantic_memory: false,
   failure_policy: 'continue'
 }
-const draft = computed(() => props.modelValue ?? defaults)
+const draft = computed(() => props.modelValue ? { ...props.modelValue, tool_profile: props.modelValue.tool_profile ?? 'auto' } : defaults)
+const selectedToolProfile = computed(() => findNpcToolProfile(draft.value.tool_profile))
 const isCombatControl = computed(() => props.hostMode === 'rpg')
 const minimum = computed(() =>
   draft.value.mode === 'off'
@@ -206,15 +210,24 @@ function selectActor(id: string, selected: boolean) {
           <span v-else class="mt-2 block text-slate-400">NPCs choose their own actions; the engine validates changes to the world. The player's choices stay theirs. Enabling selects Integrated and at least one tool round.</span>
         </label>
         <p v-if="isCombatControl && (!draft.action_tools || draft.workflow !== 'integrated' || !draft.agent_steps)" role="alert" class="mt-3 text-xs text-amber-200">Enable combat action control before saving, or select Standard.</p>
-        <label v-if="draft.mode === 'live' && (draft.notebook_enabled || draft.workflow === 'integrated')" class="mt-4 block text-xs text-slate-300">{{ draft.action_tools ? 'Agent tool compatibility' : 'Memory tool compatibility' }}
-          <select name="npc-memory-tool-protocol" :value="draft.tool_protocol ?? 'auto'" class="mt-2 w-full rounded-lg bg-slate-800 p-2" @change="update('tool_protocol', ($event.target as HTMLSelectElement).value as 'auto' | 'native' | 'json')">
-            <option value="auto">Automatic</option>
-            <option value="native">Native function calls</option>
-            <option value="json">JSON compatibility</option>
-          </select>
-          <span v-if="isCombatControl" class="mt-2 block text-slate-400">Choose JSON compatibility for a server without native tools. Both modes keep the same ability catalog and request limits.</span>
-          <span v-else class="mt-2 block text-slate-400">Choose JSON compatibility for a server without native tools. Both modes keep the same private notebook and request limits; uncertain requests are never automatically repeated.</span>
-        </label>
+        <div v-if="draft.mode === 'live' && ((draft.agent_steps ?? 0) > 0 || draft.notebook_enabled || draft.workflow === 'integrated')" class="mt-4 grid gap-4 sm:grid-cols-2">
+          <label class="block text-xs text-slate-300">{{ draft.action_tools ? 'Agent tool compatibility' : 'Memory tool compatibility' }}
+            <select name="npc-memory-tool-protocol" :value="draft.tool_protocol ?? 'auto'" class="mt-2 w-full rounded-lg bg-slate-800 p-2" @change="update('tool_protocol', ($event.target as HTMLSelectElement).value as 'auto' | 'native' | 'json')">
+              <option value="auto">Automatic</option>
+              <option value="native">Native function calls</option>
+              <option value="json">JSON compatibility</option>
+            </select>
+            <span v-if="isCombatControl" class="mt-2 block text-slate-400">{{ NPC_TOOL_PROTOCOL_HELP }} Both modes keep the same ability catalog and request limits.</span>
+            <span v-else class="mt-2 block text-slate-400">{{ NPC_TOOL_PROTOCOL_HELP }} Both modes keep the same private notebook and request limits; uncertain requests are never automatically repeated.</span>
+          </label>
+          <label class="block text-xs text-slate-300">Tool-calling profile
+            <select name="npc-tool-profile" :value="draft.tool_profile ?? 'auto'" aria-describedby="npc-template-tool-profile-help" class="mt-2 w-full rounded-lg bg-slate-800 p-2" @change="update('tool_profile', ($event.target as HTMLSelectElement).value as NpcToolProfile)">
+              <option v-if="draft.tool_profile && !selectedToolProfile" :value="draft.tool_profile" disabled>Saved unsupported profile: {{ draft.tool_profile }}</option>
+              <option v-for="profile in NPC_TOOL_PROFILES" :key="profile.id" :value="profile.id">{{ profile.label }}</option>
+            </select>
+            <span id="npc-template-tool-profile-help" class="mt-2 block text-slate-400">{{ selectedToolProfile?.help ?? 'Choose a supported profile before saving.' }} {{ NPC_TOOL_PROFILE_REQUIREMENTS }}</span>
+          </label>
+        </div>
         <p v-if="isCombatControl && draft.mode === 'live'" class="mt-3 text-xs text-slate-400">Each tool round allows one request per NPC combat turn to choose an available ability or keep standard combat AI. Invalid choices can be corrected within remaining rounds; the model can finish early.</p>
         <p v-else-if="draft.mode === 'live'" class="mt-3 text-xs text-slate-400">
           Each round adds one model request per active NPC and up to two local tool operations.

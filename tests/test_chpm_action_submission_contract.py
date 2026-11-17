@@ -14,6 +14,7 @@ from tests.observable_state_support import tools_for, world
 from tests.test_chpm_kernel import wire_proposal
 from tests.test_chpm_native_notebook_loop import NativeModel, call, turn
 from tests.test_chpm_reliability import Replies
+from tests.test_chpm_tool_profiles import PROFILES
 from tests.test_npc_action_previews import fixture as action_fixture
 
 
@@ -27,7 +28,8 @@ def proposal(preferred="CONTINUE"):
     return value
 
 
-async def deliberate(protocol, requests, *, actions=True):
+async def deliberate(protocol, requests, *, actions=True, profile="auto"):
+    native = protocol != "json" and not (protocol == "auto" and profile in {"gemma", "qwen"})
     model = (
         NativeModel(
             [
@@ -40,7 +42,7 @@ async def deliberate(protocol, requests, *, actions=True):
                 for index, batch in enumerate(requests)
             ]
         )
-        if protocol == "native"
+        if native
         else Replies(
             [
                 json.dumps(
@@ -70,6 +72,7 @@ async def deliberate(protocol, requests, *, actions=True):
             actor_ids=["npc"],
             workflow="integrated",
             tool_protocol=protocol,
+            tool_profile=profile,
             action_tools=actions,
             agent_steps=2,
             max_input_chars=64000,
@@ -81,7 +84,7 @@ async def deliberate(protocol, requests, *, actions=True):
         [],
         tools.mind,
     )
-    system = model.requests[0][0][0]["content"] if protocol == "native" else model.requests[0][1]
+    system = model.requests[0][0][0]["content"] if native else model.requests[0][1]
     return decision, usage, draft, scope, system
 
 
@@ -165,3 +168,19 @@ async def test_memory_only_mode_retains_immediate_grounded_submission(protocol):
     assert "message_plan alone does not stage or execute" not in system
     assert not draft.approved and draft.requests == []
     assert usage.calls == 1
+
+
+@pytest.mark.parametrize("profile", PROFILES)
+async def test_selected_profiles_keep_action_staging_and_final_acceptance_in_the_same_owners(
+    profile,
+):
+    decision, usage, draft, scope, _system = await deliberate(
+        "auto",
+        [[("take_item", {"item_id": "KEY"})], [("submit_decision", proposal())]],
+        profile=profile,
+    )
+    assert decision.selected.kind == "CONTINUE"
+    assert draft.approved and len(draft.requests) == 1
+    assert draft.requests[0].tool == "take_item"
+    assert scope.possessions.owners["KEY"] == "__scene__"
+    assert usage.calls == 2 and usage.proposal_repairs == 0

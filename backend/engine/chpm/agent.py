@@ -33,7 +33,7 @@ async def investigate(
     notebook: NotebookDraft | None = None,
 ) -> tuple[Tools, list[dict]]:
     tools = make_tools(manager, mind, observation, pinned=pinned, notebook=notebook)
-    if notebook and settings.agent_steps:
+    if settings.agent_steps and (notebook is not None or settings.tool_profile != "auto"):
         native_model = agent_native.select_model(manager, settings)
         if native_model is not None:
             return await agent_native.investigate(

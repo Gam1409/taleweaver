@@ -98,6 +98,7 @@ NPC controls, implementation references and maintained module history. Dated eva
 - [NPC decision workflows](npc-decision-workflows.md)
 - [Characters introduced during play](npc-introductions.md)
 - [Private NPC notebooks](npc-notebook.md)
+- [NPC tool-calling compatibility profiles](npc-tool-profiles.md)
 - [NPC observable state tools](npc-observable-state.md)
 - [World features: current foundations and remaining work](planned-world-features.md)
 - [Player input and character history](player-tools.md)

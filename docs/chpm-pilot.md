@@ -70,6 +70,12 @@ inventory or published story.
 Changing only request limits preserves current memory. Checkpoint restore restores
 the saved mode and memory along with other session state.
 
+The separate [tool-calling profile](npc-tool-profiles.md) selects compatibility
+policy for the existing native/JSON ports. Auto preserves existing selection;
+Gemma and Qwen conservatively use JSON when compatibility is Automatic. Profile
+changes preserve psychological state and request limits. A profile does not
+change the model/provider or enable actions by itself.
+
 ## Current scope
 
 This is a bounded intentions experiment, not the complete CHPM research model.

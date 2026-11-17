@@ -1,5 +1,6 @@
 import { computed, onScopeDispose, ref, watch } from 'vue'
 import { apiFetch } from '@/services/http'
+import type { NpcToolProfile } from '@/utils/npcToolProfiles'
 
 export interface ChpmSettings {
   control_scope?: 'dialogue' | 'combat_actions'
@@ -18,6 +19,7 @@ export interface ChpmSettings {
   notebook_enabled?: boolean
   action_tools?: boolean
   tool_protocol?: 'auto' | 'native' | 'json'
+  tool_profile?: NpcToolProfile
   semantic_memory?: boolean
 }
 
@@ -99,6 +101,10 @@ export function useChpmSettings(sessionId: () => string) {
     if (enabled) draft.value.agent_steps = Math.max(1, draft.value.agent_steps ?? 0)
   }
 
+  function setToolProfile(profile: NpcToolProfile) {
+    if (draft.value) draft.value.tool_profile = profile
+  }
+
   function setWorkflow(workflow: 'staged' | 'integrated') {
     if (!draft.value) return
     draft.value.workflow = workflow
@@ -128,8 +134,9 @@ export function useChpmSettings(sessionId: () => string) {
       const data = await response.json()
       if (!response.ok) throw new Error(typeof data?.detail === 'string' ? data.detail : 'Could not save NPC behavior settings.')
       if (controller !== current) return false
-      status.value = data as ChpmStatus
-      draft.value = { ...data.settings, actor_ids: [...data.settings.actor_ids] }
+      const settings = { ...data.settings, tool_profile: data.settings.tool_profile ?? 'auto' }
+      status.value = { ...data, settings } as ChpmStatus
+      draft.value = { ...settings, actor_ids: [...settings.actor_ids] }
       return true
     } catch (cause) {
       if (controller === current) error.value = cause instanceof Error ? cause.message : 'Could not load NPC behavior settings.'
@@ -163,5 +170,5 @@ export function useChpmSettings(sessionId: () => string) {
 
   watch(sessionId, () => { void load() }, { immediate: true })
   onScopeDispose(() => { controller?.abort(); controller = null })
-  return { status, draft, busy, error, dirty, minimumCalls, budgetWarning, historyWarnings, selectStandard, setNotebookEnabled, setActionToolsEnabled, setWorkflow, load, save }
+  return { status, draft, busy, error, dirty, minimumCalls, budgetWarning, historyWarnings, selectStandard, setNotebookEnabled, setToolProfile, setActionToolsEnabled, setWorkflow, load, save }
 }

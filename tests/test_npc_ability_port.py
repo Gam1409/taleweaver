@@ -95,19 +95,24 @@ async def bound(world, model, protocol="native", *, usage=None, configured=None)
     return combat, selector
 
 
-@pytest.mark.parametrize("protocol", ["native", "json"])
+@pytest.mark.parametrize("profile", ["auto", "gemma", "qwen"])
+@pytest.mark.parametrize("protocol", ["auto", "native", "json"])
 async def test_model_selection_executes_once_through_existing_owner(
-    combat_world, monkeypatch, protocol
+    combat_world, monkeypatch, protocol, profile
 ):
     world = combat_world
     model = ScriptModel(turn(call()))
     usage = Usage()
-    combat, _selector = await bound(world, model, protocol, usage=usage)
+    combat, _selector = await bound(
+        world, model, protocol, usage=usage, configured=settings(protocol, tool_profile=profile)
+    )
     monkeypatch.setattr(
         "backend.engine.combat.special_attacks.random.randint", deterministic_randint
     )
     _ = [chunk async for chunk in world.manager.combat._advance_until_player(combat, False)]
     assert len(model.calls) == usage.calls == 1
+    portable = protocol == "json" or (protocol == "auto" and profile in {"gemma", "qwen"})
+    assert isinstance(model.calls[0][0], str) is portable
     assert world.avatar.hp == 99 and combat["enemies"][0]["mana"] == 93
     assert combat["turn_index"] == 1 and combat["turn"] == "player"
     recovery = await world.db.get(TurnReplay, world.game.id)

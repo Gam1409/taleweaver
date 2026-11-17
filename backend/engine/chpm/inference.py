@@ -10,7 +10,13 @@ from pydantic import BaseModel, ValidationError
 from backend.core.llm_completion_capture import Completion, capture_completions
 from backend.core.llm_router import GameMasterLLM
 from backend.core.llm_schema_choices import SchemaChoiceError
-from backend.engine.chpm import json_contract, parallel_budget, performance, wire_normalization
+from backend.engine.chpm import (
+    json_contract,
+    parallel_budget,
+    performance,
+    tool_profiles,
+    wire_normalization,
+)
 from backend.engine.chpm.errors import InferenceUnavailableError, RecoverableChpmError
 from backend.engine.chpm.schema import Settings, Usage
 
@@ -186,6 +192,8 @@ async def tool_request(
     """Reserve one native round through the same deadlines, admission and timings."""
     from backend.core.llm_tool_turn import InvalidToolTurnError
 
+    if getattr(llm, "protocol", "native") != "json":
+        tool_profiles.validate_native(settings.tool_profile, tools)
     sizing = getattr(llm, "input_size", None)
     size = (
         sizing(messages, tools)

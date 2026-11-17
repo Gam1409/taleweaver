@@ -13,6 +13,7 @@ from backend.engine.chpm.memory_contracts import MemoryEntry
 from backend.engine.chpm.motivation_contracts import ResolvedMotive
 from backend.engine.chpm.performance import RequestTiming
 from backend.engine.chpm.recovery_contracts import RecoveryState
+from backend.engine.chpm.tool_profiles import ToolProfile
 from backend.engine.narrated_movement.outcomes import WithMovementOutcomes, evidence_size
 
 
@@ -38,6 +39,7 @@ class SettingsFields(Contract):
     notebook_enabled: StrictBool = False
     action_tools: StrictBool = False
     tool_protocol: Literal["auto", "native", "json"] = "auto"
+    tool_profile: ToolProfile = "auto"
     semantic_memory: StrictBool = False
     failure_policy: Literal["continue", "strict"] = "continue"
 

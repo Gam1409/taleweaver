@@ -6,12 +6,14 @@ import { createSSRApp, h } from 'vue'
 import { renderToString } from '@vue/server-renderer'
 import { compileScript, parse } from '@vue/compiler-sfc'
 import ts from 'typescript'
+import { npcToolProfilesModuleUrl } from './npcToolProfilesModule.mjs'
 
 function compile(file, imports = {}) {
   const { descriptor } = parse(readFileSync(new URL(`../src/${file}`, import.meta.url), 'utf8'))
   let code = ts.transpileModule(compileScript(descriptor, { id: file, inlineTemplate: true }).content, {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext },
   }).outputText.replace(/from ['"]vue['"]/g, `from '${import.meta.resolve('vue')}'`)
+    .replace(/from ['"]@\/utils\/npcToolProfiles['"]/g, `from '${npcToolProfilesModuleUrl}'`)
     .replace(/from ['"]lucide-vue-next['"]/g, `from '${import.meta.resolve('lucide-vue-next')}'`)
   for (const [name, value] of Object.entries(imports)) {
     code = code.replace(new RegExp(`import ${name} from ['"][^'"]+['"];?`), value)
