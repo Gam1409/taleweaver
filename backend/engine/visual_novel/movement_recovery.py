@@ -13,11 +13,12 @@ from backend.engine.chpm.movement_authority import historical_action
 from backend.engine.chpm.movement_feedback import read
 from backend.engine.chpm.state import controls
 from backend.engine.clothing.visuals import session_objects
+from backend.engine.gameplay.movement_intent import PlayerTraversal
 from backend.engine.mutation_targets import TargetIndex
 from backend.engine.narrated_movement.context import context
 from backend.engine.narrated_movement.schema import MAX_MOVEMENTS, MovementProposal
 from backend.engine.narrated_movement.validation import validate
-from backend.engine.visual_novel.movement_sources import resolve
+from backend.engine.visual_novel.movement_sources import current_input, resolve
 from backend.models.chat import ChatMessage
 from backend.models.world_entity import WorldScene
 
@@ -157,6 +158,36 @@ def _check_story(actor: str, moves: list[Any], updates: list[Any], before: dict)
         raise ValueError("The staged departure no longer has an open permitted adjacent route.")
 
 
+async def _companion(
+    manager: Any,
+    event: Any,
+    actor: str,
+    moves: list[Any],
+    updates: list[Any],
+    raw: tuple[list, list],
+    before: dict,
+) -> bool:
+    travel = getattr(manager, "_confirmed_player_travel", None)
+    if (
+        not isinstance(travel, PlayerTraversal)
+        or len(raw[0]) != 1
+        or raw[1]
+        or "movement_source" in getattr(raw[0][0], "model_fields_set", set())
+        or controls(manager.state, actor)
+        or actor not in travel.companions
+        or not travel.message_id
+        or travel.message_id != getattr(manager, "_vn_player_message_id", None)
+        or travel.origin != before["scene_id"]
+        or event.new_scene_id != travel.destination
+        or len(moves) != 1
+        or moves[0].to_scene_id != travel.destination
+    ):
+        return False
+    await current_input(manager, travel.source)
+    _check_story(actor, moves, updates, before)
+    return True
+
+
 async def _destinations(manager: Any) -> TargetIndex:
     rows = await manager.db.scalars(
         select(WorldScene).where(WorldScene.session_id == manager.game_id)
@@ -193,6 +224,8 @@ async def _resolve_actor(
         return
     if raw[0] and not moves:
         raise ValueError("The movement was rejected by the existing world guardrails.")
+    if await _companion(manager, event, actor, moves, updates, raw, before):
+        return
     await _check(manager, actor, moves, updates, raw, before)
 
 

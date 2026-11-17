@@ -2,7 +2,7 @@
 
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, model_validator
 
 from backend.engine.rule_engine import EntityMovement
 
@@ -28,10 +28,18 @@ SourceReference = Annotated[MovementSource | None, BeforeValidator(optional_sour
 class VnMovement(EntityMovement):
     movement_source: SourceReference = None
 
+    @model_validator(mode="before")
+    @classmethod
+    def legacy_movement(cls, value: Any) -> Any:
+        if isinstance(value, EntityMovement) and not isinstance(value, cls):
+            return value.model_dump()
+        return value
+
 
 INSTRUCTION = """
-VN MOVEMENT SOURCES: Every NPC moved_entities entry and NPC presence/spatial_position
-update needs movement_source with kind, passage_id and basis. Copy a supplied
+VN MOVEMENT SOURCES: NPC moved_entities entries and NPC presence/spatial_position
+updates need movement_source with kind, passage_id and basis, except the narrow
+current companion case below. Copy a supplied
 history:pN or player:pN reference from movement_sources; offsets are host-owned.
 previous_narration + completed requests revalidation of a missed completed movement
 from that exact latest assistant source. Old prose alone is not confirmation:
@@ -41,8 +49,15 @@ current_player_action + resolved_external_effect is only a resolved physical eff
 of the player's CURRENT action (for example carrying, pushing or transport), not a
 request for an NPC's voluntary cooperation. Merely quoting a request proves no force
 or success. Mark attempts, wishes and uncertain effects accordingly; they cannot move
-anyone. Respect current world capabilities and access. Fresh voluntary NPC initiative
-belongs to story_beat or the active NPC planner, never an invented player effect.
+anyone. Respect current world capabilities and access.
+For a fresh companion choice owned by the ordinary narrator, accompanying the
+player's immediate current departure to the same destination, omit movement_source
+entirely (not null). Do not relabel an old movement claim or invent a forced effect.
+The host must confirm the player's current traversal and this actor's route; it
+never admits a live-controlled NPC through this companion path. Propose each
+companion individually; the player invitation alone does not choose their response.
+Other fresh voluntary NPC initiative belongs to story_beat or the active NPC planner,
+never an invented player effect.
 Missing/invalid proof preserves canonical location and presence for review. Other
 independent world updates retain their existing checks. Do not put an unconfirmed
 departure into notes or scene orientation as an established fact.

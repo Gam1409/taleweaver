@@ -114,18 +114,32 @@ async def prepare(manager: Any) -> str:
     )
 
 
-async def resolve(manager: Any, proof: Any) -> tuple[Source, Passage]:
+async def _checked_source(manager: Any, kind: str) -> Source:
     if getattr(manager, "_vn_movement_input", None) != getattr(
         manager, "_vn_player_message_id", None
     ):
         raise ValueError("Movement source belongs to a different player input.")
-    source = getattr(manager, "_vn_movement_sources", {}).get(proof.kind)
-    if not isinstance(source, Source) or proof.passage_id not in source.passages:
+    source = getattr(manager, "_vn_movement_sources", {}).get(kind)
+    if not isinstance(source, Source):
         raise ValueError("Movement requires a supplied source occurrence in its own namespace.")
     message = await manager.db.get(ChatMessage, source.message_id, populate_existing=True)
     if not source.matches(message, manager.game_id):
         raise ValueError("Movement source changed after progression preparation.")
+    return source
+
+
+async def current_input(manager: Any, text: str) -> Source:
+    source = await _checked_source(manager, "current_player_action")
+    if source.text != text:
+        raise ValueError("Confirmed traversal belongs to a different player action.")
+    return source
+
+
+async def resolve(manager: Any, proof: Any) -> tuple[Source, Passage]:
+    source = await _checked_source(manager, proof.kind)
+    if proof.passage_id not in source.passages:
+        raise ValueError("Movement requires a supplied source occurrence in its own namespace.")
     passage = source.passages[proof.passage_id]
-    if message.content[passage.start : passage.end] != passage.text:
+    if source.text[passage.start : passage.end] != passage.text:
         raise ValueError("Movement source occurrence changed.")
     return source, passage

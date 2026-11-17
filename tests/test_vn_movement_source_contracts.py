@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from backend.engine.mutation_targets import TargetIndex
-from backend.engine.rule_engine import GameEvent
+from backend.engine.rule_engine import EntityMovement, GameEvent
 from backend.engine.visual_novel.intent import VNProgressionIntent
 from backend.engine.visual_novel.movement_recovery import _resolve_actor
 from backend.engine.visual_novel.movement_sources import MAX_PASSAGES, MAX_SOURCE_CHARS, _source
@@ -24,6 +24,16 @@ def message(text):
         npc_journal=None,
         npc_recovery=None,
     )
+
+
+def test_internal_base_movement_remains_accepted_without_manufacturing_source_proof():
+    legacy = EntityMovement(entity_id="LINA", to_scene_id="ANNEX")
+    intent = VNProgressionIntent(moved_entities=[legacy])
+    restored = VNProgressionIntent.model_validate_json(intent.model_dump_json())
+    assert restored.moved_entities[0].entity_id == "LINA"
+    assert restored.moved_entities[0].to_scene_id == "ANNEX"
+    assert restored.moved_entities[0].movement_source is None
+    assert "movement_source" not in EntityMovement.model_json_schema()["properties"]
 
 
 @pytest.mark.parametrize("count", [MAX_PASSAGES, MAX_PASSAGES + 1])

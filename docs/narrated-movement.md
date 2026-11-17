@@ -23,3 +23,14 @@ For live-controlled NPCs, historical recovery additionally requires a matching r
 Before the single world-event application, the adapter uses the shared movement validator for available actors, mobility, permitted scenes, oriented adjacency and effective locks, including already validated same-turn exit updates. Accepted exit changes synchronize matching existing lock overrides. Derived-map presentation failures cannot discard the canonical unlock; critical database failures propagate to existing turn recovery. Unlock notices, scripts and authored text keep their existing order and execution policy. Story departures retain their own controller gate and receive the same route check. The existing eight-actor movement bound applies. Player travel, item/object owners, RPG and Living World event schemas retain their contracts. Proof fields do not enter persisted `GameEvent` data.
 
 Unsupported, stale, ambiguous or blocked physical proposals retain canonical location and presence and produce an explicit review notice. Coupled notes for that actor are withheld; independent actor updates and unrelated structured fields retain their normal checks. The narrator receives a retained-state reminder without an invented failed attempt or obstacle. Replay restores ordinary world state and rebuilds transient source snapshots. Deterministic tests cover these boundaries; they do not establish live-model semantic reliability.
+
+Source-unqualified narrator companion choices may share the player's separately
+confirmed current traversal. This is a new current world-plan choice, not proof of
+a past departure. The host binds it to the unchanged saved player input, confirmed
+origin/destination and the proposed companions; the same route and mobility checks
+still apply. It cannot move a live-controlled NPC, infer an unproposed companion,
+transfer a player to follow an NPC, or bypass an unconfirmed player transition.
+An explicitly supplied source, including an invalid one, cannot fall back to this
+compatibility path: historical claims still require their original source checks.
+For a new ordinary narrator companion choice, the model omits `movement_source`
+entirely instead of supplying a historical reference, forced-effect basis or null.

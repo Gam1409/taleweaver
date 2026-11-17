@@ -1,10 +1,20 @@
 """One grounded check for player travel, including omitted group-motion proposals."""
 
+from dataclasses import dataclass
 from typing import Any
 
 from backend.engine.gameplay.scene_transition_intent import confirm_scene_transition
 from backend.engine.mutation_targets import TargetIndex
 from backend.engine.npc_presence import physically_present
+
+
+@dataclass(frozen=True)
+class PlayerTraversal:
+    message_id: str | None
+    origin: str
+    destination: str
+    source: str
+    companions: frozenset[str]
 
 
 def _open_destinations(intent: Any, exits: list[dict]) -> set[str]:
@@ -55,6 +65,7 @@ async def confirm_player_movement(
 ) -> None:
     """NPC travel supplies a candidate, never proof that the player moved with them."""
     manager._group_movement_resolution = ""
+    manager._confirmed_player_travel = None
     places = TargetIndex([{"id": row["id"], "name": row.get("label")} for row in scenes])
     allowed = _open_destinations(intent, exits)
     companions = _companion_targets(manager, intent, entities, places)
@@ -79,6 +90,15 @@ async def confirm_player_movement(
     )
     intent.new_scene_id = destination if confirmed else None
     if confirmed:
+        manager._confirmed_player_travel = PlayerTraversal(
+            message_id=getattr(manager, "_vn_player_message_id", None),
+            origin=manager.state.current_scene_id,
+            destination=destination,
+            source=user_msg,
+            companions=frozenset(
+                actor for actor, target in companions.items() if target == destination
+            ),
+        )
         return
     intent.exit_label = None
     if not proposed:
