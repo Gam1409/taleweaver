@@ -5,6 +5,7 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, model_validator
 
 from backend.core.text_evidence import EvidenceSpan, WithEvidenceSpan
+from backend.engine.chpm.agenda_semantics import ACTION_DESCRIPTION, CHANGE_DESCRIPTION
 from backend.engine.chpm.agent_limits import MAX_AGENT_ROUNDS, MAX_PINNED_CHARS, MAX_PINNED_SOURCES
 from backend.engine.chpm.causal_audit import MAX_NOTES
 from backend.engine.chpm.causal_contracts import Memory as CausalMemory
@@ -118,7 +119,11 @@ class Projection(Contract):
 
 
 class AgendaIntent(Contract):
-    action: Literal["goal", "commitment", "withdraw", "report_done"]
+    """An explicitly spoken change to ongoing personal business, not a silent action plan."""
+
+    action: Literal["goal", "commitment", "withdraw", "report_done"] = Field(
+        description=ACTION_DESCRIPTION
+    )
     text: str = Field(min_length=1, max_length=300)
     entry_id: str | None = Field(default=None, min_length=1, max_length=64)
 
@@ -177,7 +182,7 @@ class CandidateBody(Contract):
     goal_alignment: Literal["supports", "neutral", "conflicts", "unknown"] = "unknown"
     goal_quote: str = Field(default="", max_length=300)
     reconsider_if: str = Field(min_length=1, max_length=200)
-    agenda_change: AgendaIntent | None = None
+    agenda_change: AgendaIntent | None = Field(default=None, description=CHANGE_DESCRIPTION)
 
 
 class Candidate(CandidateBody):

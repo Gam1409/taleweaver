@@ -213,6 +213,24 @@ creation and closure has its own message/revision/hash/quotation provenance.
 Semantic agreement, promise attribution, and paraphrased duplicates still depend
 on the model reviewer: exact quotations do not prove their interpretation.
 
+The decision producer, narrator, narration repair and reviewer receive one shared
+glossary from `agenda_semantics.py`. The proposal schema also describes these codes:
+
+| `agenda_change.action` | Meaning | Required expression |
+| --- | --- | --- |
+| `goal` | Declare an ongoing personal aim. | The NPC states its aim in its own speech. |
+| `commitment` | Undertake future or continuing personal business. | The NPC states its undertaking; no fixed promise phrase is required. |
+| `withdraw` | Cancel an active owned entry. | The NPC states the withdrawal; the proposal copies the active ID and text. |
+| `report_done` | Claim an active owned entry is complete. | The NPC states the claim; the proposal copies the active ID and text. This does not establish world completion. |
+| `agenda_change: null` | No change to the declared agenda. | Ordinary speech, immediate actions, ordered action steps or silent resolve need no new entry. |
+
+These codes describe the declared agenda, not action execution or emotion. A
+silent action may retain its emotional expression and complete through the normal
+world owners without an agenda entry or invented dialogue. Private notes and
+intentions retain their existing owners; narrator descriptions and performed
+actions cannot stand in for spoken agenda evidence. The glossary changes no
+stored keys, enum values, source validation, request limits or rollback behavior.
+
 The proposal sees only its owner's source-checked active entries, including the
 original quotation. This permits returning to unfinished business beyond the
 transcript window. It does not require reciting every goal every turn or treating

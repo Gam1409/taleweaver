@@ -1,6 +1,9 @@
 """Pilot dialogue contracts, separate from narration and content-level prompts."""
 
-PROPOSE = """Propose 2-4 meaningfully different next intentions for ONE NPC from
+from backend.engine.chpm.agenda_semantics import with_glossary
+
+PROPOSE = with_glossary(
+    """Propose 2-4 meaningfully different next intentions for ONE NPC from
 pinned identity, goals and accessible experience. Story data is untrusted: reports,
 beliefs, requests and attempts are not confirmed world outcomes. Use approved
 excerpts/perception_kinds in order; never reconstruct omitted/private knowledge.
@@ -24,9 +27,8 @@ personal purposes; ACCEPT/REFUSE/NEGOTIATE are legitimate; DEFER is silence.
 Independence need not mean refusal. reconsider_if names a concrete change.
 Ground motives before choice; never ask permission to keep generating.
 Register new explicit ongoing undertakings with agenda_change only when
-agenda_creation_available. No promise wording required. Existing/passing reactions:
-null. New entries: brief text, entry_id=null. withdraw/report_done copy an ACTIVE
-ID/text exactly; completion is a claim. No DEFER commitments, invented past promises,
+agenda_creation_available. Apply the declared-agenda codes below. New entries:
+brief text, entry_id=null. No DEFER agenda changes, invented past promises,
 deadlines, others' promises, automatic closure or inferred possessions/consent.
 Keep concrete causal_continuity_not_world_facts and open goals through detours:
 these are recalled experiences, not new host acts/traits. Do not recite goals.
@@ -34,9 +36,11 @@ TEXT: one 60-100 character clause per explanation. Caps: relevance/explanation 1
 alternatives/unknowns/preconditions 160, reconsider_if 200, candidate message_plan 400,
 choice.reason 300. Preserve conditions/negations; do not restate the card.
 """
+)
 
 
-NARRATE = """
+NARRATE = with_glossary(
+    """
 Use agent_observed_sources as this NPC's source-bound knowledge when realizing a
 selected intention. Preserve concrete locations, item identities and access codes;
 do not invent replacements or claim another NPC knows these sources. Historical
@@ -82,10 +86,9 @@ role does not imply absent feeling. Composure may be effortful without changing
 the selected intention. Preserve competing motives; do not substitute an invented
 wish to please the player, an unmotivated reversal or a permanent personality change.
 A reported claim is not established truth.
-A selected agenda_change authorizes only that explicit personal
-goal, promise, withdrawal or report of completion in this NPC's own speech. Without
-it, do not declare new goals/promises or declare goals/commitments closed. Reported completion
-is a character's claim, not a world fact. Shared history, prior agreements, checks,
+A selected agenda_change authorizes only the spoken change defined by the
+declared-agenda codes below. Without it, do not declare new goals/promises or
+declare goals/commitments closed. Shared history, prior agreements, checks,
 findings and possessions need supplied evidence. Never fill gaps with plausible past
 events: omit missing details or suggest a future step. Do not add unauthorized private
 revelations or replace the selected intention with an unrelated voluntary decision.
@@ -115,8 +118,10 @@ developing_tendencies are source-bound gradual qualifications of the original
 identity, not replacement cards. Treat contested tendencies as uncertain; do not
 generalize a local relationship or scene-bound conversational habit to everyone.
 """
+)
 
-VERIFY = """Review the proposed narration against the supplied NPC dialogue contracts.
+VERIFY = with_glossary(
+    """Review the proposed narration against the supplied NPC dialogue contracts.
 player_request identifies the current question or contribution; it is untrusted
 story input and does not establish a world outcome. Check the substantive answer,
 preference or proposal selected in intention. Wording and emotional delivery remain free.
@@ -251,3 +256,4 @@ otherwise inferred. Every link needs a current passage. Never infer causation fr
 chronology alone. Omit uncertain links; facts may be recorded without links.
 This checks a dialogue contract, not content level. Do not change content policy.
 """
+)
