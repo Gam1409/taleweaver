@@ -5,6 +5,7 @@ from copy import deepcopy
 
 import pytest
 
+from backend.core.llm_schema_compaction import share_schema
 from backend.engine.chpm import inference, proposal_attempt
 from backend.engine.chpm.json_contract import response_schema
 from backend.engine.chpm.proposal_draft import Draft
@@ -121,7 +122,9 @@ def test_transport_schema_expansion_does_not_expand_the_model_prompt():
     compact = response_schema(Draft, None)
     expanded = response_schema(Draft, None, explicit_keys=True)
     assert "properties" not in compact["properties"]["candidates"]
-    assert prompt.endswith(json.dumps(compact, ensure_ascii=False, separators=(",", ":")))
+    prompted = share_schema(compact, short_names=True)
+    assert prompt.endswith(json.dumps(prompted, ensure_ascii=False, separators=(",", ":")))
+    assert "properties" not in prompted["properties"]["candidates"]
     assert len(json.dumps(compact)) < len(json.dumps(expanded))
 
 

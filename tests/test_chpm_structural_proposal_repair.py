@@ -11,6 +11,7 @@ from backend.engine.chpm.errors import RecoverableChpmError
 from backend.engine.chpm.proposal_draft import Draft
 from backend.engine.chpm.schema import Decision, Settings, Usage
 from tests.chpm_repair_fixture import corrections
+from tests.test_chpm_json_schema_references import resolved
 from tests.test_chpm_kernel import wire_proposal
 from tests.test_chpm_proposal_repair_context import accept_choice
 from tests.test_chpm_reliability import Replies
@@ -101,4 +102,5 @@ def test_missing_field_contract_falls_back_to_full_schema_within_the_same_input_
     system, content = inference.compose("Use the schema.", prepared.payload, Draft, IDENTIFIERS)
     assert len(system) + len(content) <= limit
     contract = json.loads(system.split("JSON schema:\n", 1)[1])
-    assert "message_plan" in contract["$defs"]["Intent"]["required"]
+    candidates = resolved(contract, contract["properties"]["candidates"])
+    assert "message_plan" in candidates["additionalProperties"]["required"]

@@ -8,6 +8,7 @@ from types import SimpleNamespace
 import pytest
 
 from backend.core.llm_tool_turn import NativeToolsUnsupportedError, ToolCall, ToolTurn
+from backend.engine import turn_controls
 from backend.engine.chpm import agent, agent_native
 from backend.engine.chpm.errors import ChpmError, InferenceUnavailableError
 from backend.engine.chpm.notebook import NotebookWorkspace
@@ -140,7 +141,7 @@ async def test_stale_counter_is_corrected_and_a_later_call_reads_its_own_staged_
             ),
         ]
     )
-    tools, _, usage = await investigate(model, draft=draft)
+    tools, audit, usage = await investigate(model, draft=draft)
 
     feedback = results(model)
     assert [
@@ -156,7 +157,19 @@ async def test_stale_counter_is_corrected_and_a_later_call_reads_its_own_staged_
             },
         )
     ]
-    assert all(result["attempt_id"] and result["operation_id"] for _, result in feedback)
+    result = audit[0]["results"][0]
+    operation = turn_controls.Operation.model_validate(
+        {key: result[key] for key in turn_controls.Operation.model_fields if key in result}
+    )
+    assert operation.attempt_id == audit[0]["requests"][0]["attempt_id"]
+    assert operation.input_id == observation().message_id
+    assert operation.input_hash == observation().content_hash
+    assert operation.tool_call_id == feedback[0][0] == "stale"
+    assert (
+        operation.operation_id
+        == feedback[0][1]["operation_id"]
+        == audit[0]["requests"][0]["operation_id"]
+    )
     assert usage.calls == 2 and tools.notebook.workspace.base_revision == 4
     assert tools.notebook.workspace.revision == tools.notebook.reads[-1]["revision"] == 5
     assert json.loads(tools.notebook.reads[-1]["json_fragment"]) == PRIVATE

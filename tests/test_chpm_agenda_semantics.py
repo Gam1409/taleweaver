@@ -21,6 +21,7 @@ from backend.engine.chpm.schema import AgendaIntent, CandidateBody
 from backend.engine.chpm.state import load
 from tests.test_chpm_action_expression import TEXT, reply, review
 from tests.test_chpm_host_state import mind
+from tests.test_chpm_json_schema_references import resolved
 from tests.test_chpm_kernel import observation, wire_proposal
 from tests.test_chpm_runtime import prepared
 
@@ -60,7 +61,9 @@ def test_native_submission_and_portable_catalog_preserve_the_same_agenda_definit
     value = SimpleNamespace(schema=Draft, identifiers={})
     tools = Tools(mind(), observation(), {})
     offered = integrated_request._definitions(value, tools, 0)
-    native = offered[0]["function"]["parameters"]["$defs"]["AgendaIntent"]
+    parameters = offered[0]["function"]["parameters"]
+    candidates = resolved(parameters, parameters["properties"]["candidates"])
+    native = candidates["properties"]["CONTINUE"]["properties"]["agenda_change"]["anyOf"][0]
     system, content = compose(
         [{"role": "system", "content": prompts.PROPOSE}, {"role": "user", "content": "{}"}],
         offered,

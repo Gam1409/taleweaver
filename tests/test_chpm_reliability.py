@@ -264,7 +264,12 @@ async def test_dense_live_fixture_fits_actual_wire_schema_with_repair_reserve():
     case = next(c for c in memory_stress.catalogue() if c.id == "short-speech-long-actions")
 
     class ObservedModels(Models):
+        def __init__(self):
+            super().__init__()
+            self.requests = []
+
         async def aexecute_simple_task(self, system, content, model, **kwargs):
+            self.requests.append((kwargs["phase"], system, content))
             result = await super().aexecute_simple_task(system, content, model, **kwargs)
             if kwargs["phase"] != "perception":
                 return result
@@ -274,7 +279,15 @@ async def test_dense_live_fixture_fits_actual_wire_schema_with_repair_reserve():
                     raw["fragments"][key] = {"kind": "private", "observers": [], "engaged": []}
             return json.dumps(raw)
 
-    result = await matrix_runner.run(case, ObservedModels())
+    model = ObservedModels()
+    result = await matrix_runner.run(case, model)
     assert result["status"] == "ok", result["error"]
     assert all(c["input_chars"] <= 24000 for c in result["calls"])
+    proposal = next(call for call in model.requests if call[0] == "proposal")
+    size = len(proposal[1]) + len(proposal[2])
+    measured = next(call for call in result["calls"] if call["phase"] == "proposal")
+    assert measured["input_chars"] == size
+    assert size + 2048 <= Settings().max_input_chars
+    packing = json.loads(proposal[2])["context_packing"]
+    assert packing["tier"] == 0 and packing["canonical_history_changed"] is False
     assert '"Well?"' in result["perceptions"]["npc-01"]["quotes"]

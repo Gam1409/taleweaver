@@ -5,6 +5,7 @@ from collections.abc import Callable
 from copy import deepcopy
 from typing import Any
 
+from backend.core.llm_schema_compaction import share_schema
 from backend.engine.chpm import (
     agent_lookup_payload,
     agent_native,
@@ -66,8 +67,11 @@ def _definitions(prepared: cognitive_proposal.Prepared, tools: Tools, remaining:
                 "name": FINAL,
                 "description": "Submit this observer's complete proposal for host validation.",
                 "strict": False,
-                "parameters": json_contract.response_schema(
-                    prepared.schema, prepared.identifiers, explicit_keys=True
+                "parameters": share_schema(
+                    json_contract.response_schema(
+                        prepared.schema, prepared.identifiers, explicit_keys=True
+                    ),
+                    short_names=True,
                 ),
             },
         },

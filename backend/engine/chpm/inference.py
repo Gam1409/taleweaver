@@ -11,6 +11,7 @@ from pydantic import BaseModel, ValidationError
 from backend.core.llm_completion_capture import Completion, capture_completions
 from backend.core.llm_router import GameMasterLLM
 from backend.core.llm_schema_choices import SchemaChoiceError
+from backend.core.llm_schema_compaction import share_schema
 from backend.engine.chpm import (
     json_contract,
     parallel_budget,
@@ -82,7 +83,9 @@ def compose(
     instruction: str, payload: dict, schema: type[BaseModel], identifiers: dict | None
 ) -> tuple[str, str]:
     try:
-        contract = json_contract.response_schema(schema, identifiers)
+        contract = share_schema(
+            json_contract.response_schema(schema, identifiers), short_names=True
+        )
     except SchemaChoiceError as exc:
         raise RecoverableChpmError(
             "CHPM has no usable source-bound contract. No request was sent; no decision was applied."
