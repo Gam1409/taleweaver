@@ -60,15 +60,25 @@ To record a NEW injury, contamination, fluid trace, pain or other explicit bodil
 use operation=record with target_id, kind, part and short neutral intrinsic detail.
 Use kind=other for physical signs such as trembling or flushed skin, not emotions or intentions.
 The server assigns its condition ID.
-Record a bodily condition still present at the end of this narration, including temporary
-conditions. A completed fleeting gesture or a single vocal cue alone is not an ongoing condition.
+Record an explicitly established bodily condition still present at the end, including
+temporary physiological signs. Duration alone does not make a pose a bodily condition.
+Voluntary held poses, gaze direction, facial expressions and hand configurations belong
+to final_frame_actions, even when scene_staging is null, not kind=other merely because
+they remain visible. A gesture or single vocal cue alone establishes no bodily condition.
+An actual tremor, involuntary spasm, pain, injury or trace remains a separate condition
+when explicitly established, including in the same passage as a voluntary action.
 Describe its resulting current state, not a retelling of the action that caused it.
 Review existing records before adding a new sign. When the completed outcome explicitly
 ends an earlier transient reaction or a record that merely duplicated now-ended contact
 or item placement, resolve that existing ID with the applicable operation and current evidence.
+If an existing other record merely duplicated a pose that current narration explicitly
+ends, remove that exact condition_id. Do not use change to retell the ended action as an
+active condition. A new pose alone never clears every condition on that body part or
+proves that an independent physiological sign, injury, fluid or contamination ended.
 Do not retain a completed past event as current pain or another bodily condition merely
 because it mentions a body part. Omission alone still does not prove recovery or cleaning.
-Item placement, clothing and poses use their existing sections; record only their explicitly
+Item placement and clothing use their existing item actions; enabled staging separately
+tracks its supported general posture and spatial relations. Record only explicitly
 established bodily consequences here, not a duplicate inventory or pose entry.
 Known item targets cannot receive a new injury or pain record.
 Their generic mutable properties use item_state; real fluid or contamination traces

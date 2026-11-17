@@ -235,6 +235,19 @@ whole group historical. Cite the exact current occurrence, not its later retelli
 Mark ambiguity for review rather than guessing an object from a literary metaphor.
 Report only completed taking, handing over, putting in a pocket/bag, wearing or removing
 an item, with an exact contiguous quote identifying the item and the participants.
+Classify possession separately from object presence or contact. Looking at, studying,
+pointing to or touching an object does not by itself establish carrying, acquisition
+or transfer. Helping support an object held by another actor does not give it to the
+helper. An object described on a table may remain a scene fact or prose; never assign
+an actor as its owner merely to register its metadata or satisfy coverage.
+Explicit CURRENT possession without a narrated acquisition may use observed_possession:
+source_owner=destination_owner=that actor, disposition=carried or held, and both
+uncovered_regions and attachment_slot=null. This may register a genuinely newly described
+possession with new_item; it does not invent a pickup or handover. Existing canonical
+ownership wins: this basis cannot take an item from the scene or another owner, remove
+worn clothing, equip anything or replace saved placement. An unchanged observation of
+an already registered possession needs no action. Use completed only when the source
+actually establishes the completed action; claims, offers and nearby contact do not.
 Also report explicit current worn clothing descriptions using basis=observed_wear,
 source_owner=destination_owner=the wearer and disposition=worn. This registers a directly
 described current garment even without a dressing action or an existing visual profile.

@@ -40,6 +40,11 @@ Omission from dialogue, a scene change or an unrelated action never resolves sav
 
 final_frame_actions: at most 4 directly observed visible actions/poses still true at the END
 of this completed_narration. Give actor_ids, compact detail and a current narration evidence reference.
+Include supported voluntary held hand configurations, facial expressions and gaze direction
+here even when scene_staging is null; remaining visible does not make them bodily conditions.
+Enabled staging separately tracks its supported general posture and spatial relations.
+An explicitly established physiological sign or injury still uses condition_updates,
+independently of a pose in the same passage. Never infer a bodily sign from the pose alone.
 Use __player__ for the player and supplied NPC IDs. Retain final actor/object bindings.
 Exclude dialogue, wishes, memories, imagined actions, intermediate movement, earlier contact
 that has ended, hidden physical states and inferred gestures. Do not invent a pose from emotion.

@@ -25,6 +25,17 @@ is no separate mandatory condition-extraction request.
 
 A valid quote proves that the words occur in the reply. It does **not** prove that the model correctly understood the actor, body region, extent, actuality or completeness of the action. This implementation reduces forgotten recorded facts; it does not guarantee extraction completeness or semantic correctness. Live evaluation with the user's model remains necessary.
 
+Voluntary held poses, hand configurations, facial expressions and gaze direction
+belong to `final_frame_actions`, including when optional scene staging is disabled.
+Remaining visible at the end of a reply does not make a pose a physical condition.
+Explicit physiological signs such as a tremor or involuntary spasm, and actual
+pain, injury or contamination, remain separate conditions even when described in
+the same passage as a pose. No bodily consequence is inferred from the pose alone.
+If a previously misfiled pose explicitly ends, extraction can resolve that exact
+non-injury condition ID with `remove`. It must not rewrite the ended action as an
+active condition or clear independent facts on the same body part. Omission is
+still insufficient evidence of resolution; no automatic cleanup is added.
+
 Automatic extraction may mistakenly repeat `record` for an existing condition. Before applying that response, the host binds it to the existing ID only when canonical subject, condition kind and case-insensitive body part identify exactly one non-resolved record. The resulting `change` still passes the normal source, scope and transition checks. It preserves origin, first-recorded time and treatment status; `last_check.reference_bindings` records the local correction. Ambiguous matches stay rejected, resolved facts are not reopened, and manual Debug `record` operations remain strict. Reconfirming an unchanged fact refreshes its source without restarting its last-change clock.
 
 An update to a known active condition may repeat its immutable `target_id`, `kind`
