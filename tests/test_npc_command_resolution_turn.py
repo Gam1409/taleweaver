@@ -28,9 +28,10 @@ class EarlierFailureRoles(ActionRoles):
                     {
                         "player_item_actions": [
                             {
-                                "operation": "take",
+                                "operation": "give",
                                 "performer_id": "__player__",
-                                "item_id": "NOT_AVAILABLE",
+                                "item_id": "HIDDEN_RING",
+                                "target_id": "LINA",
                                 "passage_id": "player:p0",
                                 "basis": "performed",
                             }

@@ -335,6 +335,8 @@ def prepare_intent(
             error,
             intent=proposal,
             owners=snapshot.owners if snapshot else None,
+            participants=set(snapshot.npcs) if snapshot else None,
+            containers=set(snapshot.containers) if snapshot else None,
             captured=captured,
         )
         result.new_inventory_items = []

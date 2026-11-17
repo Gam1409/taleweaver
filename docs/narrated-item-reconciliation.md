@@ -18,6 +18,13 @@ room-level proxy for it, cannot be restored through independent state updates.
 The original physical/scene validators still check evidence, ownership, audience,
 operations and game time. Rejected independent updates are counted and reported.
 
+A localized preliminary denial includes typed `player_item_actions` as well as
+legacy inventory proposals. Its scope covers supplied performer and recipient
+identities, referenced items and the participants' current possessions. Unknown,
+unresolved or malformed typed scope retains the global block; it never defaults
+to the player. This scope only excludes affected subjects from independent state
+updates. It grants no custody, completion or evidence authority.
+
 The local response parser now preserves independent sections with staging both
 enabled and disabled. With staging disabled, the wire schema and instructions
 still omit staging; the tolerant parser does not enable that feature. Each item
