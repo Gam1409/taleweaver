@@ -149,4 +149,7 @@ def make_tools(
         observable=getattr(turn, "observable_views", {}).get(mind.genesis.scope.observer_id)
         if getattr(turn, "input_id", None) == observation.message_id
         else None,
+        actions=getattr(turn, "action_drafts", {}).get(mind.genesis.scope.observer_id)
+        if getattr(turn, "input_id", None) == observation.message_id
+        else None,
     )

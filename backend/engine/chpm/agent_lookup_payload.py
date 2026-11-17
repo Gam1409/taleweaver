@@ -51,4 +51,5 @@ def build(
         "max_tool_calls_per_round": 2,
         "previous_lookups": previous_lookups,
         **({"personal_notebook": tools.notebook.metadata()} if tools.notebook else {}),
+        **({"pending_actions_not_world_facts": tools.actions.context()} if tools.actions else {}),
     }

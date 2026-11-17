@@ -12,7 +12,6 @@ from backend.core.llm_router import GameMasterLLM
 from backend.core.state_rejection_trace import reject
 from backend.engine.character_identity import identity_facts
 from backend.engine.clothing.context import actor_records, detail_settings
-from backend.engine.clothing.runtime import _store_actor
 from backend.engine.clothing.visuals import session_objects
 from backend.engine.narrated_items import (
     correction_input,
@@ -28,10 +27,12 @@ from backend.engine.narrated_items.context import actor_context, item_context
 from backend.engine.narrated_items.diagnostics import describe_failure
 from backend.engine.narrated_items.errors import ItemFailure
 from backend.engine.narrated_items.observation_sources import verified_sources
+from backend.engine.narrated_items.persistence import store_changes as _store_changes
 from backend.engine.narrated_items.preflight import SkippedCheck, skipped_check
 from backend.engine.narrated_items.schema import INSTRUCTIONS, ItemExtraction
 from backend.engine.narrated_movement import runtime as narrated_movement
 from backend.engine.narrated_movement.schema import INSTRUCTIONS as MOVEMENT_INSTRUCTIONS
+from backend.engine.npc_actions import reconciliation as command_reconciliation
 from backend.engine.physical_conditions import runtime as physical_conditions
 from backend.engine.physical_conditions.presentation import context as condition_context
 from backend.engine.physical_conditions.prompts import INSTRUCTIONS as CONDITION_INSTRUCTIONS
@@ -180,6 +181,11 @@ async def reconcile_items(
             "player_actor_id": PLAYER,
             "scene_source_id": SCENE,
             "authoritative_resolution": resolution,
+            **(
+                {"npc_command_control": command_reconciliation.context(manager)}
+                if command_reconciliation.context(manager)
+                else {}
+            ),
             "player_report": pending_conditions.player_message[1]
             if pending_conditions.player_message
             else "",
@@ -228,6 +234,11 @@ async def reconcile_items(
             + SCENE_INSTRUCTIONS
             + MOVEMENT_INSTRUCTIONS
             + independent_state.INSTRUCTIONS
+            + (
+                command_reconciliation.INSTRUCTIONS
+                if command_reconciliation.context(manager)
+                else ""
+            )
             + (STAGING_INSTRUCTIONS if staging_enabled else ""),
             payload,
             catalog,
@@ -258,8 +269,10 @@ async def reconcile_items(
         result, sections = coverage.annotate(result, catalog, sections, staging=staging_enabled)
         result = evidence.bind(result, narration, catalog=catalog)
         shared_staging.propose(manager, result, unconfirmed_sections=sections.staging_missing)
-        extraction, schema_failures, batch_denied, source_indices = independent_state.unpack(
-            result, actors, original_actions=original_actions
+        extraction, schema_failures, batch_denied, source_indices, command_errors = (
+            command_reconciliation.unpack(
+                manager, result, actors, original_actions=original_actions
+            )
         )
         failures = list(schema_failures)
         changed, accepted, errors = (
@@ -278,7 +291,7 @@ async def reconcile_items(
                 verified_sources=await verified_sources(manager, extraction, actors),
             )
         )
-        errors = [failure.message() for failure in schema_failures] + errors
+        errors = [failure.message() for failure in schema_failures] + errors + command_errors
         denied = set(blocked_targets or ()) | set(batch_denied or ())
         state_rejected = 0
         if denied:
@@ -412,21 +425,3 @@ def _state_review(rejected: int) -> list[str]:
         if rejected
         else []
     )
-
-
-def _store_changes(manager: Any, changed: dict, accepted: list[dict], catalog: dict) -> None:
-    states = dict(manager.state.entity_states or {})
-    affected = {entry[key] for entry in accepted for key in ("source_owner", "destination_owner")}
-    for identifier in affected - {SCENE}:
-        _store_actor(manager, states, changed[identifier])
-    for entry in accepted:
-        identifier = entry["item"]["id"]
-        if identifier not in catalog:
-            continue
-        states[identifier] = {
-            **states.get(identifier, {}),
-            "is_in_inventory": True,
-            "current_scene_id": manager.state.current_scene_id,
-            "vn_item_data": entry["item"],
-        }
-    manager.state.entity_states = states

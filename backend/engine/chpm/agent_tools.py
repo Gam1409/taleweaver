@@ -18,6 +18,8 @@ from backend.engine.chpm.schema import EpisodeContext, Observation
 from backend.engine.memory_rag.documents import MemoryDocument
 from backend.engine.memory_rag.ranking import rank_documents, tokens
 from backend.engine.narrated_movement.outcomes import descriptor, evidence_size
+from backend.engine.npc_actions.contracts import Request as ActionRequest
+from backend.engine.npc_actions.preview import Draft as ActionDraft
 
 
 def covering_excerpt(whole: str, previous: str, current: str) -> str:
@@ -44,12 +46,16 @@ class Tools:
     episode_contexts: dict[str, EpisodeContext] = field(default_factory=dict)
     notebook: NotebookDraft | None = None
     observable: View | None = None
+    actions: ActionDraft | None = None
 
     def __post_init__(self) -> None:
         if self.mind.genesis.scope.world_id != self.observation.session_id:
             raise ChpmError("CHPM tools belong to another session.")
 
-    def execute(self, lookup: Lookup | NotebookRequest) -> dict:
+    def execute(self, lookup: Lookup | NotebookRequest | ActionRequest) -> dict:
+        if isinstance(lookup, ActionRequest):
+            actions = self.current_actions()
+            return actions.execute(lookup) if actions else {"status": "unavailable_actions"}
         if not isinstance(lookup, Lookup):
             return (
                 self.notebook.execute(lookup)
@@ -57,6 +63,22 @@ class Tools:
                 else {"status": "unavailable_notebook"}
             )
         return self._lookup(lookup)
+
+    def current_actions(self) -> ActionDraft | None:
+        if self.actions is None or agent_observable.current(self) is None:
+            return None
+        scope = self.actions.scope
+        expected = (
+            self.mind.genesis.scope.world_id,
+            self.mind.genesis.scope.observer_id,
+            self.observation.message_id,
+            self.observation.scene_id,
+        )
+        return (
+            self.actions
+            if (scope.session_id, scope.actor_id, scope.input_id, scope.scene_id) == expected
+            else None
+        )
 
     def _lookup(self, lookup: Lookup) -> dict:
         if lookup.tool == "read_memory":

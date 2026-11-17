@@ -9,16 +9,14 @@ from sqlalchemy import select
 
 from backend.core.state_rejection_trace import reject
 from backend.engine.clothing.actions import WardrobeAction
+from backend.engine.clothing.changes import mutate as change_owned_wear
 from backend.engine.clothing.context import actor_records, detail_settings, resolved_inventory
 from backend.engine.clothing.profiles import (
     garment_for_item,
-    load_profile,
     owned_items,
     reconcile_profile,
-    validate_profile,
 )
 from backend.engine.clothing.resolution_facts import inner_details_allowed, item_facts
-from backend.engine.clothing.schema import VisualProfile, WornItem
 from backend.engine.visual_novel.continuity import PLAYER
 from backend.models.world_entity import WorldEntity
 
@@ -42,47 +40,8 @@ def _store_actor(manager: Any, states: dict, actor: dict) -> None:
         }
 
 
-def _profile(actor: dict) -> VisualProfile:
-    current = actor["visual_profile"]
-    profile = load_profile(current)
-    if profile is None and current:
-        raise ValueError("Unsupported visual profile was preserved.")
-    return profile or VisualProfile()
-
-
 def _change_wear(actor: dict, action: WardrobeAction) -> None:
-    profile = _profile(actor)
-    items = owned_items(actor["resolved_inventory"], equipment=actor["equipment"])
-    if action.item_id not in items:
-        raise ValueError("The character does not own that garment.")
-    worn = {item.item_id: item for item in profile.worn}
-    equipped = {
-        value.get("id") if isinstance(value, dict) else value
-        for value in actor["equipment"].values()
-    }
-    if action.operation != "wear" and action.item_id not in worn and action.item_id not in equipped:
-        raise ValueError("That garment is not currently worn.")
-    if action.operation == "remove":
-        worn.pop(action.item_id, None)
-    else:
-        worn[action.item_id] = WornItem(
-            item_id=action.item_id, uncovered_regions=action.uncovered_regions
-        )
-    profile.worn = list(worn.values())
-    actor["visual_profile"] = validate_profile(
-        profile, actor["resolved_inventory"], equipment=actor["equipment"]
-    ).model_dump()
-    if action.operation == "remove":
-        carried = owned_items(actor["inventory"])
-        if action.item_id not in carried:
-            actor["inventory"].append(deepcopy(items[action.item_id]))
-            actor["resolved_inventory"].append(deepcopy(items[action.item_id]))
-        actor["equipment"] = {
-            slot: None
-            if (value.get("id") if isinstance(value, dict) else value) == action.item_id
-            else value
-            for slot, value in actor["equipment"].items()
-        }
+    change_owned_wear(actor, action.item_id, action.operation, action.uncovered_regions)
 
 
 def _reconcile(manager: Any, entities: list[Any], states: dict) -> bool:

@@ -243,6 +243,15 @@ def retract(state: Any, message_id: str) -> None:
         state.entity_states = {**state.entity_states, KEY: data}
 
 
+def clear_item(state: Any, item_id: str) -> None:
+    """Invalidate only a transferred object's old derived placement."""
+    if KEY not in (state.entity_states or {}):
+        return
+    data = deepcopy(state.entity_states[KEY])
+    data["items"] = [entry for entry in data.get("items", []) if entry.get("item_id") != item_id]
+    state.entity_states = {**state.entity_states, KEY: data}
+
+
 def remap(states: dict, ids: dict[str, str]) -> dict:
     if KEY not in states:
         return states

@@ -86,14 +86,26 @@ def _messages(
             "belief_subject_ids",
             "omitted_belief_subjects",
             "max_tool_calls_per_round",
+            "pending_actions_not_world_facts",
         )
         if key in lookup
     }
     payload = {**capabilities, **prepared.payload, "remaining_rounds": remaining}
+    instruction = prepared.instruction + INSTRUCTIONS
+    if tools.actions is not None:
+        from backend.engine.npc_actions.instructions import INSTRUCTIONS as ACTION_INSTRUCTIONS
+
+        instruction = (
+            instruction.replace(
+                "Submission does not execute a world action.",
+                "Submission approves the pending action plan for fresh host checks.",
+            )
+            + ACTION_INSTRUCTIONS
+        )
     return [
         {
             "role": "system",
-            "content": prepared.instruction + INSTRUCTIONS,
+            "content": instruction,
         },
         {"role": "user", "content": json.dumps(payload, ensure_ascii=False, separators=(",", ":"))},
         *history,

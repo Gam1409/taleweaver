@@ -57,7 +57,11 @@ def _conditions(ledger: Ledger | None, target: str, *, own: bool, visible: set[s
             "part": row.part,
             "status": row.status,
             **(
-                {"detail": row.detail if own else row.visual_detail}
+                {
+                    "detail": row.detail
+                    if own or row.kind == "item_state" and row.latest.kind == "command"
+                    else row.visual_detail
+                }
                 if row.status != "resolved"
                 else {}
             ),
@@ -110,6 +114,11 @@ def _item_view(
         if worn and identifier in worn
         else "not_worn",
         "recorded_conditions": conditions,
+        **(
+            {"spatial_position": item["spatial_position"]}
+            if owner == SCENE and item.get("spatial_position")
+            else {}
+        ),
     }
 
 
@@ -167,7 +176,9 @@ def project(manager: Any, rows: list[Any], observer_id: str, observation: Observ
         {**row, "owner_id": PLAYER if row["owner_id"] == manager.avatar.id else row["owner_id"]}
         for row in placed
     ]
-    available.update({row["item_id"]: row["owner_id"] for row in placed})
+    available.update(
+        {row["item_id"]: snapshot.owners.get(row["item_id"], row["owner_id"]) for row in placed}
+    )
     loose = {key for key in available if available[key] == SCENE} | {
         row["item_id"] for row in placed
     }
@@ -223,7 +234,7 @@ def _add_items(
                 and identifier in loose
                 and row.visibility == "public"
                 and row.status != "resolved"
-                and row.visual_detail
+                and (row.visual_detail or row.kind == "item_state" and row.latest.kind == "command")
                 and row.latest.kind != "unavailable"
             }
             if ledger

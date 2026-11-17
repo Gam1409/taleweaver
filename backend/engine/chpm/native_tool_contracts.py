@@ -18,6 +18,8 @@ from backend.engine.chpm.notebook_requests import (
     NotebookRequest,
     NotebookWrite,
 )
+from backend.engine.npc_actions.contracts import ACTION_MODELS
+from backend.engine.npc_actions.contracts import Request as ActionRequest
 
 MAX_VALUE_CHARS = 8192
 MAX_OPERATIONS = 16
@@ -62,7 +64,7 @@ _POINTER = "RFC 6901 JSON Pointer. '' selects the root; '/' selects an empty-nam
 _VALUE = {
     "description": "Any strict JSON value: null, boolean, number, string, array or object with freely chosen keys. No fixed notebook layout. Each value's canonical JSON must fit 8192 characters."
 }
-_KNOWN_TOOL_NAMES = frozenset((*_LOOKUPS, *_NOTEBOOKS))
+_KNOWN_TOOL_NAMES = frozenset((*_LOOKUPS, *_NOTEBOOKS, *ACTION_MODELS))
 
 
 def known_tool_names() -> frozenset[str]:
@@ -371,12 +373,16 @@ def _validate_paths(request: Lookup | NotebookRequest) -> None:
         ) from None
 
 
-def parse_call(name: str, arguments_raw: str) -> Lookup | NotebookRequest:
+def parse_call(name: str, arguments_raw: str) -> Lookup | NotebookRequest | ActionRequest:
     """Strictly decode one pure request; callers validate the full batch before execution."""
     if type(name) is not str or name not in _KNOWN_TOOL_NAMES:
         raise NativeToolArgumentError(
-            "invalid_tool", "Unknown tool. Allowed: " + ", ".join([*_LOOKUPS, *_NOTEBOOKS])
+            "invalid_tool",
+            "Unknown tool. Use an offered name. Known: "
+            + ", ".join([*_LOOKUPS, *_NOTEBOOKS, *ACTION_MODELS]),
         )
+    if name in ACTION_MODELS:
+        return _action_request(name, arguments_raw)
     issues: list[_Issue] = []
     prepared = _prepare(name, _arguments(arguments_raw), issues)
     model = Lookup if name in _LOOKUPS else _NOTEBOOKS[name]
@@ -389,3 +395,17 @@ def parse_call(name: str, arguments_raw: str) -> Lookup | NotebookRequest:
         _reject(issues)
     _validate_paths(request)
     return request
+
+
+def _action_request(name: str, raw: str) -> ActionRequest:
+    arguments = _arguments(raw)
+    if "tool" in arguments:
+        raise NativeToolArgumentError(
+            "invalid_arguments",
+            "Pass only declared function arguments; the host binds the tool name.",
+        )
+    try:
+        return ACTION_MODELS[name].model_validate({"tool": name, **arguments})
+    except ValidationError as exc:
+        issues = _validation_issues(exc, name)
+        _reject(issues)

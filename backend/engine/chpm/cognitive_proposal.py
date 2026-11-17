@@ -66,6 +66,11 @@ def prepare(
                 for request, result in zip(step["requests"], step["results"], strict=True)
             ],
             **({"private_notebook_not_world_facts": notebook.context()} if notebook else {}),
+            **(
+                {"pending_actions_not_world_facts": tools.actions.context()}
+                if tools.actions
+                else {}
+            ),
         }
     episode_contexts = semantic_recall.contexts(pinned, hits)
     if episode_contexts:
@@ -162,6 +167,8 @@ def prepare(
                 "candidate_motives": resolved_motives,
             }
         )
+        if tools is not None and tools.actions is not None:
+            tools.actions.approved = True
         return complete, changed
 
     return Prepared(

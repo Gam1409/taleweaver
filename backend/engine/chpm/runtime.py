@@ -51,6 +51,7 @@ from backend.engine.chpm.schema import (
     Verdict,
 )
 from backend.engine.chpm.state import KEY, load, save
+from backend.engine.npc_actions.preview import Draft as ActionDraft
 from backend.engine.turn_replay.transactions import release_for_model
 
 logger = logging.getLogger(__name__)
@@ -88,6 +89,8 @@ class Turn:
     report_origins: dict = field(default_factory=dict)
     report_origins_enabled: bool = True
     catchup_unavailable: list = field(default_factory=list)
+    action_drafts: dict[str, ActionDraft] = field(default_factory=dict)
+    action_outcomes: dict[str, list[dict]] = field(default_factory=dict)
 
 
 def current(manager: Any) -> Turn | None:
@@ -152,14 +155,23 @@ def contract_data(turn: Turn) -> dict:
             data[actor]["selected_motives_not_world_facts"] = narrative_context.compact_motives(
                 decision, data[actor]
             )
+    for actor, outcomes in turn.action_outcomes.items():
+        if actor in data:
+            data[actor]["authoritative_command_outcomes"] = outcomes
+            data[actor]["observation_time"] = (
+                "before_command_publication; use current world state and command outcomes for subsequent effects"
+            )
     return data
 
 
 def contract(turn: Turn) -> str:
     if turn.simplified:
         return continuation.contract(turn)
+    from backend.engine.npc_actions.instructions import NARRATION as ACTION_NARRATION
+
     return (
         prompts.NARRATE
+        + (ACTION_NARRATION if turn.action_outcomes else "")
         + json.dumps(contract_data(turn), ensure_ascii=False, separators=(",", ":"))
         + roster.instruction(turn.deferred_names)
         + (
@@ -301,6 +313,10 @@ async def _prepare(manager: Any, turn: Turn, message: str, actors: list[Any]) ->
     if turn.initial.settings.mode == "live" and turn.initial.settings.agent_steps:
         turn.agent_clothing = await agent_views.capture(manager)
         turn.observable_views = await observable_state.capture(manager, active_ids, observed)
+        if turn.initial.settings.action_tools:
+            from backend.engine.npc_actions.preparation import capture
+
+            turn.action_drafts = await capture(manager, turn.observable_views, observed)
     await semantic_recall.prepare(manager, turn, active_ids, observed)
     from backend.engine.chpm import parallel
 
@@ -308,6 +324,10 @@ async def _prepare(manager: Any, turn: Turn, message: str, actors: list[Any]) ->
     from backend.engine.chpm.rendering import preflight
 
     preflight(turn)
+    if turn.action_drafts:
+        from backend.engine.npc_actions.runtime import publish_turn
+
+        await publish_turn(manager, turn)
 
 
 async def _prepare_actor(manager: Any, turn: Turn, actor: Any, observed: Observation) -> None:

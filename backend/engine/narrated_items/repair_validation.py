@@ -9,6 +9,7 @@ from backend.engine.narrated_items.apply import apply_actions
 from backend.engine.narrated_items.observation_sources import verified_sources
 from backend.engine.narrated_items.schema import ItemExtraction
 from backend.engine.narrated_items.source_catalog import Catalog
+from backend.engine.npc_actions.reconciliation import protect as protect_commands
 from backend.engine.physical_conditions.ledger import apply as apply_conditions
 from backend.engine.physical_conditions.ledger import read as read_conditions
 from backend.engine.physical_conditions.references import bind_records
@@ -48,7 +49,13 @@ class Check:
             return False
         bound = evidence.bind(body, self.catalog.narration, catalog=self.catalog)
         extracted, failures, denied, indices = independent_state.unpack(bound, self.actors)
-        if failures or denied or (extracted.actions and not self.item_changes_allowed):
+        extracted, indices, command_errors = protect_commands(self.manager, extracted, indices)
+        if (
+            command_errors
+            or failures
+            or denied
+            or (extracted.actions and not self.item_changes_allowed)
+        ):
             return False
         if self._blocked(extracted) or _item_chain_conflict(extracted, len(original.actions)):
             return False

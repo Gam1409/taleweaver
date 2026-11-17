@@ -33,12 +33,21 @@ class Settings(Contract):
     memory_limit: int = Field(default=12, ge=0, le=24, strict=True)
     agent_steps: int = Field(default=0, ge=0, le=MAX_AGENT_ROUNDS, strict=True)
     notebook_enabled: StrictBool = False
+    action_tools: StrictBool = False
     tool_protocol: Literal["auto", "native", "json"] = "auto"
     semantic_memory: StrictBool = False
     failure_policy: Literal["continue", "strict"] = "continue"
 
     @model_validator(mode="after")
     def valid_selection(self) -> "Settings":
+        if (
+            self.action_tools
+            and self.mode == "live"
+            and (self.workflow != "integrated" or not self.agent_steps)
+        ):
+            raise ValueError(
+                "NPC action tools require the integrated workflow and at least one tool round."
+            )
         if len(set(self.actor_ids)) != len(self.actor_ids):
             raise ValueError("Choose each NPC only once.")
         if any(not value.strip() or len(value) > 100 for value in self.actor_ids):

@@ -1947,16 +1947,12 @@ class GameTurnManager:
         ]
         narration_prompt = "\n\n".join(part for part in narration_prompt_parts if part)
         narration_prompt = append_correction(narration_prompt, self.narration_correction)
-        portrait_turn = portrait_presentation.prepare(self, all_entities)
-        narration_prompt = "\n\n".join(filter(None, (narration_prompt, portrait_turn.prompt)))
-
         reminders: list[str] = [
             location_resolution(scene_id_before_turn, self.state.current_scene_id)
             + clarification_block(self, scene_id_before_turn),
             movement_resolution(all_entities, self.state, game_event),
             getattr(self, "_vn_movement_resolution", ""),
             getattr(self, "_group_movement_resolution", ""),
-            portrait_turn.reminder,
         ]
         if language:
             reminders.append(
@@ -1986,6 +1982,17 @@ class GameTurnManager:
         yield f"event: status\ndata: {json.dumps({'content': 'Preparing NPC responses...'})}\n\n"
         chpm_context = await chpm_runtime.prepare(self, user_msg, all_entities)
         chpm_buffered = chpm_runtime.buffered(self)
+        npc_turn = chpm_runtime.current(self)
+        if npc_turn and any(
+            row.get("status") == "applied"
+            for results in npc_turn.action_outcomes.values()
+            for row in results
+        ):
+            await self._llm_context_builder.refresh_narration_state(ctx)
+            all_entities = ctx.all_entities
+        portrait_turn = portrait_presentation.prepare(self, all_entities)
+        narration_prompt = "\n\n".join(filter(None, (narration_prompt, portrait_turn.prompt)))
+        reminders.append(portrait_turn.reminder)
 
         turn_context = build_narration_turn_block(
             ctx.narration_state_block,

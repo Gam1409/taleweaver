@@ -263,7 +263,7 @@ def remap(states: dict | None, message_ids: dict[str, str]) -> dict:
     sources.extend(row.reported_by for row in ledger.conditions.values() if row.reported_by)
     sources.extend(event.reported_by for event in ledger.events if event.reported_by)
     for source in sources:
-        if source.kind not in {"narration", "player"}:
+        if source.kind not in {"narration", "player", "command"}:
             continue
         source.message_id = message_ids.get(source.message_id or "")
         if source.message_id is None:

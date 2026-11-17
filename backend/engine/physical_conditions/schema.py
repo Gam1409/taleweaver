@@ -3,10 +3,19 @@
 import re
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, StrictInt, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    SerializerFunctionWrapHandler,
+    StrictInt,
+    model_serializer,
+    model_validator,
+)
 
 from backend.core.text_evidence import WithEvidenceSpan
 from backend.engine.clothing.schema import Region
+from backend.engine.physical_conditions.command_source import CommandProof
 from backend.engine.physical_conditions.wire_contract import operation_rules
 
 KEY = "__physical_conditions__"
@@ -68,18 +77,34 @@ class ConditionProposal(Model, WithEvidenceSpan):
 
 
 class Source(Model, WithEvidenceSpan):
-    kind: Literal["narration", "player", "manual", "unavailable"]
+    kind: Literal["narration", "player", "manual", "command", "unavailable"]
     message_id: str | None = Field(default=None, max_length=100)
     content_hash: str = Field(default="", max_length=64)
     quote: str = Field(min_length=1, max_length=600)
+    command: CommandProof | None = None
 
     @model_validator(mode="after")
     def coherent(self) -> "Source":
-        if self.kind in {"narration", "player"} and (
+        if self.kind in {"narration", "player", "command"} and (
             not self.message_id or len(self.content_hash) != 64
         ):
-            raise ValueError("Narration sources require a saved message ID and content hash.")
+            raise ValueError(
+                "Message-backed sources require a saved input/message ID and content hash."
+            )
+        if self.kind == "command" and self.command is None:
+            raise ValueError("Command sources require host operation provenance.")
+        if self.command is not None and self.kind not in {"command", "unavailable"}:
+            raise ValueError(
+                "Host operation provenance cannot stand in for narration or manual input."
+            )
         return self
+
+    @model_serializer(mode="wrap")
+    def legacy_shape(self, handler: SerializerFunctionWrapHandler) -> dict:
+        result = super().preserve_legacy_shape(handler)
+        if self.command is None:
+            result.pop("command", None)
+        return result
 
 
 class Condition(Model):

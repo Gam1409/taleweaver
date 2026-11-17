@@ -119,10 +119,28 @@ def activate(
 
 
 def contract(turn: "Turn") -> str:
-    return INSTRUCTION + json.dumps(
-        {"npc_identities": turn.fallback_identities, "continuity_gap": gap_context(turn.initial)},
-        ensure_ascii=False,
-        separators=(",", ":"),
+    from backend.engine.npc_actions.instructions import NARRATION as ACTION_NARRATION
+
+    outcomes = getattr(turn, "action_outcomes", {})
+    return (
+        INSTRUCTION
+        + (ACTION_NARRATION if outcomes else "")
+        + json.dumps(
+            {
+                "npc_identities": turn.fallback_identities,
+                "continuity_gap": gap_context(turn.initial),
+                **(
+                    {
+                        "authoritative_command_outcomes": outcomes,
+                        "identity_host_observation_time": "before_command_publication; current owner state and command outcomes take precedence",
+                    }
+                    if outcomes
+                    else {}
+                ),
+            },
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
     )
 
 

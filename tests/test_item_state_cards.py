@@ -85,6 +85,56 @@ async def test_npc_card_projects_current_value_and_public_equipment_properties(
     assert "A private inscription." not in str(data)
 
 
+async def test_command_property_is_displayed_without_requiring_a_fabricated_prose_quote(
+    auth_client, portrait_world
+):
+    from hashlib import sha256
+
+    from backend.engine.physical_conditions.command_source import CommandProof
+    from backend.engine.physical_conditions.item_commands import apply_command
+
+    await configure()
+    detail = "The coat is carefully folded at the cuff."
+    private = "A private mark beneath the lining."
+    async with TestSessionLocal() as db:
+        state = await db.scalar(
+            select(SessionState).where(SessionState.session_id == "portrait-session")
+        )
+        db.add(
+            ChatMessage(
+                id="command-input",
+                session_id=state.session_id,
+                role="user",
+                content="I continue the conversation.",
+            )
+        )
+        for index, dimension, text, visibility in [
+            (1, "form", detail, "public"),
+            (2, "inscription", private, "private"),
+        ]:
+            state.entity_states, _ = apply_command(
+                state.entity_states,
+                item_id="COAT",
+                dimension=dimension,
+                detail=text,
+                owned_item_ids={"COAT"},
+                proof=CommandProof(
+                    id=f"command-{index}", actor_id="NPC_NEW", operation="change_item_state"
+                ),
+                message_id="command-input",
+                request_hash=sha256(str(index).encode()).hexdigest(),
+                session_id=state.session_id,
+                minute=50,
+                visibility=visibility,
+            )
+        await db.commit()
+    response = await auth_client.get(URL)
+    assert response.status_code == 200, response.text
+    data = response.json()["current_state"]
+    assert any(row["detail"] == detail for row in data["conditions"]["items"])
+    assert private not in str(data)
+
+
 @pytest.mark.parametrize(
     "metadata,override,available",
     [
