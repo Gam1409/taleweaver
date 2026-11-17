@@ -139,7 +139,12 @@ async def test_valid_action_with_empty_speech_keeps_hearing_and_agenda_strict(
         )
         changes["agenda_evidence"] = [{"actor_id": "npc", "passage_id": "p0"}]
         message = "agenda update needs exact evidence"
-    monkeypatch.setattr(inference, "request", AsyncMock(return_value=review(**changes)))
+    request = AsyncMock(return_value=review(**changes))
+    repair = AsyncMock(return_value=TEXT)
+    monkeypatch.setattr(inference, "request", request)
+    monkeypatch.setattr(rendering, "_repair", repair)
     with pytest.raises(ChpmError, match=message):
         await rendering.validate(host, TEXT, completed=True, resolution="", system_prompt="Policy")
+    assert request.await_count == (2 if boundary == "agenda" else 1)
+    assert repair.await_count == (1 if boundary == "agenda" else 0)
     assert not load(host.state).actors and not load(host.state).agenda
