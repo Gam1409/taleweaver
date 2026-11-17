@@ -3,7 +3,7 @@
 from copy import deepcopy
 
 import pytest
-from pydantic import BaseModel
+from pydantic import AliasChoices, BaseModel, Field
 
 from backend.engine.chpm import proposal_edits
 
@@ -114,3 +114,109 @@ def test_schema_roots_remain_editable_when_existing_paths_fill_the_catalogue():
     )
     assert changed["value"] == "repaired"
     assert "value" not in candidate
+
+
+class AliasedValue(BaseModel):
+    value: str = Field(validation_alias=AliasChoices("wire_name", "legacy_name"))
+
+
+class NestedProposal(BaseModel):
+    payload: AliasedValue
+    rows: list[AliasedValue] = Field(default_factory=list)
+
+
+def test_schema_required_missing_alias_children_can_be_added_under_existing_dicts_only():
+    candidate = {"payload": {}, "rows": [{}]}
+    before = deepcopy(candidate)
+    allowed = proposal_edits.paths(candidate, NestedProposal)
+    assert "/payload/wire_name" in allowed and "/rows/0/wire_name" in allowed
+    changed = proposal_edits.apply(
+        candidate,
+        edits(
+            {"op": "replace", "path": "/payload/wire_name", "value": "first"},
+            {"op": "replace", "path": "/rows/0/wire_name", "value": "second"},
+        ),
+        NestedProposal,
+    )
+    assert NestedProposal.model_validate(changed).payload.value == "first"
+    assert candidate == before
+    legacy = {"payload": {"legacy_name": "retained"}}
+    assert "/payload/wire_name" not in proposal_edits.paths(legacy, NestedProposal)
+
+
+@pytest.mark.parametrize("candidate", [{}, {"payload": None}, {"payload": "scalar"}])
+def test_required_fields_do_not_create_paths_through_missing_or_scalar_parents(candidate):
+    assert "/payload/wire_name" not in proposal_edits.paths(candidate, NestedProposal)
+
+
+@pytest.mark.parametrize("path", ["/payload/invented", "/rows/1/wire_name", "/rows/-/wire_name"])
+def test_missing_child_discovery_cannot_add_invented_fields_or_grow_arrays(path):
+    candidate = {"payload": {}, "rows": [{}]}
+    before = deepcopy(candidate)
+    with pytest.raises(ValueError, match="unavailable"):
+        proposal_edits.apply(
+            candidate, edits({"op": "replace", "path": path, "value": "ignored"}), NestedProposal
+        )
+    assert candidate == before
+
+
+def test_missing_required_children_remain_unavailable_for_removal():
+    candidate = {"payload": {}}
+    with pytest.raises(ValueError, match="missing field"):
+        proposal_edits.apply(
+            candidate, edits({"op": "remove", "path": "/payload/wire_name"}), NestedProposal
+        )
+    assert candidate == {"payload": {}}
+
+
+class UnionProposal(BaseModel):
+    payload: AliasedValue | int
+
+
+def test_union_error_branch_names_never_become_schema_field_paths():
+    candidate = {"payload": {"AliasedValue": {}}}
+    allowed = proposal_edits.paths(candidate, UnionProposal)
+    assert "/payload/AliasedValue/wire_name" not in allowed
+    assert "/payload" in allowed
+
+
+class EscapedValue(BaseModel):
+    value: str = Field(alias="a/b~c")
+
+
+class EscapedProposal(BaseModel):
+    payload: EscapedValue
+
+
+def test_missing_alias_paths_use_exact_pointer_escaping():
+    candidate = {"payload": {}}
+    allowed = proposal_edits.paths(candidate, EscapedProposal)
+    assert "/payload/a~1b~0c" in allowed
+    assert "/payload/a/b~c" not in allowed and "/payload/a~2b~0c" not in allowed
+    changed = proposal_edits.apply(
+        candidate,
+        edits({"op": "replace", "path": "/payload/a~1b~0c", "value": "retained"}),
+        EscapedProposal,
+    )
+    assert EscapedProposal.model_validate(changed).payload.value == "retained"
+
+
+class DeepProposal(BaseModel):
+    payload: NestedProposal
+
+
+def test_declared_missing_children_keep_existing_depth_and_path_length_caps():
+    candidate = {"payload": {"payload": {}, "rows": [{}]}}
+    allowed = proposal_edits.paths(candidate, DeepProposal)
+    assert "/payload/payload/wire_name" in allowed
+    assert "/payload/rows/0/wire_name" not in allowed
+    assert all(len(path.split("/")) - 1 <= proposal_edits.MAX_DEPTH for path in allowed)
+
+    class LongAliasValue(BaseModel):
+        value: str = Field(alias="a" * proposal_edits.MAX_PATH_LENGTH)
+
+    class LongAliasProposal(BaseModel):
+        payload: LongAliasValue
+
+    allowed = proposal_edits.paths({"payload": {}}, LongAliasProposal)
+    assert allowed == ["/payload"]

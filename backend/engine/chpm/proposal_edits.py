@@ -3,12 +3,14 @@
 from copy import deepcopy
 from typing import Literal
 
-from pydantic import BaseModel, Field, JsonValue, model_validator
+from pydantic import BaseModel, Field, JsonValue, ValidationError, model_validator
 
 from backend.engine.chpm.schema import Contract
 
 MAX_PATHS = 256
 MAX_DEPTH = 3
+MAX_EDITS = 8
+MAX_PATH_LENGTH = 300
 INSTRUCTIONS = (
     "\nFIELD EDIT REPAIR: This round returns only the Corrections schema object. "
     "Earlier proposal rules still govern the reconstructed proposal's content and evidence. "
@@ -19,7 +21,7 @@ INSTRUCTIONS = (
 
 class Edit(Contract):
     op: Literal["replace", "remove"]
-    path: str = Field(min_length=1, max_length=300)
+    path: str = Field(min_length=1, max_length=MAX_PATH_LENGTH)
     value: JsonValue = None
 
     @model_validator(mode="after")
@@ -32,14 +34,65 @@ class Edit(Contract):
 
 
 class Corrections(Contract):
-    edits: list[Edit] = Field(min_length=1, max_length=8)
+    edits: list[Edit] = Field(min_length=1, max_length=MAX_EDITS)
 
 
 def paths(candidate: dict, schema: type[BaseModel]) -> list[str]:
     roots = {"/" + _escape(key) for key in schema.model_json_schema().get("properties", {})}
     remaining = max(0, MAX_PATHS - len(roots))
-    children = sorted(set(_paths(candidate)) - roots)[:remaining]
+    children = sorted((set(_paths(candidate)) | set(_missing_paths(candidate, schema))) - roots)[
+        :remaining
+    ]
     return sorted(roots | set(children))[:MAX_PATHS]
+
+
+def pointer(location: tuple[str | int, ...]) -> str:
+    return "/" + "/".join(_escape(str(part)) for part in location)
+
+
+def _missing_fields(candidate: dict, schema: type[BaseModel]) -> list[tuple[str | int, ...]] | None:
+    try:
+        schema.model_validate(deepcopy(candidate))
+    except ValidationError as exc:
+        errors = exc.errors(include_input=False, include_url=False, include_context=False)
+        if len(errors) > MAX_PATHS:
+            return None
+        return [item["loc"] for item in errors if item["type"] == "missing"]
+    return []
+
+
+def _parent(candidate: dict, location: tuple[str | int, ...]) -> dict | None:
+    parent: JsonValue = candidate
+    try:
+        for part in location[:-1]:
+            parent = _member(parent, str(part))
+    except ValueError:
+        return None
+    return parent if isinstance(parent, dict) else None
+
+
+def _missing_paths(candidate: dict, schema: type[BaseModel]) -> list[str]:
+    locations = _missing_fields(candidate, schema)
+    if locations is None:
+        return []
+    result = []
+    for location in locations:
+        if not 1 < len(location) <= MAX_DEPTH or not isinstance(location[-1], str):
+            continue
+        path = pointer(location)
+        if len(path) > MAX_PATH_LENGTH or _parent(candidate, location) is None:
+            continue
+        probe = deepcopy(candidate)
+        parent = _parent(probe, location)
+        if parent is None or location[-1] in parent:
+            continue
+        # A union branch label can coincide with an input key. Confirm that the
+        # actual required field, rather than a diagnostic-only branch, is addressed.
+        parent[location[-1]] = None
+        remaining = _missing_fields(probe, schema)
+        if remaining is not None and location not in remaining:
+            result.append(path)
+    return result
 
 
 def _paths(value: JsonValue, prefix: str = "", depth: int = 0) -> list[str]:
@@ -55,7 +108,7 @@ def _paths(value: JsonValue, prefix: str = "", depth: int = 0) -> list[str]:
     result = []
     for key, child in items:
         path = prefix + "/" + _escape(str(key))
-        if len(path) > 300:
+        if len(path) > MAX_PATH_LENGTH:
             continue
         result.append(path)
         result.extend(_paths(child, path, depth + 1))
