@@ -1,7 +1,7 @@
 """Turn-local NPC command previews; inspecting or planning never changes the world."""
 
 from copy import deepcopy
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from hashlib import sha256
 from typing import TYPE_CHECKING, Literal
 
@@ -184,7 +184,10 @@ class Draft:
             from backend.engine.npc_actions.pose_actions import apply as pose_preview
 
             self._states, effect = pose_preview(
-                self.scope, self._states, request, self.start_index + len(self.requests)
+                replace(self.scope, scene_objects=self._scene_objects()),
+                self._states,
+                request,
+                self.start_index + len(self.requests),
             )
             return effect
         if isinstance(request, Interact):
@@ -200,6 +203,25 @@ class Draft:
         if isinstance(request, (ChangeState, Use)):
             return self._property(request)
         raise ValueError("This action is unavailable to this controller.")
+
+    def _scene_objects(self) -> dict[str, str]:
+        """Keep fixed visible props and apply this plan's current loose-item custody."""
+        return {
+            **{
+                key: name
+                for key, name in self.scope.scene_objects.items()
+                if key in self.scope.accessible_ids
+                and self._possessions.owners.get(key, SCENE) == SCENE
+            },
+            **{
+                key: item["name"][:120]
+                for key, item in self._possessions.items.items()
+                if key in self.scope.accessible_ids
+                and self._possessions.owners.get(key) == SCENE
+                and isinstance(item.get("name"), str)
+                and item["name"].strip()
+            },
+        }
 
     def _transfer(self, request: Take | Give | PutDown) -> dict:
         operation: Literal["take", "give", "put_down"] = (
