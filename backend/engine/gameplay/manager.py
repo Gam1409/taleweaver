@@ -1254,6 +1254,9 @@ class GameTurnManager:
         _ = auto_visualize
         self._vn_story_beat = None
         self._vn_scene_focus = None
+        self._vn_movement_resolution = ""
+        self._vn_movement_sources: dict[str, Any] = {}
+        self._vn_movement_proposal = None
         cycle_start = time.perf_counter()
         scene_id_before_turn = self.state.current_scene_id
         time_before_turn = self.state.in_game_time
@@ -1744,6 +1747,9 @@ class GameTurnManager:
                     entities=all_entities,
                     clothing_scenes=all_scenes,
                 )
+                from backend.engine.visual_novel import movement_sources
+
+                progression_state += await movement_sources.prepare(self)
             progression_user_prompt = build_pass1_user_prompt(
                 progression_state,
                 user_msg,
@@ -1781,6 +1787,8 @@ class GameTurnManager:
                 raise
 
             yield f"event: status\ndata: {json.dumps({'content': 'Applying progression...'})}\n\n"
+            if policy.vn:
+                self._vn_movement_proposal = progression_intent.model_copy(deep=True)
             await confirm_player_movement(
                 self,
                 progression_intent,
@@ -1946,6 +1954,7 @@ class GameTurnManager:
             location_resolution(scene_id_before_turn, self.state.current_scene_id)
             + clarification_block(self, scene_id_before_turn),
             movement_resolution(all_entities, self.state, game_event),
+            getattr(self, "_vn_movement_resolution", ""),
             getattr(self, "_group_movement_resolution", ""),
             portrait_turn.reminder,
         ]

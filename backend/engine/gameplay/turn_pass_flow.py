@@ -55,6 +55,8 @@ async def run_guardrail_chain(
     """
     await validate_mutation_targets(manager, game_event)
     for method_name, takes_user_msg in _GUARDRAIL_STEPS:
+        if is_vn(manager.adventure) and method_name == "_enforce_npc_movement_guardrails":
+            continue  # VN uses the source-bound movement owner below, including these gates.
         enforce = getattr(manager, method_name)
         args = (game_event, user_msg) if takes_user_msg else (game_event,)
         messages = await enforce(*args)
@@ -68,6 +70,11 @@ async def run_guardrail_chain(
         rule_violations.extend(
             await manager._enforce_win_and_loss_guardrails(game_event, script_context=script_ctx)
         )
+    else:
+        from backend.engine.visual_novel.movement_recovery import resolve_event
+
+        for message in await resolve_event(manager, game_event):
+            yield sse_system(message)
     for system_message in await manager._apply_game_event(game_event):
         yield sse_role_message(system_message)
 

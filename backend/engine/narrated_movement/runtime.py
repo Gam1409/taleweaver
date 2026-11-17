@@ -11,17 +11,15 @@ from sqlalchemy import select
 
 from backend.core.engine_detailed_trace import step
 from backend.core.state_rejection_trace import reject
-from backend.core.text_evidence import require_span
 from backend.engine.clothing.visuals import session_objects
 from backend.engine.gameplay.turn_state_applier import TurnStateApplier
 from backend.engine.narrated_movement.context import context
 from backend.engine.narrated_movement.outcomes import MovementBlockedError, MovementOutcome, receipt
-from backend.engine.narrated_movement.schema import MovementProposal
+from backend.engine.narrated_movement.schema import MAX_MOVEMENTS, MovementProposal
+from backend.engine.narrated_movement.validation import validate as _validate
 from backend.engine.rule_engine import EntityMovement, GameEvent, WorldEntityUpdate
 from backend.engine.scene_continuity.runtime import follow_transition
 from backend.models.chat import ChatMessage
-
-MAX_MOVEMENTS = 8
 
 
 @dataclass
@@ -195,28 +193,6 @@ def _unconfirmed(pending: Pending) -> list[MovementOutcome]:
         for raw in pending.proposals or []
         if (outcome := receipt(raw, pending.narration, "unconfirmed")) is not None
     ]
-
-
-def _validate(proposal: MovementProposal, pending: Pending) -> None:
-    require_span(pending.narration, proposal.evidence, proposal.evidence_span)
-    if proposal.evidence not in pending.narration or proposal.basis != "completed":
-        raise ValueError("Movement requires exact evidence of a completed current action.")
-    actor = pending.before["actors"].get(proposal.actor_id)
-    if actor is None or proposal.actor_id in pending.denied:
-        raise ValueError("Actor is unavailable or the action was rejected.")
-    if not actor["can_move"]:
-        raise MovementBlockedError("This actor cannot move.")
-    destination = proposal.destination_scene_id
-    if (
-        destination
-        and destination != pending.before["scene_id"]
-        and destination not in actor["allowed_destinations"]
-    ):
-        raise MovementBlockedError("Destination is not an open permitted adjacent location.")
-    if proposal.actor_id == "__player__" and (
-        not proposal.player_evidence or proposal.player_evidence not in pending.player_message
-    ):
-        raise ValueError("Player travel lacks exact authorization in the current player message.")
 
 
 def _append(event: GameEvent, proposal: MovementProposal, scene_id: str) -> None:

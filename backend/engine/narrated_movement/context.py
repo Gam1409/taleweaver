@@ -1,15 +1,17 @@
 """Expose canonical nearby routes and movement permissions without private NPC memories."""
 
+from collections.abc import Sequence
 from typing import Any
 
 from sqlalchemy import select
 
+from backend.engine.living_world.routes import lock_state
 from backend.engine.npc_movement import allowed_scenes, is_moveable
 from backend.engine.npc_presence import presence
 from backend.models.world_entity import WorldExit, WorldScene
 
 
-async def context(manager: Any, rows: list[Any]) -> dict:
+async def context(manager: Any, rows: list[Any], *, exit_updates: Sequence[Any] = ()) -> dict:
     scene_id = manager.state.current_scene_id
     scenes = {
         scene.id: scene.label
@@ -23,9 +25,13 @@ async def context(manager: Any, rows: list[Any]) -> dict:
     routes = []
     for row in exits:
         destination = _destination(row, scene_id)
-        if destination in scenes:
+        if destination is not None and destination in scenes:
             routes.append(
-                {"scene_id": destination, "label": scenes[destination], "locked": row.is_locked}
+                {
+                    "scene_id": destination,
+                    "label": scenes[destination],
+                    "locked": _locked(manager.state, row, scene_id, destination, exit_updates),
+                }
             )
     open_routes = {row["scene_id"] for row in routes if not row["locked"]}
     actors = {
@@ -45,6 +51,23 @@ async def context(manager: Any, rows: list[Any]) -> dict:
         "routes": sorted(routes, key=lambda row: (row["scene_id"], row["locked"])),
         "actors": actors,
     }
+
+
+def _locked(state: Any, edge: Any, origin: str, target: str, updates: Sequence[Any]) -> bool:
+    effective = lock_state(state, edge, origin, target).get("is_locked")
+    locked = effective if isinstance(effective, bool) else edge.is_locked
+    for update in updates:
+        direct = (update.from_scene_id, update.to_scene_id) == (
+            edge.from_scene_id,
+            edge.to_scene_id,
+        )
+        reverse = edge.exit_type == "bidirectional" and (
+            update.from_scene_id,
+            update.to_scene_id,
+        ) == (edge.to_scene_id, edge.from_scene_id)
+        if direct or reverse:
+            locked = update.is_locked
+    return locked
 
 
 def _destination(row: WorldExit, scene_id: str) -> str | None:

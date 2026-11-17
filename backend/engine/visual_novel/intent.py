@@ -16,6 +16,10 @@ from backend.engine.physical_conditions.presentation import context as physical_
 from backend.engine.physical_conditions.presentation import targets_from_actors
 from backend.engine.physical_conditions.scope import item_scope
 from backend.engine.rule_engine import InventoryItem, WorldEntityUpdate
+from backend.engine.visual_novel.movement_contracts import (
+    INSTRUCTION as MOVEMENT_SOURCE_INSTRUCTION,
+)
+from backend.engine.visual_novel.movement_contracts import SourceReference, VnMovement
 from backend.engine.visual_novel.scene_focus import SceneFocus, optional_focus
 from backend.engine.visual_novel.story_director import (
     StoryBeat,
@@ -54,7 +58,6 @@ _INTENT_FIELDS = frozenset(
         "discovered_entity_ids",
         "new_scene_id",
         "exit_label",
-        "moved_entities",
         "updated_exits",
         "deleted_entities",
     }
@@ -80,6 +83,7 @@ VNEntityUpdate = create_model(
     __config__=ConfigDict(extra="ignore"),
     **_fields(WorldEntityUpdate, _ENTITY_FIELDS),
     inventory=(GenericAlias(list, VNInventoryItem) | None, None),
+    movement_source=(SourceReference, None),
 )
 VNProgressionIntent = create_model(
     "VNProgressionIntent",
@@ -106,6 +110,7 @@ VNProgressionIntent = create_model(
     updated_inventory_items=(GenericAlias(list, VNInventoryItem) | None, None),
     spawned_items=(GenericAlias(list, VNInventoryItem) | None, None),
     updated_entities=(GenericAlias(list, VNEntityUpdate) | None, None),
+    moved_entities=(list[VnMovement] | None, None),
     wardrobe_actions=(list[WardrobeAction], Field(default_factory=list, max_length=6)),
     garment_creations=(list[GarmentCreation], Field(default_factory=list, max_length=3)),
     extra_time_minutes=(
@@ -196,6 +201,7 @@ story from resolved facts; no prose draft is requested here. Leave uncertain cha
     + "\n"
     + DIRECTOR_INSTRUCTION
     + TIME_PASSAGE_INSTRUCTION
+    + MOVEMENT_SOURCE_INSTRUCTION
 )
 
 
