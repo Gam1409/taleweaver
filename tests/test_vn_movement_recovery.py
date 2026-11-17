@@ -253,7 +253,8 @@ async def test_stale_or_invalid_source_retains_npc_without_losing_independent_up
             if change == "revision":
                 previous.revision_id = "new-revision"
             if change == "input":
-                manager._vn_player_message_id = "different-input"
+                # Keep the active attempt current while invalidating the movement snapshot.
+                manager._vn_movement_input = "different-input"
             await db.flush()
 
         supplied = proof(passage="player:p0" if change == "namespace" else "history:p0")
@@ -267,3 +268,27 @@ async def test_stale_or_invalid_source_retains_npc_without_losing_independent_up
         await db.refresh(state)
         assert state.entity_states.get("LINA", {}).get("current_scene_id", "START") == "START"
         assert state.entity_states["ABSENT"]["notes"] == "Retain this independent note."
+
+
+async def test_changed_active_input_rejects_whole_progression_before_applying_updates(monkeypatch):
+    async with TestSessionLocal() as db:
+        user, avatar, state = await recovery_state(db, mode="off")
+
+        async def change_input():
+            manager._vn_player_message_id = "different-input"
+
+        roles = RecoveringRoles(proof=proof(), presence="present", mutate=change_input)
+        install(monkeypatch, roles)
+        manager = GameTurnManager(db, state.session_id, user)
+        inventory = list(avatar.inventory)
+
+        events = [event async for event in manager.process_turn("I study the map.")]
+
+        assert any(event.startswith("event: error") for event in events), "".join(events)
+        assert not any(event.startswith("event: final") for event in events)
+        assert roles.prompts == [] and roles.chpm_calls == []
+        await db.refresh(state)
+        await db.refresh(avatar)
+        assert state.entity_states.get("LINA", {}).get("current_scene_id", "START") == "START"
+        assert "notes" not in state.entity_states.get("ABSENT", {})
+        assert state.current_scene_id == "START" and avatar.inventory == inventory

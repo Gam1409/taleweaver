@@ -10,6 +10,7 @@ from backend.engine.chpm.state import load
 from backend.engine.gameplay.turn_prompt_layout import format_recent_narration
 from backend.models.chat import ChatMessage
 from tests import test_custom_openai as endpoint_fixtures
+from tests.chpm_reference_fixture import evidence_text
 from tests.conftest import TestSessionLocal
 from tests.emotional_scene_fixture import BEATS, IDENTITIES, seed_emotional_scene
 from tests.test_chpm_kernel import preferred_choice
@@ -78,7 +79,7 @@ class EmotionalRoles(LocalFailureRoles):
                 "about_id": "@player",
                 "personal_motive_ids": ["character"],
                 "explanation": explanation,
-                "citations": [{"source_id": trigger["source_id"], "quote": trigger["text"]}],
+                "citations": [{"source_id": trigger["source_id"], "quote": evidence_text(trigger)}],
                 "alternatives": [],
                 "unknowns": ["Oleg's current independently verified safety"],
             }
