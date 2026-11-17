@@ -85,7 +85,10 @@ def validate_proposal(proposal: Proposal, entries: list[AgendaEntry]) -> None:
     for candidate in proposal.candidates:
         validate_intent(candidate.agenda_change, entries)
         if candidate.kind == "DEFER" and candidate.agenda_change:
-            raise ChpmError("CHPM cannot change the agenda through a silent DEFER.")
+            raise ChpmError(
+                "CHPM cannot change the agenda through a silent DEFER. "
+                "Replace /candidates/DEFER/agenda_change with null; keep the field present."
+            )
 
 
 def validate_evidence(decisions: dict[str, Decision], verdict: Verdict) -> None:
