@@ -23,6 +23,7 @@ from backend.engine.chpm.host_state import Mind, before_messages
 from backend.engine.chpm.proposal_draft import Draft
 from backend.engine.chpm.schema import KernelState, Settings, Usage
 from backend.engine.chpm.state import KEY
+from tests.chpm_repair_fixture import corrections
 from tests.test_chpm_appraisal import heard
 from tests.test_chpm_kernel import observation, wire_proposal
 from tests.test_chpm_reliability import Replies
@@ -211,7 +212,7 @@ async def test_single_repair_can_omit_only_the_unsupported_optional_experience()
     ]
     corrected = deepcopy(original)
     corrected["experiences"] = original["experiences"][1:]
-    model = Replies([json.dumps(original), json.dumps(corrected)])
+    model = Replies([json.dumps(original), corrections(("/experiences", corrected["experiences"]))])
     host = SimpleNamespace(_chpm_model_factory=lambda _role: model, game_id="fixture")
     catalogue = motivation.build(value, [], window)
     usage = Usage()

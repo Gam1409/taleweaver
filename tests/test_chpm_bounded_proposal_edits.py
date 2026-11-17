@@ -11,6 +11,7 @@ from backend.engine.chpm.errors import RecoverableChpmError
 from backend.engine.chpm.kernel import ChpmError
 from backend.engine.chpm.proposal_draft import Draft
 from backend.engine.chpm.schema import Settings, Usage
+from tests.chpm_repair_fixture import corrections
 from tests.test_chpm_kernel import wire_proposal
 from tests.test_chpm_proposal_repair_context import accept_choice
 from tests.test_chpm_reliability import Replies
@@ -80,7 +81,7 @@ async def test_source_error_repair_also_receives_the_independent_missing_gate_di
     original["choice"]["preferred"] = "CLARIFY"
     corrected = deepcopy(original)
     corrected["choice"]["preferred"] = "CONTINUE"
-    model = Replies([json.dumps(original), json.dumps(corrected)])
+    model = Replies([json.dumps(original), corrections(("/choice/preferred", "CONTINUE"))])
     manager = SimpleNamespace(_chpm_model_factory=lambda _role: model, game_id="fixture")
     usage = Usage()
 

@@ -9,6 +9,7 @@ from backend.engine.chpm import inference, proposal_attempt
 from backend.engine.chpm.json_contract import response_schema
 from backend.engine.chpm.proposal_draft import Draft
 from backend.engine.chpm.schema import Settings, Usage
+from tests.chpm_repair_fixture import corrections
 from tests.test_chpm_json_contract import host
 from tests.test_chpm_kernel import wire_proposal
 from tests.test_chpm_proposal_repair_context import accept_choice
@@ -77,7 +78,7 @@ async def test_local_format_correction_cannot_bypass_semantic_grounding():
     original = wire_proposal()
     original["choice"]["motive_id"] = "character"
     original["choice"].pop("motive_ids")
-    model = Replies([json.dumps(original), json.dumps(wire_proposal())])
+    model = Replies([json.dumps(original), corrections(("/choice/motive_ids", ["goal1"]))])
     manager = host("")
     manager._chpm_model_factory = lambda _role: model
     usage = Usage()

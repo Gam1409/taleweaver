@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from pydantic import BaseModel
 
 from backend.engine.chpm import inference, proposal_edits
+from backend.engine.chpm.proposal_draft import Draft
 
 
 @dataclass(frozen=True)
@@ -36,10 +37,11 @@ def prepare(
         identifiers=identifiers,
         limit=limit,
     )
-    if candidate is None or "rejected_proposal_omitted" not in full["proposal_feedback"]:
+    omitted = "rejected_proposal_omitted" in full["proposal_feedback"]
+    if candidate is None or (not issubclass(schema, Draft) and not omitted):
         return Prepared(full, identifiers)
     details = dict(full["proposal_feedback"])
-    details.pop("rejected_proposal_omitted")
+    details.pop("rejected_proposal_omitted", None)
     details.update(
         rejected_proposal=candidate,
         repair_mode="field_edits",

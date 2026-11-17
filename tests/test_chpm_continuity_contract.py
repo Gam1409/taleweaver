@@ -17,6 +17,7 @@ from backend.engine.chpm.json_contract import response_schema
 from backend.engine.chpm.kernel import ChpmError
 from backend.engine.chpm.proposal_draft import Draft
 from backend.engine.chpm.schema import Settings, Usage
+from tests.chpm_repair_fixture import corrections
 from tests.test_chpm_appraisal import heard
 from tests.test_chpm_bounded_proposal_edits import tight_request
 from tests.test_chpm_kernel import observation, wire_proposal
@@ -64,7 +65,15 @@ async def test_single_correction_names_the_exact_empty_transition_field(structur
         original["choice"]["reason"] = "x" * 301
     corrected = deepcopy(original)
     corrected["choice"].update(change_basis=[], reason="Keep my purpose.")
-    model = Replies([json.dumps(original), json.dumps(corrected)])
+    model = Replies(
+        [
+            json.dumps(original),
+            corrections(
+                ("/choice/change_basis", []),
+                ("/choice/reason", corrected["choice"]["reason"]),
+            ),
+        ]
+    )
     manager = SimpleNamespace(_chpm_model_factory=lambda _role: model, game_id="fixture")
     usage = Usage()
 
@@ -126,7 +135,15 @@ async def test_maintain_conflict_is_explained_even_beside_a_structural_error(str
     corrected = deepcopy(original)
     corrected["choice"]["change_basis"] = []
     corrected["experiences"] = []
-    model = Replies([json.dumps(original), json.dumps(corrected)])
+    model = Replies(
+        [
+            json.dumps(original),
+            corrections(
+                ("/choice/change_basis", []),
+                ("/experiences", []),
+            ),
+        ]
+    )
     host = SimpleNamespace(_chpm_model_factory=lambda _role: model, game_id="fixture")
     usage = Usage()
 
@@ -194,7 +211,16 @@ async def test_long_error_keeps_multiple_actionable_hints_within_feedback_limit(
     )
     corrected = deepcopy(original)
     corrected["choice"].update(preferred="CONTINUE", continuity="new", change_basis=[])
-    model = Replies([json.dumps(original), json.dumps(corrected)])
+    model = Replies(
+        [
+            json.dumps(original),
+            corrections(
+                ("/choice/preferred", "CONTINUE"),
+                ("/choice/continuity", "new"),
+                ("/choice/change_basis", []),
+            ),
+        ]
+    )
     host = SimpleNamespace(_chpm_model_factory=lambda _role: model, game_id="fixture")
     usage = Usage()
 

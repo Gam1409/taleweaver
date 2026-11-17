@@ -9,6 +9,7 @@ from backend.engine.chpm import cognition
 from backend.engine.chpm.notebook import NotebookWorkspace
 from backend.engine.chpm.notebook_tools import NotebookDraft
 from backend.engine.chpm.schema import KernelState, Settings, Usage
+from tests.chpm_repair_fixture import corrections
 from tests.test_chpm_agent_tools import current
 from tests.test_chpm_kernel import observation, wire_proposal
 from tests.test_chpm_native_notebook_loop import NativeModel, call, turn
@@ -130,7 +131,7 @@ async def test_semantic_rejection_uses_the_existing_shared_repair_once(parallel)
     class RepairModel(NativeModel):
         async def aexecute_simple_task(self, system, content, model, **kwargs):
             self.json_requests.append((system, content, kwargs))
-            return json.dumps(wire_proposal())
+            return corrections(("/choice/motive_ids", ["goal1"]))
 
     model = RepairModel([turn(call("decision", "submit_decision", original))])
     token = performance.actor_id.set("npc")
