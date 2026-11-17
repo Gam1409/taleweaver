@@ -52,7 +52,9 @@ including archived events. Current input is already supplied, not a memory searc
 Try concrete cues/synonyms if a previous query missed.
 read_memory(argument=memory_id): read an ID already returned by search_memory in this turn.
 inspect_self(argument=''): current host facts about this NPC's location, possessions and worn IDs.
-inspect_entity(argument=id): accessible item/actor state by exact ID; owner is not placement.
+find_entity(argument=query): find accessible current actors/items by name or ID, including omitted index entries.
+inspect_entity(argument=id): accessible item/actor state; use observer_id for yourself, @player for the player. Owner is not placement.
+inspect_scene(argument=''): current public room facts, actors and known routes; a read never moves anyone.
 visible_clothing(argument=actor_id): current visible clothing layers of a listed present NPC.
 inspect_beliefs(argument=subject_id): up to two OWN subjective beliefs about that person.
 Use player_actor_id for the player; other belief subjects are in belief_subject_ids.
