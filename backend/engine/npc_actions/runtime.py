@@ -5,6 +5,7 @@ from typing import Any
 
 from sqlalchemy import select
 
+from backend.engine import turn_controls
 from backend.engine.chpm import control_settings
 from backend.engine.chpm.state import KEY
 from backend.engine.npc_actions.publication import publish, rejected_results
@@ -25,12 +26,41 @@ async def publish_turn(manager: Any, turn: Any) -> None:
         if actor in turn.action_outcomes or actor not in turn.action_drafts:
             continue
         draft = turn.action_drafts[actor]
-        if not draft.approved or not draft.requests:
+        if not draft.approved:
             continue
         valid = enabled and await _current_input(manager, turn.decisions[actor].observation)
+        if not draft.requests and not (valid and _current_empty_plan(manager, turn, actor)):
+            continue
         turn.action_outcomes[actor] = (
             await publish(manager, draft) if valid else rejected_results(draft, "stale")
         )
+
+
+def _current_empty_plan(manager: Any, turn: Any, actor: str) -> bool:
+    """An empty final list cannot borrow control from another captured plan."""
+    if control_settings.read((manager.state.entity_states or {}).get(KEY)) != turn.initial.settings:
+        return False
+    scope = turn.action_drafts[actor].scope
+    if scope.scene_id != manager.state.current_scene_id:
+        return False
+    observation = turn.decisions[actor].observation
+    return (
+        scope.session_id,
+        scope.actor_id,
+        scope.input_id,
+        scope.input_revision,
+        scope.input_hash,
+        scope.scene_id,
+    ) == (
+        observation.session_id,
+        actor,
+        observation.message_id,
+        observation.revision_id,
+        observation.content_hash,
+        observation.scene_id,
+    ) and turn_controls.bind_current(
+        manager, scope.control, "npc_command_preview", observation=observation
+    )
 
 
 async def _current_input(manager: Any, observation: Any) -> bool:

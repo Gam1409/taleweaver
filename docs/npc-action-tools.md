@@ -82,6 +82,12 @@ arbitrary recipient-state setter or separate permission tool.
    attempted, blocked, stale, skipped or unconfirmed results establish no new
    successful effects. This timing label adds no request, world mutation or
    alternative state owner.
+   A current approved plan with no commands retains an explicit empty result list
+   for its actor. Narration, review, repair and ordinary continuation receive that
+   same boundary: no voluntary command-owned change executed. An empty plan is
+   neither a physical failed attempt nor an obligation to act; speech, waiting,
+   refusal and no action remain valid. Unapproved previews and stale empty plans
+   do not acquire this publication authority.
 7. Shared extraction cannot repeat or reverse command-owned inventory, wardrobe
    and travel effects. Only handled item-property dimensions are protected;
    independent body conditions, other dimensions and unrelated scene effects

@@ -28,6 +28,18 @@ RESOLUTION_CHRONOLOGY = (
     "overrides earlier exact owned fields; unrelated failures stay. Other/missing statuses prove no success.\n"
 )
 
+EXECUTION = """
+authoritative_command_outcomes supplies complete publication results per
+tool-controlled actor. An empty list means no command was executed by that
+actor. A selected intention/message_plan is not execution. Narration cannot supply
+omitted inventory, wardrobe, item-state, posture, local-approach or room-travel
+changes. Review and correct claims of such voluntary completion against these
+results. An empty plan is neither a physical failed attempt nor a requirement to
+act or obey. Speech, waiting, refusal and no action remain valid. Compatible
+gestures, emotional delivery and independent player, other-actor or world effects
+remain eligible.
+"""
+
 NARRATION = (
     """
 AUTHORITATIVE NPC COMMANDS: authoritative_command_outcomes lists host-checked
@@ -48,14 +60,18 @@ dialogue and independent physical consequences remain free. Preserve player agen
 
 def resolution_timing(outcomes: Mapping[str, list[dict]]) -> dict[str, str]:
     """Label the existing earlier resolution without replacing its facts or failures."""
-    return {"host_resolution_time": "before_command_publication"} if any(outcomes.values()) else {}
+    return {"host_resolution_time": "before_command_publication"} if outcomes else {}
 
 
 def for_outcomes(outcomes: Mapping[str, list[dict]]) -> str:
     """Use identical owner semantics for narration, review and bounded correction."""
-    return NARRATION if any(outcomes.values()) else ""
+    return _empty_instructions(outcomes) + NARRATION if outcomes else ""
 
 
 def resolution_instructions(outcomes: Mapping[str, list[dict]]) -> str:
-    """Give later resolution consumers the same compact temporal precedence rule."""
-    return RESOLUTION_CHRONOLOGY if any(outcomes.values()) else ""
+    """Give review and repair the same execution and temporal precedence rules."""
+    return _empty_instructions(outcomes) + RESOLUTION_CHRONOLOGY if outcomes else ""
+
+
+def _empty_instructions(outcomes: Mapping[str, list[dict]]) -> str:
+    return EXECUTION if any(not rows for rows in outcomes.values()) else ""
