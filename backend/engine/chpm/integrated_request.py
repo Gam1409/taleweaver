@@ -97,6 +97,15 @@ def _messages(
 
         instruction = (
             instruction.replace(
+                "Choose necessary offered private memory tools OR submit_decision",
+                "Use necessary offered memory and action functions, then call submit_decision",
+            )
+            .replace(
+                "Submit immediately when current information is sufficient;",
+                "Submit when current information is sufficient and each chosen "
+                "API-owned change is staged;",
+            )
+            .replace(
                 "Submission does not execute a world action.",
                 "Submission approves the pending action plan for fresh host checks.",
             )

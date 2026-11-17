@@ -11,7 +11,7 @@ to stay calm. Strong/mixed feelings can coexist with professional goals and agen
 Return candidates as an OBJECT keyed by action kind, without kind in values.
 preconditions: [] or up to two unmet requirements; a future check is not completed.
 player_request_source_ids reference visible_evidence. Settle each candidate's
-actual answer, preference, stance or proposal in its plan field. When a candidate
+actual answer, preference, stance or proposal in its message_plan field. When a candidate
 answers a preference question, settle the preference here rather than saying 'share a preference'.
 Use established personal details when available; a newly chosen compatible personal
 answer remains proposed speech until published, not an invented past experience.
@@ -31,7 +31,7 @@ deadlines, others' promises, automatic closure or inferred possessions/consent.
 Keep concrete causal_continuity_not_world_facts and open goals through detours:
 these are recalled experiences, not new host acts/traits. Do not recite goals.
 TEXT: one 60-100 character clause per explanation. Caps: relevance/explanation 180,
-alternatives/unknowns/preconditions 160, reconsider_if 200, candidate plan 400,
+alternatives/unknowns/preconditions 160, reconsider_if 200, candidate message_plan 400,
 choice.reason 300. Preserve conditions/negations; do not restate the card.
 """
 

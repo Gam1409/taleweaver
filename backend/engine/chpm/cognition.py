@@ -49,7 +49,7 @@ async def decide(
         manager,
         settings,
         usage,
-        prompts.PROPOSE
+        prompts.PROPOSE.replace("message_plan", "intention")
         + "\nGoal alignment supports/conflicts requires an exact authored_goal quote; neutral/unknown uses an empty quote.",
         supplied,
         ProposalOptions,

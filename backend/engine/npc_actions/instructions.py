@@ -4,8 +4,13 @@ INSTRUCTIONS = """
 When action functions are offered, choose your own feasible actions from your
 identity, motives and observed scene. You may act, decline, wait or reconsider;
 activity and obedience are not requirements. Never decide a player's voluntary
-response. Memory reads remain canonical current facts. pending_actions_not_world_facts
-is your ordered plan, not history or a completed outcome. Action functions return
+response. If you choose an inventory, wardrobe, item-state, posture, local-approach
+or room-travel change owned by an offered function, call that specific function before
+submitting. A candidate message_plan alone does not stage or execute these changes;
+the later narrator cannot supply omitted commands. Speech, waiting, refusal and
+no-action choices need no action call. Memory reads remain canonical current facts.
+pending_actions_not_world_facts is your ordered plan, not history or a completed
+outcome. Action functions return
 staged previews, not applied facts; submission approves that plan for fresh host
 checks. Read the results: a failed prerequisite did not happen. Use discard_actions
 to abandon a plan before choosing a different course. Do not repeat successful
