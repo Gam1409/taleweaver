@@ -6,6 +6,7 @@ import pytest
 
 from backend.engine.chpm import inference, rendering
 from backend.engine.chpm.state import load
+from tests.chpm_reference_fixture import evidence_text
 from tests.conftest import TestSessionLocal
 from tests.test_chpm_host_turn import configured, run
 from tests.test_chpm_turn import ChpmRoles
@@ -31,7 +32,7 @@ class AppraisalRoles(ChpmRoles):
             "domain": "reliability",
             "statement": "May fail to keep a promise",
             "stance": "support",
-            "citations": [{"source_id": visible["source_id"], "quote": visible["text"]}],
+            "citations": [{"source_id": visible["source_id"], "quote": evidence_text(visible)}],
             "alternatives": ["External circumstances may explain it"],
             "unknowns": ["Intent and ability to act"],
         }

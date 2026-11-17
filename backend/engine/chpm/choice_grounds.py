@@ -2,9 +2,10 @@
 
 import json
 from collections.abc import Collection
-from typing import TypeGuard
+from typing import TypeGuard, get_args
 
 from backend.engine.chpm.kernel import ChpmError
+from backend.engine.chpm.schema import ActionKind
 
 
 def problem(preferred: str, selected: list[str], allowed: Collection[str]) -> str:
@@ -29,34 +30,61 @@ def validate(preferred: str, selected: list[str], allowed: Collection[str]) -> N
         raise ChpmError(reason)
 
 
-def repair_hint(candidate: dict | None, *, no_previous_intention: bool = False) -> str:
+def repair_hint(
+    candidate: dict | None,
+    *,
+    no_previous_intention: bool = False,
+    previous_intention: object = None,
+) -> str:
     """Inspect bounded IDs for feedback only; never validate or apply psychology."""
     if not isinstance(candidate, dict):
         return ""
     choice, candidates = candidate.get("choice"), candidate.get("candidates")
     if not isinstance(choice, dict) or not isinstance(candidates, dict):
         return ""
-    continuity = _continuity_hint(choice, no_previous_intention)
+    continuity = _continuity_hint(choice, no_previous_intention, previous_intention)
     return " ".join(filter(None, (continuity, _candidate_hint(candidate, choice, candidates))))
 
 
-def _continuity_hint(choice: dict, no_previous_intention: bool) -> str:
-    if no_previous_intention and (
-        choice.get("continuity", "new") != "new" or choice.get("change_basis")
-    ):
+def _continuity_hint(choice: dict, no_previous_intention: bool, previous: object) -> str:
+    if no_previous_intention:
+        if choice.get("continuity", "new") == "new" and not choice.get("change_basis"):
+            return ""
         return (
             "previous_intention is null: set choice.continuity='new' and choice.change_basis=[]. "
             "Keep your grounded preferred intention; current motives are not a change from a prior intention."
         )
-    if (
-        no_previous_intention
-        or choice.get("continuity") != "maintain"
-        or not choice.get("change_basis")
-    ):
+    if choice.get("continuity") != "maintain":
+        return ""
+    transition = _kind_change_hint(choice, previous)
+    if transition:
+        return transition
+    if not choice.get("change_basis"):
         return ""
     return (
         "choice.continuity='maintain' requires choice.change_basis=[]. Keep the grounded course; "
         "use 'revise' only for a real change supported by exact new evidence."
+    )
+
+
+def _kind_change_hint(choice: dict, previous: object) -> str:
+    selected = previous.get("selected") if isinstance(previous, dict) else None
+    retained = selected.get("kind") if isinstance(selected, dict) else None
+    preferred = choice.get("preferred")
+    kinds = get_args(ActionKind)
+    if (
+        retained not in kinds
+        or preferred not in kinds
+        or preferred == retained
+        or (retained, preferred) == ("INITIATE", "CONTINUE")
+    ):
+        return ""
+    # Clearing evidence alone cannot repair a forbidden kind transition. Describe
+    # both legal choices within the existing retry, leaving the decision to the model.
+    return (
+        f"Retained kind is {retained}; preferred {preferred} cannot maintain. "
+        f"Either keep {retained} with continuity='maintain' and change_basis=[] for an unchanged "
+        "course, or use continuity='revise' with exact offered change_basis for a real change."
     )
 
 

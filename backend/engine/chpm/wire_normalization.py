@@ -4,6 +4,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from backend.engine.chpm.proposal_references import Choice
 from backend.engine.chpm.schema import ChoicePreference
 
 
@@ -13,7 +14,11 @@ def normalize(
     """Copy only an unambiguous known singular choice ID into its canonical list."""
     field = schema.model_fields.get("choice")
     choice = candidate.get("choice")
-    if field is None or field.annotation is not ChoicePreference or not isinstance(choice, dict):
+    if (
+        field is None
+        or field.annotation not in (ChoicePreference, Choice)
+        or not isinstance(choice, dict)
+    ):
         return candidate, ()
     alias: Any = choice.get("motive_id")
     if (

@@ -10,6 +10,7 @@ from backend.api.routes.adventures.gameplay_logic import GameTurnManager
 from backend.engine.chpm import context, inference, rendering, runtime
 from backend.engine.chpm.schema import AgendaClosure, KernelState, Settings
 from backend.engine.chpm.state import KEY, load
+from tests.chpm_reference_fixture import evidence_text
 from tests.conftest import TestSessionLocal
 from tests.test_chpm_agenda import undertaking
 from tests.test_chpm_compact_contract import contract_fixture
@@ -215,7 +216,7 @@ async def test_twenty_unrelated_turns_and_zero_recall_do_not_hide_or_complete_a_
                 )
                 evidence = roles.proposal_inputs[-1]["appraisal_context"]["visible_evidence"]
                 assert any(
-                    item["text"] == SAMPLE and item["channel"] == "narration"
+                    evidence_text(item) == SAMPLE and item["channel"] == "narration"
                     for item in evidence
                     if "channel" in item
                 )

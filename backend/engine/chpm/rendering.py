@@ -6,20 +6,28 @@ from typing import Any
 from backend.core.engine_detailed_trace import step
 from backend.core.llm_router import GameMasterLLM
 from backend.core.state_rejection_trace import reject
+from backend.engine import turn_controls
 from backend.engine.chpm import (
     agenda,
     continuation,
     continuation_writer,
     expression,
     inference,
+    json_contract,
     narration_repair_input,
     passages,
     prompts,
 )
-from backend.engine.chpm.errors import InferenceUnavailableError, RecoverableChpmError
-from backend.engine.chpm.kernel import ChpmError
+from backend.engine.chpm.errors import (
+    InferenceUnavailableError,
+    RecoverableChpmError,
+    StaleControlError,
+)
+from backend.engine.chpm.kernel import ChpmError, fingerprint
 from backend.engine.chpm.runtime import Turn, contract_data, current
 from backend.engine.chpm.schema import Verdict
+from backend.engine.npc_actions import feedback as command_feedback
+from backend.engine.npc_actions import instructions as command_instructions
 from backend.engine.npc_presentation.runtime import clean_candidate, output_reminder
 
 
@@ -190,24 +198,32 @@ async def _review(manager: Any, turn: Turn, text: str, resolution: str) -> Verdi
     from backend.engine.chpm import reports
 
     available = passages.index(text)
+    control, observed = _review_control(manager, turn)
+    instruction = (
+        prompts.VERIFY
+        + command_instructions.resolution_instructions(turn.action_outcomes)
+        + command_feedback.instructions(turn)
+    )
     payload = _review_payload(turn, available, resolution)
-    identifiers = _review_identifiers(turn, available)
+    identifiers = _review_identifiers(turn, available, scope=payload["review_scope"])
     if turn.report_origins and not inference.fits(
-        turn.initial.settings, prompts.VERIFY, payload, passages.Review, identifiers
+        turn.initial.settings, instruction, payload, passages.SharedReview, identifiers
     ):
         reports.disable(turn)
         payload = _review_payload(turn, available, resolution)
-        identifiers = _review_identifiers(turn, available)
-    raw: passages.Review | Verdict = await inference.request(
+        identifiers = _review_identifiers(turn, available, scope=payload["review_scope"])
+    raw: passages.SharedReview | passages.Review | Verdict = await inference.request(
         manager,
         turn.initial.settings,
         turn.usage,
-        prompts.VERIFY,
+        instruction,
         payload,
-        passages.Review,
+        passages.SharedReview,
         "validation",
         identifiers=identifiers,
     )
+    _validate_review_scope(raw, turn, available, text, resolution, payload)
+    _ensure_review_current(manager, control, observed)
     if not raw.matches:
         _reject_review(turn, text, resolution, raw.issues, raw, payload)
         return Verdict(
@@ -215,9 +231,7 @@ async def _review(manager: Any, turn: Turn, text: str, resolution: str) -> Verdi
             issues=raw.issues or ["The dialogue validator rejected this candidate."],
         )
     try:
-        verdict = (
-            passages.resolve(raw, available, text=text) if isinstance(raw, passages.Review) else raw
-        )
+        verdict = _resolve_review(raw, turn, available, text)
     except ChpmError as exc:
         _reject_review(turn, text, resolution, [str(exc)], raw, payload)
         raise RecoverableChpmError(str(exc)) from exc
@@ -246,6 +260,67 @@ async def _review(manager: Any, turn: Turn, text: str, resolution: str) -> Verdi
         _reject_review(turn, text, resolution, [str(exc)], verdict, payload)
         return Verdict(matches=False, issues=[str(exc)])
     return verdict
+
+
+def _resolve_review(
+    raw: passages.SharedReview | passages.Review | Verdict,
+    turn: Turn,
+    available: dict[str, str],
+    text: str,
+) -> Verdict:
+    if isinstance(raw, passages.SharedReview):
+        return passages.resolve_shared(
+            raw,
+            available,
+            agenda_actors={
+                actor
+                for actor, decision in turn.decisions.items()
+                if decision.selected.agenda_change
+            },
+            text=text,
+        )
+    if isinstance(raw, passages.Review):
+        return passages.resolve(raw, available, text=text)
+    return raw
+
+
+def _review_control(manager: Any, turn: Turn) -> tuple[dict, Any]:
+    observed = next(iter(turn.decisions.values())).observation
+    control = turn_controls.scope(manager, "narration_review", observation=observed)
+    if not getattr(turn, "control", None):
+        turn.control = control
+    _ensure_review_current(manager, turn.control, observed)
+    turn.review_operation = turn_controls.operation(control, "narration_review").model_dump(
+        exclude_none=True
+    )
+    return control, observed
+
+
+def _ensure_review_current(manager: Any, control: dict, observed: Any) -> None:
+    if not turn_controls.bind_current(manager, control, "narration_review", observation=observed):
+        raise StaleControlError("CHPM narration review belongs to an inactive turn attempt.")
+
+
+def _validate_review_scope(
+    raw: passages.SharedReview | passages.Review | Verdict,
+    turn: Turn,
+    available: dict,
+    text: str,
+    resolution: str,
+    payload: dict,
+) -> None:
+    if not isinstance(raw, passages.SharedReview):
+        return
+    try:
+        json_contract.validate_identifiers(
+            type(raw),
+            raw.model_dump(mode="json"),
+            _review_identifiers(turn, available, scope=payload["review_scope"]),
+        )
+        passages.validate_shared(raw, payload["review_scope"], available, set(turn.decisions))
+    except ValueError as exc:
+        _reject_review(turn, text, resolution, [str(exc)], raw, payload)
+        raise RecoverableChpmError(str(exc)) from exc
 
 
 def _deferred_speech(turn: Turn, verdict: Verdict, text: str) -> list[str]:
@@ -288,12 +363,49 @@ def _review_payload(turn: Turn, available: dict[str, str], resolution: str) -> d
         "contract": contract_data(turn),
         "player_request": turn.player_request,
         "host_resolution": resolution,
+        **command_instructions.resolution_timing(turn.action_outcomes),
         "present_speakers": turn.present_names,
         "controlled_actor_ids": sorted(turn.decisions),
         "inactive_controlled_actors": turn.deferred_names,
         "passages": available,
+        "request_control": _review_request_control(turn),
+        "review_scope": _review_scope(turn, available, resolution),
         "report_origins_not_world_facts": reports.context(turn),
+        **(
+            {"host_rejections_before_commands": turn.host_rejections}
+            if getattr(turn, "host_rejections", None)
+            else {}
+        ),
     }
+
+
+def _review_request_control(turn: Turn) -> dict:
+    if not turn.review_operation:
+        turn.review_operation = turn_controls.operation(
+            turn_controls.scope(turn, "narration_review"), "narration_review"
+        ).model_dump(exclude_none=True)
+    return turn_controls.request_view(turn_controls.Operation.model_validate(turn.review_operation))
+
+
+def _review_scope(turn: Turn, available: dict, resolution: str) -> str:
+    _review_request_control(turn)
+    return fingerprint(
+        {
+            "input": turn.input_id,
+            "revision": turn.initial.revision,
+            "observations": {
+                actor: decision.observation.model_dump(exclude={"player_request"})
+                for actor, decision in turn.decisions.items()
+            },
+            "passages": available,
+            "resolution": resolution,
+            "control": turn_controls.scope(turn, "narration_review"),
+            "host_rejections": getattr(turn, "host_rejections", []),
+            "contract": contract_data(turn),
+            "action_outcomes": turn.action_outcomes,
+            "operation": turn.review_operation,
+        }
+    )
 
 
 def preflight(turn: Turn) -> None:
@@ -318,17 +430,23 @@ def preflight(turn: Turn) -> None:
 def _review_room(turn: Turn) -> int:
     payload = _review_payload(turn, {}, "")
     prompt, content = inference.compose(
-        prompts.VERIFY, payload, passages.Review, _review_identifiers(turn, {})
+        prompts.VERIFY
+        + command_instructions.resolution_instructions(turn.action_outcomes)
+        + command_feedback.instructions(turn),
+        payload,
+        passages.SharedReview,
+        _review_identifiers(turn, {}, scope=payload["review_scope"]),
     )
     return turn.initial.settings.max_input_chars - len(prompt) - len(content)
 
 
-def _review_identifiers(turn: Turn, available: dict) -> dict:
+def _review_identifiers(turn: Turn, available: dict, *, scope: str | None = None) -> dict:
     return {
         "actor_id": sorted(turn.decisions),
         "speaker_id": sorted(turn.present_names),
         "passage_id": list(available),
         "origin_id": sorted(turn.report_origins),
+        "review_scope": [scope or _review_scope(turn, available, "")],
     }
 
 
@@ -359,7 +477,7 @@ async def _repair(
 ) -> str:
     system, payload = narration_repair_input.build(
         turn,
-        system_prompt,
+        system_prompt + command_feedback.instructions(turn),
         text,
         resolution,
         issues,

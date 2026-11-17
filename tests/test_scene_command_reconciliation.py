@@ -12,6 +12,7 @@ from backend.engine.scene_staging.schema import Placement
 from backend.engine.scene_staging.shared import _cast, apply_extraction, begin, consume
 from backend.engine.scene_staging.state import KEY, project
 from backend.engine.visual_novel.config import VnSettings, write_settings
+from tests.npc_control_support import bind_turn
 from tests.observable_state_support import world
 from tests.test_item_command_state import change
 
@@ -59,6 +60,7 @@ def fixture(
         },
         simplified=False,
     )
+    bind_turn(host, host._chpm_turn)
     return host, rows, cast
 
 
@@ -172,6 +174,7 @@ def test_pose_owner_cleared_placement_cannot_be_reconstructed_from_the_old_relat
             "effect": {"posture": "sitting", "placement": None},
         }
     )
+    bind_turn(host, host._chpm_turn)
     apply_extraction(
         host,
         TEXT,

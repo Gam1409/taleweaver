@@ -29,18 +29,23 @@ from tests.test_chpm_runtime import prepared
 def test_offered_proposal_schema_explains_spoken_agenda_and_null_for_current_actions(schema):
     contract = json_contract.response_schema(schema, {}, explicit_keys=True)
     intent = contract["$defs"]["AgendaIntent"]
-    assert "spoken" in intent["description"]
-    statuses = intent["properties"]["action"]["description"]
-    for label in (
-        "Declared ongoing goal",
-        "Spoken ongoing commitment",
-        "Spoken withdrawal",
-        "Spoken completion claim",
+    from backend.engine.chpm.agenda_semantics import GLOSSARY
+
+    assert "spoken" in intent["description"].lower()
+    assert "AGENDA CODES" in intent["description"]
+    for meaning in (
+        "null=immediate/ordered acts, silent/private intent",
+        "goal=ongoing aim",
+        "commitment=ongoing undertaking",
+        "withdraw=cancel",
+        "report_done=claim done, not world fact",
+        "text=ACTIVE OWNED TEXT, not dialogue",
+        "entry_id=ACTIVE ID",
     ):
-        assert label in statuses
+        assert meaning in GLOSSARY
+    assert GLOSSARY in prompts.PROPOSE
     fields = contract.get("$defs", {}).get("Intent", contract)["properties"]
-    assert "null" in fields["agenda_change"]["description"]
-    assert "silent" in fields["agenda_change"]["description"]
+    assert fields["agenda_change"]["default"] is None
     assert intent["properties"]["action"]["enum"] == [
         "goal",
         "commitment",
@@ -63,8 +68,25 @@ def test_native_submission_and_portable_catalog_preserve_the_same_agenda_definit
     assert GLOSSARY in system
     payload = json.loads(content)
     assert payload["functions"][0]["name"] == "submit_decision"
-    assert native["properties"]["action"]["description"] in content
+    assert native["description"] in content
     assert "No promise wording required" not in system
+
+
+def test_field_edit_repair_keeps_the_shared_meanings_and_explicit_unique_paths():
+    from backend.engine.chpm.agenda_semantics import GLOSSARY
+    from backend.engine.chpm.proposal_repair import Prepared
+
+    instruction = Prepared({}, {}, original=wire_proposal()).instruction(prompts.PROPOSE)
+
+    assert instruction.count(GLOSSARY) == 1
+    assert "Use each allowed path once" in instruction
+    assert "one full parent/array replacement" in instruction
+
+
+def test_only_the_producer_needs_the_new_entry_admission_flag():
+    assert "agenda_creation_available" in prompts.PROPOSE
+    for instruction in (prompts.NARRATE, prompts.VERIFY, narration_repair_input.CONTRACT_RULES):
+        assert "agenda_creation_available" not in instruction
 
 
 @pytest.mark.parametrize("embedded", [False, True])
@@ -84,7 +106,7 @@ def test_narration_and_both_repair_paths_receive_one_shared_glossary(embedded):
     )
     assert GLOSSARY in runtime.contract(turn)
     assert system.count(GLOSSARY) == 1
-    assert "Spoken ongoing commitment" in prompts.VERIFY
+    assert GLOSSARY in prompts.VERIFY
     payload = json.loads(content)
     if not embedded:
         assert payload["dialogue_contract"] == runtime.contract_data(turn)

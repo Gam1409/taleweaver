@@ -38,7 +38,9 @@ async def probe(
         names={"npc": case.name},
         present_names={"npc": case.name},
     )
-    host = SimpleNamespace(user=None, game_id=None, _chpm_model_factory=measured, _chpm_turn=turn)
+    host = SimpleNamespace(
+        user=None, game_id=source.pair_id, _chpm_model_factory=measured, _chpm_turn=turn
+    )
     violation = _violation(case, source.response, violation_kind)
     accepted = ""
     error = ""
@@ -95,12 +97,14 @@ def _violation(case: Case, accepted: str, kind: Violation) -> str:
     )
 
 
-def _first_verdict(measured: MeasuredFactory) -> passages.Review | None:
+def _first_verdict(measured: MeasuredFactory) -> passages.SharedReview | passages.Review | None:
     first = next((call for call in measured.calls if call.phase == "validation"), None)
     if first is None:
         return None
     try:
-        return json_contract.parse(passages.Review, first.returned_text)
+        candidate = json_contract.decode(first.returned_text)
+        schema = passages.SharedReview if "review_scope" in candidate else passages.Review
+        return schema.model_validate(candidate)
     except ValueError:
         return None
 

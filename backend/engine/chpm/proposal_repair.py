@@ -6,6 +6,7 @@ from pydantic import BaseModel
 
 from backend.engine.chpm import inference, json_contract, proposal_edits, proposal_repair_groups
 from backend.engine.chpm.proposal_draft import Draft
+from backend.engine.chpm.proposal_references import ReferenceDraft
 
 
 @dataclass(frozen=True)
@@ -38,7 +39,7 @@ def prepare(
         limit=limit,
     )
     omitted = "rejected_proposal_omitted" in full["proposal_feedback"]
-    if candidate is None or (not issubclass(schema, Draft) and not omitted):
+    if candidate is None or (not issubclass(schema, (Draft, ReferenceDraft)) and not omitted):
         return Prepared(full, identifiers)
     allowed = proposal_edits.paths(candidate, schema)
     structural = proposal_repair_groups.inspect(candidate, schema, allowed)

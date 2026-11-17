@@ -10,6 +10,7 @@ from backend.core.diagnostic_failures import failure_details, failure_reason
 from backend.core.engine_detailed_trace import step
 from backend.core.game_modes import is_vn
 from backend.core.state_rejection_trace import reject
+from backend.engine import turn_controls
 from backend.engine.chpm import (
     agenda,
     agent_context,
@@ -51,6 +52,8 @@ from backend.engine.chpm.schema import (
     Verdict,
 )
 from backend.engine.chpm.state import KEY, load, save
+from backend.engine.npc_actions import feedback as command_feedback
+from backend.engine.npc_actions.control import model_outcomes
 from backend.engine.npc_actions.preview import Draft as ActionDraft
 from backend.engine.turn_replay.transactions import release_for_model
 
@@ -91,11 +94,18 @@ class Turn:
     catchup_unavailable: list = field(default_factory=list)
     action_drafts: dict[str, ActionDraft] = field(default_factory=dict)
     action_outcomes: dict[str, list[dict]] = field(default_factory=dict)
+    control: dict = field(default_factory=dict)
+    host_rejections: list[dict] = field(default_factory=list)
+    review_operation: dict = field(default_factory=dict)
 
 
 def current(manager: Any) -> Turn | None:
     value = getattr(manager, "_chpm_turn", None)
-    return value if isinstance(value, Turn) else None
+    if not isinstance(value, Turn):
+        return None
+    if value.control and not turn_controls.bind_current(manager, value.control):
+        return None
+    return value
 
 
 def public_status(state: Any) -> dict:
@@ -155,23 +165,27 @@ def contract_data(turn: Turn) -> dict:
             data[actor]["selected_motives_not_world_facts"] = narrative_context.compact_motives(
                 decision, data[actor]
             )
-    for actor, outcomes in turn.action_outcomes.items():
+    for actor, outcomes in model_outcomes(turn).items():
         if actor in data:
             data[actor]["authoritative_command_outcomes"] = outcomes
             data[actor]["observation_time"] = (
-                "before_command_publication; use current world state and command outcomes for subsequent effects"
+                "before_command_publication, including host resolution; current applied fields win"
             )
+    for actor, records in command_feedback.project(turn).items():
+        if actor in data:
+            data[actor]["rejected_command_previews"] = records
     return data
 
 
 def contract(turn: Turn) -> str:
     if turn.simplified:
         return continuation.contract(turn)
-    from backend.engine.npc_actions.instructions import NARRATION as ACTION_NARRATION
+    from backend.engine.npc_actions.instructions import for_outcomes
 
     return (
         prompts.NARRATE
-        + (ACTION_NARRATION if turn.action_outcomes else "")
+        + for_outcomes(turn.action_outcomes)
+        + command_feedback.instructions(turn)
         + json.dumps(contract_data(turn), ensure_ascii=False, separators=(",", ":"))
         + roster.instruction(turn.deferred_names)
         + (
@@ -183,7 +197,9 @@ def contract(turn: Turn) -> str:
 
 
 @step("npc.prepare")
-async def prepare(manager: Any, message: str, actors: list[Any]) -> str:
+async def prepare(
+    manager: Any, message: str, actors: list[Any], *, host_rejections: list[dict] | None = None
+) -> str:
     settings = control_settings.read((manager.state.entity_states or {}).get(KEY))
     if (
         settings.mode == "off"
@@ -205,7 +221,12 @@ async def prepare(manager: Any, message: str, actors: list[Any]) -> str:
     if old is not None and old.input_id == input_id:
         return contract(old) if buffered(manager) else ""
     turn = Turn(
-        state, input_id, player_request=message, gap_cursors=dict(state.recovery.gap_cursors)
+        state,
+        input_id,
+        player_request=message,
+        gap_cursors=dict(state.recovery.gap_cursors),
+        control=turn_controls.scope(manager, "npc_preparation"),
+        host_rejections=list(host_rejections or ()),
     )
     manager._chpm_turn = turn
     selected = [
@@ -327,11 +348,21 @@ async def _prepare(manager: Any, turn: Turn, message: str, actors: list[Any]) ->
     await parallel.prepare(manager, turn, active, observed, _prepare_actor)
     from backend.engine.chpm.rendering import preflight
 
+    if not turn_controls.bind_current(manager, turn.control, observation=observed):
+        raise turn_controls.ControlBindingError(
+            "The NPC preparation belongs to an inactive attempt."
+        )
+    turn.control = turn_controls.scope(manager, "narration_review", observation=observed)
     preflight(turn)
     if turn.action_drafts:
         from backend.engine.npc_actions.runtime import publish_turn
 
         await publish_turn(manager, turn)
+        if not turn_controls.bind_current(manager, turn.control, observation=observed):
+            raise turn_controls.ControlBindingError(
+                "The NPC publication belongs to an inactive attempt."
+            )
+        turn.control = turn_controls.scope(manager, "narration_review", observation=observed)
         preflight(turn)
 
 

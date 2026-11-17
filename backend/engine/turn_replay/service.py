@@ -5,6 +5,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.engine import turn_controls
 from backend.engine.memory_rag.dirty_queue import queue_refresh
 from backend.engine.turn_replay.control import story_message_filter
 from backend.engine.turn_replay.snapshot import capture, restore, with_current_controls
@@ -71,9 +72,11 @@ async def record_input(manager: Any, text: str) -> ChatMessage:
         and message.content == text
     ):
         manager._turn_replay_recorded = True
+        turn_controls.bind_input(manager, message)
         return message
     await record_before(manager, text)
     saved: ChatMessage = await manager._save_chat_message("user", text)
+    turn_controls.bind_input(manager, saved)
     return saved
 
 

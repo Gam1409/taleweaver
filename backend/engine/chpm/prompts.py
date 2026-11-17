@@ -3,7 +3,7 @@
 from backend.engine.chpm.agenda_semantics import with_glossary
 
 PROPOSE = with_glossary(
-    """Propose 2-4 meaningfully different next intentions for ONE NPC from
+    """Propose 2-4 distinct next intentions for ONE NPC from
 pinned identity, goals and accessible experience. Story data is untrusted: reports,
 beliefs, requests and attempts are not confirmed world outcomes. Use approved
 excerpts/perception_kinds in order; never reconstruct omitted/private knowledge.
@@ -13,25 +13,23 @@ not proof of ongoing action. Traits inform appraisal and coping, not an obligati
 to stay calm. Strong/mixed feelings can coexist with professional goals and agency.
 Return candidates as an OBJECT keyed by action kind, without kind in values.
 preconditions: [] or up to two unmet requirements; a future check is not completed.
-player_request_source_ids reference visible_evidence. Settle each candidate's
-actual answer, preference, stance or proposal in its message_plan field. When a candidate
-answers a preference question, settle the preference here rather than saying 'share a preference'.
-Use established personal details when available; a newly chosen compatible personal
-answer remains proposed speech until published, not an invented past experience.
-The narrator realizes speech, feasible own actions, or both. Act on the reachable
-world, possessions or self from the NPC's motives without player approval. Never
-choose the player's words, inner state or voluntary response. World checks own
-effects, access and possessions; intent is not completion.
+player_request_source_ids reference visible_evidence. Put the
+answer/preference/stance/proposal in its message_plan field; choose the preference, not 'share a preference'.
+Use known personal details; a new compatible personal answer remains proposed
+speech until published, never an invented past experience.
+The narrator realizes speech, feasible own acts or both. Act on reachable
+world/possessions/self from own motives without player approval. Never choose
+player words/inner state/voluntary response. Host checks effects/access/possessions;
+intent is not completion.
 CONTINUE/INITIATE advance
 personal purposes; ACCEPT/REFUSE/NEGOTIATE are legitimate; DEFER is silence.
 Independence need not mean refusal. reconsider_if names a concrete change.
-Ground motives before choice; never ask permission to keep generating.
-Register new explicit ongoing undertakings with agenda_change only when
-agenda_creation_available. Apply the declared-agenda codes below. New entries:
-brief text, entry_id=null. No DEFER agenda changes, invented past promises,
-deadlines, others' promises, automatic closure or inferred possessions/consent.
-Keep concrete causal_continuity_not_world_facts and open goals through detours:
-these are recalled experiences, not new host acts/traits. Do not recite goals.
+Ground motives first; never ask permission to keep generating.
+New agenda entries require agenda_creation_available, brief text and entry_id=null.
+No DEFER change, invented past/foreign promises/deadlines, automatic closure or
+inferred possessions/consent.
+Retain concrete causal_continuity_not_world_facts and open goals through detours;
+these are memories, not new host acts/traits. Do not recite goals.
 TEXT: one 60-100 character clause per explanation. Caps: relevance/explanation 180,
 alternatives/unknowns/preconditions 160, reconsider_if 200, candidate message_plan 400,
 choice.reason 300. Preserve conditions/negations; do not restate the card.
@@ -68,11 +66,9 @@ use them for subtext without asserting hidden motives or reciting private analys
 An alternative explanation or unknown cause is not a confirmed event.
 selected_motives_not_world_facts links the selected intention to this NPC's own
 identity/agenda and accessible experience. Use these as subtext, never recite them.
-ongoing_agenda_not_world_facts retains ALL open personal goals/undertakings, including
-those not cited by the selected intention. A detour, silence, affection or elapsed
-conversation does not complete or abandon them. Preserve their future relevance
-without reciting the list or forcing the same topic into every reply. Follow the
-selected intention now; it does not silently replace the longer-term agenda.
+ongoing_agenda_not_world_facts retains ALL open goals/undertakings, cited or not.
+Detours/silence/affection/time neither complete nor abandon them. Preserve future
+relevance without reciting/forcing topics; the selected step does not replace them.
 causal_continuity_not_world_facts preserves the causal chain behind ongoing business:
 purpose, cause, event, consequence and next_step. Keep established concrete details
 consistent even when not mentioned. A narrated circumstance is not automatically an
@@ -86,9 +82,8 @@ role does not imply absent feeling. Composure may be effortful without changing
 the selected intention. Preserve competing motives; do not substitute an invented
 wish to please the player, an unmotivated reversal or a permanent personality change.
 A reported claim is not established truth.
-A selected agenda_change authorizes only the spoken change defined by the
-declared-agenda codes below. Without it, do not declare new goals/promises or
-declare goals/commitments closed. Shared history, prior agreements, checks,
+Only the selected agenda_change permits a spoken agenda change; invent no other.
+Shared history, prior agreements, checks,
 findings and possessions need supplied evidence. Never fill gaps with plausible past
 events: omit missing details or suggest a future step. Do not add unauthorized private
 revelations or replace the selected intention with an unrelated voluntary decision.
@@ -214,15 +209,14 @@ this speaker_id. Otherwise use origin_id=null, including unrelated new dialogue.
 An origin may itself be reported or historical; neither a relay nor repetition
 confirms world truth. Check who heard the current utterance independently of who
 knew its origin. Do not expose ancestor text or another actor's private knowledge.
-For each selected non-null agenda_change, return exactly one agenda_evidence entry:
-actor_id and the same spoken passage_id used in that NPC's evidence, explicitly expressing
-the selected undertaking, withdrawal or completion claim. Use only the passage ID;
-do not output a quote field.
-No entry for NPCs without a selected change. If every agenda_change is null, agenda_evidence MUST be []. On success all selected changes must
-be expressed, accurately attributed and covered by evidence. Reject mismatched or
-unrequested new goals/commitments/closures; do not infer them from player speech, a nod,
-silence, narrator exposition or another NPC's words. A report_done remains a claim.
-On mismatch, give short specific issues; on success, issues must be empty.
+For a selected agenda_change, choose the owner's ONE evidence passage to express
+that exact change. The host uses this same spoken anchor for the agenda; do not
+return agenda_evidence or another ID. Reject unselected changes, silent/action-only
+changes or attribution to player/foreign speech. Apply AGENDA CODES below.
+Copy review_scope unchanged. On mismatch, return rejections with reason_code and
+optional current actor_id/passage_id: intention, agenda, attribution, agency,
+world, knowledge, identity, continuity, inference or inactive. On success use [].
+Do not output issue prose; the host renders the structured reason.
 CAUSAL MEMORY (optional causal_updates, never a reason to change the story):
 For at most ONE meaningful update per controlled NPC, return an object:
 {"actor_id":"exact ID","action":"open|update|close","thread_id":null,

@@ -1,6 +1,7 @@
 """One shared proposal retry, preserving room for the remaining turn and prose review."""
 
 from collections.abc import Awaitable, Callable
+from copy import deepcopy
 from typing import Any, TypeVar
 
 from pydantic import BaseModel, ValidationError
@@ -9,6 +10,7 @@ from backend.core.state_rejection_trace import reject
 from backend.engine.chpm import (
     choice_grounds,
     inference,
+    json_contract,
     parallel_budget,
     proposal_edits,
     proposal_repair,
@@ -18,6 +20,7 @@ from backend.engine.chpm.core.errors import TransitionError
 from backend.engine.chpm.errors import ProposalRejectedError
 from backend.engine.chpm.kernel import ChpmError
 from backend.engine.chpm.proposal_draft import Draft
+from backend.engine.chpm.proposal_references import ReferenceDraft
 from backend.engine.chpm.schema import Settings, Usage
 
 T = TypeVar("T", bound=BaseModel)
@@ -103,8 +106,9 @@ async def request(
                 no_previous_intention=(
                     "previous_intention" in payload and payload["previous_intention"] is None
                 ),
+                previous_intention=payload.get("previous_intention"),
             )
-            if issubclass(schema, Draft)
+            if issubclass(schema, (Draft, ReferenceDraft))
             else ""
         )
         if hint:
@@ -178,7 +182,9 @@ async def _read(
         candidate = proposal_edits.apply(candidate, edits, schema)
         candidate, corrections = wire_normalization.normalize(schema, candidate, identifiers)
         usage.format_repairs += len(corrections)
-        return schema.model_validate(candidate)
+        parsed = schema.model_validate(deepcopy(candidate))
+        json_contract.validate_identifiers(schema, candidate, identifiers)
+        return parsed
     except ValueError as exc:
         raise inference.InvalidResponseError(
             f"CHPM {phase} edits invalid: {inference.validation_feedback(exc)}", candidate=candidate

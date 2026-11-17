@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 from backend.engine.narrated_items.schema import ItemExtraction
 from backend.engine.npc_actions.reconciliation import protect
+from tests.npc_control_support import bind_turn
 from tests.test_item_command_state import change
 from tests.test_npc_action_previews import fixture
 
@@ -18,6 +19,7 @@ def manager(outcomes=None):
         action_outcomes=outcomes or {},
         simplified=False,
     )
+    bind_turn(host, host._chpm_turn)
     return host
 
 

@@ -56,9 +56,18 @@ async def test_progression_context_prompt_and_optional_schema_describe_only_the_
 
 async def test_deferred_spatial_field_does_not_reject_an_existing_player_transfer():
     async with TestSessionLocal() as db:
-        manager, _, _ = await setup(db)
+        manager, _, _ = await setup(db, text="I take the brass key from the table.")
         raw = placement()
         raw["new_inventory_items"] = [{"id": "BRASS_KEY", "name": "Brass key"}]
+        raw["player_item_actions"] = [
+            {
+                "operation": "take",
+                "performer_id": "__player__",
+                "item_id": "BRASS_KEY",
+                "passage_id": "player:p0",
+                "basis": "performed",
+            }
+        ]
         _, notices = await apply(manager, raw)
         snapshot = possession_snapshot(manager, await session_objects(db, manager.game_id))
         assert snapshot.owners["BRASS_KEY"] == "__player__" and notices

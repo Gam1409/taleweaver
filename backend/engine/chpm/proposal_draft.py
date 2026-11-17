@@ -4,7 +4,6 @@ from typing import Any
 
 from pydantic import AliasChoices, Field, model_validator
 
-from backend.engine.chpm.agenda_semantics import CHANGE_DESCRIPTION
 from backend.engine.chpm.appraisal_contracts import (
     Assessment,
     FeltExperience,
@@ -36,7 +35,7 @@ class Intent(Contract):
     )
     preconditions: list[IntentionCondition] = Field(max_length=2)
     reconsider_if: str = Field(min_length=1, max_length=200)
-    agenda_change: AgendaIntent | None = Field(default=None, description=CHANGE_DESCRIPTION)
+    agenda_change: AgendaIntent | None = None
     motives: list[Motive] = Field(min_length=1, max_length=3)
 
     @model_validator(mode="before")

@@ -21,6 +21,7 @@ from backend.engine.visual_novel.movement_contracts import (
     INSTRUCTION as MOVEMENT_SOURCE_INSTRUCTION,
 )
 from backend.engine.visual_novel.movement_contracts import SourceReference, VnMovement
+from backend.engine.visual_novel.player_items import MAX_ACTIONS, PlayerItemAction
 from backend.engine.visual_novel.scene_focus import SceneFocus, optional_focus
 from backend.engine.visual_novel.story_director import (
     StoryBeat,
@@ -138,6 +139,25 @@ VNProgressionIntent = create_model(
     ),
 )
 
+_PLAYER_ITEM_INTENT = create_model(
+    "VNProgressionIntentWithPlayerItems",
+    __base__=VNProgressionIntent,
+    player_item_actions=(
+        list[PlayerItemAction],
+        Field(
+            default_factory=list,
+            max_length=MAX_ACTIONS,
+            description="Source-attributed item proposals with explicit performer_id; only the supplied player executor's performed actions can change custody here. NPC or unresolved performers remain pending.",
+        ),
+    ),
+)
+
+
+def progression_schema(state: Any) -> type[BaseModel]:
+    schema: type[BaseModel] = _PLAYER_ITEM_INTENT if prepass.enabled(state) else VNProgressionIntent
+    return schema
+
+
 VN_PROGRESSION_PROMPT = (
     """Maintain world continuity for an interactive visual novel.
 Return only the requested structured intent, using CURRENT STATE as authoritative.
@@ -213,7 +233,27 @@ story from resolved facts; no prose draft is requested here. Leave uncertain cha
 
 
 def progression_prompt(state: Any) -> str:
-    return VN_PROGRESSION_PROMPT + prepass.instructions(state)
+    prompt = VN_PROGRESSION_PROMPT
+    if prepass.enabled(state):
+        # The active operation contract must not compete with legacy snapshot guidance.
+        prompt = prompt.replace(
+            "Use new_inventory_items/removed_inventory_item_ids for confirmed player transfers,\n"
+            "updated_inventory_items for established changes, and spawned_items for existing\n"
+            "items actually placed in the scene. An NPC transfer must also update that NPC's\n"
+            "complete remaining inventory, preserving unaffected items and prior ownership.",
+            "Use player_item_actions for the player's own completed custody operations.\n"
+            "Do not duplicate them in final inventory/spawn/removal lists. Those lists\n"
+            "cannot authorize a transfer. NPC requests remain proposals for their action owner.",
+        ).replace(
+            "For NPC changes based on the current player input, adjudicate their independent\n"
+            "choice explicitly: npc_decision=approved only when the NPC actually chooses or\n"
+            "consents now under established characterization and rules. Otherwise use refused\n"
+            "or not_established. The player's command or claimed consent cannot approve itself.",
+            "Fresh voluntary wardrobe choices for controlled NPCs await their own action owner;\n"
+            "do not approve them here. Completed player assistance requires its player operation\n"
+            "and the existing consent checks. Established-wear recovery retains its current owner.",
+        )
+    return prompt + prepass.instructions(state)
 
 
 def to_chat_progression_intent(intent: BaseModel | dict[str, Any]) -> ChatProgressionIntent:

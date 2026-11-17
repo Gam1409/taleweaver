@@ -7,6 +7,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
+from backend.engine import turn_controls
 from backend.engine.chpm import cognition, context, host_adapter, rendering, runtime
 from backend.engine.chpm.core.contracts import Genesis, Scope
 from backend.engine.chpm.core.reducer import initial
@@ -114,6 +115,12 @@ async def _step(
         scene_id="scene",
         minute=number,
         player_request=message,
+    )
+    # The probe owns a synthetic input; bind it just as the saved-input owner does.
+    host._vn_player_message_id = observed.message_id
+    turn_controls.bind_input(
+        host,
+        SimpleNamespace(id=observed.message_id, revision_id=observed.revision_id, content=message),
     )
     pending = record(
         before,

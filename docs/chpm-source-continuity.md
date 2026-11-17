@@ -4,6 +4,13 @@ These additions use the existing perception and shared narration review. They
 add output fields and bounded source context, without another generative call.
 All routing, mode switches, state ownership and request limits remain in place.
 
+Modern NPC proposals select request-local fragment/episode references while
+reading the same permitted source prose. The host resolves those references to
+the existing canonical quotations and source anchors; fragment IDs are never
+stored as replacement memory. Fragments from one source retain that source's
+original evidence roots. Changed/deleted sources, regeneration, copy/import and
+replay therefore continue through the existing source owners and validators.
+
 ## Recovery after simplified RP
 
 A simplified assistant reply records eligible NPC IDs, known speakers, its hash,

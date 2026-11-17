@@ -2,18 +2,22 @@
 
 from copy import deepcopy
 
+from backend.engine import turn_controls
 from backend.engine.chpm.observable_state import project
 from backend.engine.clothing.context import actor_records
 from backend.engine.npc_actions.contracts import ChangeState, Discard, Give, Move, PutDown, Take
 from backend.engine.npc_actions.preview import Draft, Scope
 from backend.engine.physical_conditions.ledger import read
 from backend.engine.visual_novel.continuity import possession_snapshot
+from tests.npc_control_support import bind_observation
 from tests.observable_state_support import observation, world
 
 
 def fixture():
     host, rows = world()
-    view = project(host, rows, "npc", observation())
+    observed = observation()
+    bind_observation(host, observed)
+    view = project(host, rows, "npc", observed)
     scope = Scope(
         host.game_id,
         view.message_id,
@@ -24,6 +28,10 @@ def fixture():
         host.state.entity_states,
         frozenset(view.entities),
         frozenset({"PORCH"}),
+        input_revision=observed.revision_id,
+        input_hash=observed.content_hash,
+        observation=observed,
+        control=turn_controls.scope(host, "npc_command_preview", observation=observed),
     )
     return host, scope, Draft(scope)
 

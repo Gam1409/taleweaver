@@ -6,6 +6,7 @@ import pytest
 
 from backend.engine.chpm.evaluation import matrix_cases, matrix_cli, matrix_runner
 from tests.chpm_projection_fixture import public_projection
+from tests.chpm_reference_fixture import response as reference_response
 from tests.test_chpm_kernel import preferred_choice, wire_proposal
 
 
@@ -24,6 +25,10 @@ class Models:
         return self
 
     async def aexecute_simple_task(self, _system, content, _model, **kwargs):
+        raw = await self.call(_system, content, _model, **kwargs)
+        return reference_response(raw, json.loads(content))
+
+    async def call(self, _system, content, _model, **kwargs):
         phase = kwargs["phase"]
         body = json.loads(content)
         if self.fault == phase:
@@ -35,7 +40,7 @@ class Models:
             value = wire_proposal()
             value["choice"] = preferred_choice(body)
             value["candidates"]["CONTINUE"]["goal_quote"] = body["authored_goal"]
-            return json.dumps(value)
+            return reference_response(json.dumps(value), body)
         if phase in {"narration", "repair"}:
             return "\n".join(f"Person {key[-2:]}: I will check my part." for key in self.active)
         if phase == "validation":

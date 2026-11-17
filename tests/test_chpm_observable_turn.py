@@ -9,6 +9,7 @@ from backend.engine.chpm.state import load
 from backend.engine.narrated_items.schema import ItemExtraction
 from backend.engine.physical_conditions.ledger import apply, read
 from backend.models.chat import ChatMessage
+from tests.chpm_reference_fixture import proposal as reference_proposal
 from tests.conftest import TestSessionLocal
 from tests.test_chpm_host_turn import run
 from tests.test_chpm_native_notebook_loop import call, turn
@@ -55,7 +56,7 @@ class StateRoles(ChpmRoles):
     async def decision(self, body, model):
         result = await ChpmRoles.simple(self, "", json.dumps(body), model, phase="proposal")
         self.chpm_calls.pop()  # Fixture proposal generation is not another model call.
-        return json.loads(result)
+        return reference_proposal(json.loads(result), body)
 
     async def native(self, messages, tools, model, **kwargs):
         self.chpm_calls.append(kwargs["phase"])

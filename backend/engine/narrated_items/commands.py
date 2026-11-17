@@ -7,6 +7,7 @@ from typing import Literal
 from backend.engine.clothing.profiles import garment_for_item
 from backend.engine.clothing.projection import known_worn_item_ids
 from backend.engine.narrated_items.apply import _receive, _remove
+from backend.engine.narrated_items.errors import ItemTransferError
 from backend.engine.visual_novel.continuity import PLAYER, SCENE, Possessions
 
 Operation = Literal["take", "give", "put_down"]
@@ -21,7 +22,7 @@ def _destination(
         return SCENE
     recipient = PLAYER if recipient_id == "@player" else recipient_id
     if recipient not in actors or recipient == actor_id:
-        raise ValueError("The recipient is unavailable or already owns this item.")
+        raise ItemTransferError("recipient_unavailable")
     return str(recipient)
 
 
@@ -51,11 +52,9 @@ def _require_carried(
     )
     wearable = garment_for_item(item) is not None or bool(item.get("wearable_slots"))
     if worn is None and wearable and item_id not in carried_item_ids:
-        raise ValueError(
-            "Current garment placement is unknown; establish its wear state before transferring it."
-        )
+        raise ItemTransferError("unknown_wear_state")
     if worn and item_id in worn:
-        raise ValueError("This item is worn; take it off before transferring it.")
+        raise ItemTransferError("item_worn")
 
 
 def transfer(
@@ -72,10 +71,10 @@ def transfer(
 ) -> tuple[dict, Possessions, dict]:
     """Validate against present custody, then change working copies through item owners."""
     if operation not in {"take", "give", "put_down"} or actor_id not in actors:
-        raise ValueError("The item operation or actor is unavailable.")
+        raise ItemTransferError("operation_unavailable")
     source = SCENE if operation == "take" else actor_id
     if item_id not in snapshot.items or snapshot.owners.get(item_id) != source:
-        raise ValueError("The item is unavailable for this transfer under its current custody.")
+        raise ItemTransferError("custody_changed")
     destination = _destination(actor_id, operation, recipient_id, actors)
     if source != SCENE:
         _require_carried(actors[source], snapshot.items[item_id], item_id, carried_item_ids)

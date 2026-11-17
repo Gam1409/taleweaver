@@ -20,6 +20,28 @@ class ItemPolicyError(ValueError):
         super().__init__(POLICY_MESSAGES[code])
 
 
+TransferCode = Literal[
+    "recipient_unavailable",
+    "unknown_wear_state",
+    "item_worn",
+    "operation_unavailable",
+    "custody_changed",
+]
+TRANSFER_MESSAGES: dict[TransferCode, str] = {
+    "recipient_unavailable": "The recipient is unavailable or already owns this item.",
+    "unknown_wear_state": "Current garment placement is unknown; establish its wear state before transferring it.",
+    "item_worn": "This item is worn; take it off before transferring it.",
+    "operation_unavailable": "The item operation or actor is unavailable.",
+    "custody_changed": "The item is unavailable for this transfer under its current custody.",
+}
+
+
+class ItemTransferError(ValueError):
+    def __init__(self, code: TransferCode):
+        self.code = code
+        super().__init__(TRANSFER_MESSAGES[code])
+
+
 @dataclass(frozen=True)
 class ItemFailure:
     label: str

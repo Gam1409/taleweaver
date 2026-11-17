@@ -10,7 +10,7 @@ from backend.engine.chpm import (
     agent_lookup_payload,
     inference,
     offered_tools,
-    tool_feedback,
+    tool_operations,
     tool_profiles,
 )
 from backend.engine.chpm.agent_contracts import INSTRUCTIONS as LOOKUP_RULES
@@ -133,19 +133,26 @@ def _audit(
     *,
     protocol: str = "native",
 ) -> dict:
+    by_call = {result.get("tool_call_id"): result for result in results}
     return {
         "purpose": "Private memory tool round",
         "purpose_truncated": False,
         "protocol": protocol,
         "requests": [
-            request_summary(request)
-            if request is not None
-            else {
-                "tool": canonical_tool_name(call.name),
-                "arguments_hash": sha256(
-                    call.arguments_raw.encode(errors="surrogatepass")
-                ).hexdigest(),
-                "name_hash": sha256(call.name.encode(errors="surrogatepass")).hexdigest(),
+            (
+                request_summary(request)
+                if request is not None
+                else {
+                    "tool": canonical_tool_name(call.name),
+                    "arguments_hash": sha256(
+                        call.arguments_raw.encode(errors="surrogatepass")
+                    ).hexdigest(),
+                    "name_hash": sha256(call.name.encode(errors="surrogatepass")).hexdigest(),
+                }
+            )
+            | {
+                key: by_call.get(call.id, {}).get(key)
+                for key in ("attempt_id", "operation_id", "tool_call_id")
             }
             for call, request in zip(calls, requests, strict=True)
         ],
@@ -157,12 +164,11 @@ def _audit(
 def _feedback(
     messages: list[dict],
     notebook: NotebookDraft | None,
-    calls: tuple[ToolCall, ...],
-    results: list[dict],
+    batch: tool_operations.Batch,
 ) -> None:
-    for call, result in zip(calls, results, strict=True):
+    for call, result in tool_operations.feedback(batch):
         name = canonical_tool_name(call.name)
-        feedback = tool_feedback.for_model(name, result)
+        feedback = tool_operations.for_model(name, result)
         messages.append(
             {
                 "role": "tool",
@@ -216,6 +222,7 @@ async def investigate(
     ]
     audit: list[dict] = []
     seen_ids: set[str] = set()
+    captured = tool_operations.capture(manager, tools)
     for index in range(settings.agent_steps):
         if index:
             messages.append(
@@ -256,9 +263,12 @@ async def investigate(
             break
         seen_ids.update(call.id for call in turn.calls)
         requests, errors = _parse_batch(turn.calls)
-        results = errors if errors is not None else [tools.execute(request) for request in requests]
+        batch = tool_operations.execute(
+            manager, tools, turn.calls, requests, errors, captured=captured
+        )
+        results = batch.results
         messages.append(turn.assistant_message)
-        _feedback(messages, notebook, turn.calls, results)
+        _feedback(messages, notebook, batch)
         stop = "step_limit" if index + 1 == settings.agent_steps else "continue"
         audit.append(_audit(turn.calls, requests, results, stop, protocol=protocol))
     return tools, audit

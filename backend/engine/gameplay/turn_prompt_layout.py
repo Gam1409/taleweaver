@@ -81,6 +81,10 @@ def build_outcome_json(game_event: Any) -> tuple[str, str]:
     if not game_event:
         return "", "{}"
     outcome = game_event.model_dump()
+    from backend.engine.visual_novel.player_items import outcome as player_item_outcome
+
+    if applied_items := player_item_outcome(game_event):
+        outcome["preliminary_player_item_outcomes"] = applied_items
     draft = outcome.get("narrative_description") or ""
     pruned = {
         key: value

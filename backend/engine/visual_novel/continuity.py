@@ -1,12 +1,15 @@
 """Hydrate VN possession proposals from current canonical items, never model attributes."""
 
+from collections.abc import Mapping
 from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any
 
 from pydantic import ConfigDict
 
+from backend.engine import turn_controls
 from backend.engine.llm_intents import ChatProgressionIntent
+from backend.engine.npc_actions.control import CommandRejectedError
 from backend.engine.npc_presence import physically_present
 from backend.engine.rule_engine import InventoryItem, WorldEntityUpdate
 from backend.engine.visual_novel.item_rejections import clear, remember
@@ -275,23 +278,41 @@ def _hydrate(intent: ChatProgressionIntent, snapshot: Possessions) -> None:
     intent.updated_entities = _holder_updates(intent, snapshot, destinations, removed)
 
 
-def prepare_intent(manager: Any, intent: Any, entities: list[Any]) -> ChatProgressionIntent:
+def prepare_intent(
+    manager: Any,
+    intent: Any,
+    entities: list[Any],
+    *,
+    control: Mapping | None = None,
+    item_plan: Any = None,
+) -> ChatProgressionIntent:
     """Return an engine-ready intent; reject an invalid possession batch without losing items."""
-    from backend.engine.visual_novel.intent import VNProgressionIntent, to_chat_progression_intent
+    from backend.engine.visual_novel import player_items
+    from backend.engine.visual_novel.intent import progression_schema, to_chat_progression_intent
 
+    captured = (
+        dict(control) if control is not None else turn_controls.scope(manager, "preliminary_items")
+    )
+    if not turn_controls.bind_current(manager, captured, "preliminary_items"):
+        raise CommandRejectedError("stale")
     clear(manager)
-    raw = intent.model_dump(exclude_none=True) if hasattr(intent, "model_dump") else intent
-    proposal = VNProgressionIntent.model_validate(raw)
+    # Required nullable selectors retain an explicit unresolved value during
+    # revalidation; excluding null would turn it into an omitted actor field.
+    raw = intent.model_dump() if hasattr(intent, "model_dump") else intent
+    proposal = progression_schema(manager.state).model_validate(raw)
     result = to_chat_progression_intent(proposal)
     snapshot = None
     try:
         snapshot = possession_snapshot(manager, entities)
         pending = defer_unregistered_items(result, snapshot)
+        # An active action owner accepts operations, not a model-written final inventory.
+        player_items.constrain(manager, result, snapshot, item_plan)
         _hydrate(result, snapshot)
         result.narrative_description += pending_item_context(pending)
+        proposed_updates = getattr(proposal, "updated_inventory_items", None) or []
         conditions = {
             item.id: item.condition_note
-            for item in proposal.updated_inventory_items or []
+            for item in proposed_updates
             if item.condition_note is not None
         }
         for item in result.updated_inventory_items or []:
@@ -302,7 +323,7 @@ def prepare_intent(manager: Any, intent: Any, entities: list[Any]) -> ChatProgre
             proposed.name != item.name
             or (proposed.description is not None and proposed.description != item.description)
             for proposed, item in zip(
-                proposal.updated_inventory_items or [],
+                proposed_updates,
                 result.updated_inventory_items or [],
                 strict=False,
             )
@@ -310,7 +331,11 @@ def prepare_intent(manager: Any, intent: Any, entities: list[Any]) -> ChatProgre
             result.narrative_description += " Existing item identity, type and base description remain unchanged; only explicit condition notes may change."
     except (ValueError, TypeError) as error:
         reason = remember(
-            manager, error, intent=proposal, owners=snapshot.owners if snapshot else None
+            manager,
+            error,
+            intent=proposal,
+            owners=snapshot.owners if snapshot else None,
+            captured=captured,
         )
         result.new_inventory_items = []
         result.updated_inventory_items = []
@@ -319,7 +344,5 @@ def prepare_intent(manager: Any, intent: Any, entities: list[Any]) -> ChatProgre
         result.deleted_entities = []
         for update in result.updated_entities or []:
             update.inventory = None
-        result.narrative_description = (
-            "The attempted item change did not occur; possessions remain unchanged. " + reason
-        )
+        result.narrative_description = "The preliminary item proposal was not applied. " + reason
     return result

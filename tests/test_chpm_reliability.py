@@ -17,6 +17,7 @@ from backend.engine.chpm.evaluation import matrix_runner, memory_stress
 from backend.engine.chpm.kernel import ChpmError
 from backend.engine.chpm.proposal_draft import Draft
 from backend.engine.chpm.schema import Contract, Settings, Usage
+from tests.chpm_reference_fixture import response as reference_response
 from tests.test_chpm_appraisal import heard
 from tests.test_chpm_kernel import wire_proposal
 from tests.test_chpm_matrix import Models
@@ -127,7 +128,7 @@ class Replies:
         result = next(self.responses)
         if isinstance(result, Exception):
             raise result
-        return result
+        return reference_response(result, json.loads(content))
 
 
 async def request_replies(responses, *, budget=6, accept=lambda item: item):

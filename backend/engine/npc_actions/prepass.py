@@ -22,7 +22,28 @@ does not establish that effect. Leave those placement fields empty for the NPC's
 command API and completed-narration owners. Do not preapply their expected result
 through an object's position. A portable object can travel to another room here
 only with the player's already-confirmed current traversal to that same room.
-Inventory transfers keep their existing owner and do not need a new proof here.
+PLAYER ITEM OPERATIONS: Every player_item_actions proposal explicitly identifies
+performer_id from player_item_executor_id or a supplied present character ID;
+use null if unresolved. The performer is distinct from a recipient or clothing
+target. A player speaking to an NPC does not make the player the performer.
+Only the host-bound player's performed operations may execute here. NPC proposals
+remain deferred, including an expected agreement. Cite an exact supplied player:pN
+passage and use basis=performed only for an actual completed action.
+take moves an accessible existing item to the player, including resolved theft;
+give/drop/consume require the player to carry it at that step. give needs the
+exact present recipient/container target_id. destroy removes an available object.
+These custody operations otherwise omit target_id. Player-performed wardrobe
+assistance uses wear/remove/adjust with an existing item_id and target_id plus
+the corresponding wardrobe_actions entry. acquire_garment uses target_id and
+creation_ref (the matching garment_creations index), omitting item_id; its logical
+source and clothing policies are still checked by the clothing owner. Never use
+these player operations for an NPC's own choice. At most six operations per plan.
+Raw inventory/new_inventory/spawn/deletion fields
+cannot independently change custody while this control is enabled. For a request
+to an NPC, leave player_item_actions empty and let its action owner decide.
+An NPC choice, even an expected agreement, is not the player's performed action.
+Fresh voluntary wardrobe choices for controlled actors likewise await that owner;
+completed player assistance and established-wear recovery keep their normal checks.
 Keep independent object updates separate from an unconfirmed placement. A missing
 or rejected placement is deferred, not a fictional failed attempt or obstacle.
 """
@@ -50,7 +71,24 @@ def context(state: Any) -> dict:
         "controlled_actor_ids": sorted(settings.actor_ids),
         "portable_object_placement_source": "current_player_action + resolved_external_effect",
         "unproven_placements": "defer to command or completed-narration owners",
+        "player_item_executor_id": "__player__",
+        "item_operations": "proposed player actions; canonical owners validate and apply",
     }
+
+
+def defer_wardrobe(
+    state: Any, change: Any, *, item_plan: Any = None, creation_ref: int | None = None
+) -> bool:
+    """The preliminary model cannot approve a fresh controlled actor's own wardrobe choice."""
+    if not enabled(state) or change.actor_id not in context(state)["controlled_actor_ids"]:
+        return False
+    if change.source != "player_action":
+        return False
+    from backend.engine.visual_novel.player_items import assisted
+
+    # A generated approval is not the live actor's decision. Player assistance
+    # keeps the clothing owner's consent checks and needs its own validated operation.
+    return not assisted(item_plan, change, creation_ref=creation_ref)
 
 
 def _portable(rows: list[Any], state: Any) -> list[dict]:

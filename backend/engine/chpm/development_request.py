@@ -8,7 +8,7 @@ from backend.engine.chpm import (
     development,
     development_context,
     motivation,
-    proposal_draft,
+    proposal_references,
 )
 from backend.engine.chpm.appraisal_contracts import GroundedProposal
 from backend.engine.chpm.core.contracts import Belief
@@ -39,6 +39,7 @@ def prepare(
     pinned: dict[str, tuple[str, Source, str]] | None = None,
     pinned_beliefs: dict[str, Belief] | None = None,
     focus_subjects: tuple[str, ...] = (),
+    reference_binding: dict | None = None,
 ) -> Prepared:
     available = development_context.episodes(
         mind, query=observation.player_request, focus_subjects=focus_subjects
@@ -54,18 +55,20 @@ def prepare(
                 supplied,
                 entries,
                 settings,
-                instruction + development.INSTRUCTIONS,
+                proposal_references.instructions(instruction + development.INSTRUCTIONS),
                 schema=DevelopmentProposal,
-                wire_schema=proposal_draft.DevelopmentDraft,
+                wire_schema=proposal_references.ReferenceDevelopmentDraft,
                 pinned=pinned,
                 pinned_beliefs=pinned_beliefs,
                 focus_subjects=focus_subjects,
                 extra={"development_context": body},
+                reference_episodes=available,
+                reference_binding=reference_binding,
             )
             return Prepared(
                 *packed,
                 DevelopmentProposal,
-                instruction + development.INSTRUCTIONS,
+                proposal_references.instructions(instruction + development.INSTRUCTIONS),
                 available,
                 "available",
             )
@@ -78,17 +81,18 @@ def prepare(
         supplied,
         entries,
         settings,
-        instruction,
+        proposal_references.instructions(instruction),
         extra={"development_context": body},
-        wire_schema=proposal_draft.Draft,
+        wire_schema=proposal_references.ReferenceDraft,
         pinned=pinned,
         pinned_beliefs=pinned_beliefs,
         focus_subjects=focus_subjects,
+        reference_binding=reference_binding,
     )
     return Prepared(
         *packed,
         GroundedProposal,
-        instruction,
+        proposal_references.instructions(instruction),
         {},
         "deferred_input_budget" if allowed else "not_yet_eligible",
     )

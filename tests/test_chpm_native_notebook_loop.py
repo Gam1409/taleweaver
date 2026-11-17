@@ -13,6 +13,7 @@ from backend.engine.chpm.errors import ChpmError, InferenceUnavailableError
 from backend.engine.chpm.notebook import NotebookWorkspace
 from backend.engine.chpm.notebook_tools import NotebookDraft
 from backend.engine.chpm.schema import Settings, Usage
+from tests.chpm_reference_fixture import tool_turn as reference_turn
 from tests.test_chpm_host_state import mind
 from tests.test_chpm_kernel import observation
 from tests.test_chpm_reliability import Replies
@@ -54,7 +55,7 @@ class NativeModel:
         result = next(self.responses)
         if isinstance(result, BaseException):
             raise result
-        return result
+        return reference_turn(result, messages)
 
     async def aexecute_simple_task(self, system, content, model, **kwargs):
         self.json_requests.append((system, content, kwargs))
@@ -141,7 +142,11 @@ async def test_stale_counter_is_corrected_and_a_later_call_reads_its_own_staged_
     )
     tools, _, usage = await investigate(model, draft=draft)
 
-    assert results(model) == [
+    feedback = results(model)
+    assert [
+        (identifier, {key: result[key] for key in ("status", "message", "revision")})
+        for identifier, result in feedback
+    ] == [
         (
             "stale",
             {
@@ -151,6 +156,7 @@ async def test_stale_counter_is_corrected_and_a_later_call_reads_its_own_staged_
             },
         )
     ]
+    assert all(result["attempt_id"] and result["operation_id"] for _, result in feedback)
     assert usage.calls == 2 and tools.notebook.workspace.base_revision == 4
     assert tools.notebook.workspace.revision == tools.notebook.reads[-1]["revision"] == 5
     assert json.loads(tools.notebook.reads[-1]["json_fragment"]) == PRIVATE

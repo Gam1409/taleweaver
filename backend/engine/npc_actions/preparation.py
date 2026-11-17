@@ -3,6 +3,7 @@
 from copy import deepcopy
 from typing import Any
 
+from backend.engine import turn_controls
 from backend.engine.clothing.context import actor_records
 from backend.engine.clothing.visuals import detailed_for_state, session_objects
 from backend.engine.npc_actions.preview import Draft, Scope
@@ -58,6 +59,7 @@ async def capture(manager: Any, views: dict, observed: Any) -> dict[str, Draft]:
                 },
                 staging_enabled=read_settings(manager.state).scene_staging,
                 observation=observed.model_copy(deep=True),
+                control=turn_controls.scope(manager, "npc_command_preview", observation=observed),
             )
         )
     return result

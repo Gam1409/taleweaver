@@ -6,6 +6,16 @@ Observe comparison remain available. The current wire protocol uses separate
 `new_beliefs` and `belief_revisions` arrays; the host converts both to canonical
 interpretation events without changing the stored reducer contract.
 
+The current model wire selects evidence IDs. Each visible excerpt is displayed
+once as exact `fragments` of at most 300 characters. Belief, experience and
+intention-change citations return `fragment_id`; development citations return
+`episode_id`. Motives already select catalogue IDs. The host supplies canonical
+source IDs, exact quotations and provenance before the existing validators run.
+The required `reference_scope` binds these selectors to this observer, source
+window and host attempt/operation. Request metadata remains separate from the
+semantic decision cache. Legacy canonical source/quote records keep their strict
+read, replay and lifecycle contracts; they are not accepted as modern responses.
+
 ```mermaid
 flowchart LR
   A[Observer-visible speech and original identity] --> B[Bounded evidence and belief window]

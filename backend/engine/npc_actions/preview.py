@@ -5,10 +5,12 @@ from dataclasses import dataclass, field, replace
 from hashlib import sha256
 from typing import TYPE_CHECKING, Literal
 
+from backend.engine import turn_controls
 from backend.engine.clothing.changes import preview as wardrobe_preview
 from backend.engine.clothing.profiles import garment_for_item
 from backend.engine.clothing.projection import known_worn_item_ids
 from backend.engine.narrated_items.commands import carried_after, transfer
+from backend.engine.npc_actions import control
 from backend.engine.npc_actions.contracts import (
     Adjust,
     Approach,
@@ -56,6 +58,7 @@ class Scope:
     scene_objects: dict[str, str] = field(default_factory=dict)
     staging_enabled: bool = False
     observation: "Observation | None" = None
+    control: dict = field(default_factory=dict)
 
 
 @dataclass
@@ -65,6 +68,7 @@ class Draft:
     prior_receipts: tuple[dict, ...] = field(default=(), kw_only=True, repr=False)
     requests: list[Request] = field(default_factory=list)
     receipts: list[dict] = field(default_factory=list)
+    operations: list[turn_controls.Operation] = field(default_factory=list, init=False, repr=False)
     approved: bool = False
     published_results: list[dict] | None = field(default=None, init=False)
     _actors: dict = field(init=False, repr=False)
@@ -75,6 +79,8 @@ class Draft:
     def __post_init__(self) -> None:
         if self.scope.actor_id not in self.scope.actors:
             raise ValueError("The command actor is unavailable in this scene.")
+        if not self.scope.control:
+            self.scope = replace(self.scope, control=control.local_scope(self.scope))
         self._reset()
 
     def _reset(self) -> None:
@@ -88,6 +94,9 @@ class Draft:
             "status": "pending_not_world_facts",
             "count": len(self.requests),
             "commands": [request.model_dump() for request in self.requests],
+            # Full bindings remain on the host. The model needs the handles to
+            # relate feedback to its plan, not repeated input hashes per command.
+            "operation_ids": [operation.operation_id for operation in self.operations],
             "remaining_commands": MAX_ACTIONS - len(self.requests),
         }
 
@@ -127,51 +136,61 @@ class Draft:
             names.update({"take_off_item", "adjust_clothing"})
         return names
 
-    def execute(self, request: Request) -> dict:
+    def execute(
+        self, request: Request, *, operation: turn_controls.Operation | None = None
+    ) -> dict:
+        identity, _ = operation_identity(self.scope, request, self.start_index + len(self.requests))
+        if operation is not None and (
+            not control.bound_to(operation, self.scope.control)
+            or operation.actor_id != self.scope.actor_id
+            or operation.tool != request.tool
+            or operation.command_id not in {None, identity}
+        ):
+            rejected = turn_controls.operation(
+                self.scope.control, request.tool, actor_id=self.scope.actor_id, command_id=identity
+            )
+            return control.result(rejected, "blocked", reason_code="invalid_operation")
+        operation = (
+            operation.model_copy(update={"command_id": identity})
+            if operation is not None
+            else turn_controls.operation(
+                self.scope.control, request.tool, actor_id=self.scope.actor_id, command_id=identity
+            )
+        )
         if self.approved:
-            return {"status": "plan_closed", "message": "This decision has already been submitted."}
+            return control.result(operation, "plan_closed", reason_code="plan_closed")
         if isinstance(request, Discard):
             self.requests.clear()
             self.receipts.clear()
+            self.operations.clear()
             self._reset()
-            return {"status": "discarded", "count": 0}
+            return control.result(operation, "discarded", count=0)
         rejection = self._rejection(request)
         if rejection:
-            return rejection
+            return control.result(operation, rejection, reason_code=rejection)
         try:
             receipt = self._preview(request)
         except ValueError as exc:
-            return {"status": "blocked", "message": str(exc)[:320]}
+            return control.owner_failure(operation, exc)
         self.requests.append(request.model_copy(deep=True))
         self.receipts.append(receipt)
-        return {
-            "status": "staged",
-            "index": len(self.requests) - 1,
-            "effect": receipt,
-            "world_changed": False,
-        }
+        self.operations.append(operation)
+        return control.result(
+            operation, "staged", index=len(self.requests) - 1, effect=receipt, world_changed=False
+        )
 
-    def _rejection(self, request: Request) -> dict | None:
+    def _rejection(self, request: Request) -> str | None:
         if len(self.requests) >= MAX_ACTIONS:
-            return {"status": "action_limit", "message": "Submit or discard the existing plan."}
+            return "action_limit"
         if self._departed:
-            return {
-                "status": "scene_frame_ended",
-                "message": "Room travel ends this scene's plan. Submit it or discard it first.",
-            }
+            return "scene_frame_ended"
         if isinstance(request, Item) and request.item_id not in self.scope.accessible_ids:
-            return {
-                "status": "unavailable_entity",
-                "message": "Use an exact currently accessible item ID; find or inspect it first.",
-            }
+            return "unavailable_entity"
         if (
             isinstance(request, (Approach, Interact))
             and request.target_id not in self.scope.accessible_ids
         ):
-            return {
-                "status": "unavailable_entity",
-                "message": "Choose a currently accessible target ID; search or inspect first.",
-            }
+            return "unavailable_entity"
         return None
 
     def _preview(self, request: Request) -> dict:

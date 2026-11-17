@@ -16,6 +16,7 @@ from backend.engine.scene_staging import props
 from backend.models.chat import ChatMessage
 from backend.models.world_entity import WorldEntity, WorldExit, WorldScene
 from tests.chpm_projection_fixture import public_projection
+from tests.chpm_reference_fixture import response as reference_response
 from tests.conftest import TestSessionLocal
 from tests.test_chpm_kernel import motivated_candidates, preferred_choice
 from tests.test_shared_scene_staging import ACTION, TEXT, SharedRoles, seed
@@ -33,8 +34,13 @@ class AutonomousRoles(SharedRoles):
         model = super().for_role(user, role, **kwargs)
         model.max_tokens = 4096
         model.request_timeout = 10
-        model.aexecute_simple_task = self.simple
+        model.aexecute_simple_task = self.reference_simple
         return model
+
+    async def reference_simple(self, system, payload, model, **kwargs):
+        return reference_response(
+            await self.simple(system, payload, model, **kwargs), json.loads(payload)
+        )
 
     async def structured(self, *args, **kwargs):
         result = await super().structured(*args, **kwargs)

@@ -2,9 +2,11 @@
 
 import json
 import logging
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from backend.engine import turn_controls
 from backend.engine.chpm import agent_native, inference, json_contract
 from backend.engine.chpm.agent_limits import MAX_TOOL_ARGUMENT_CHARS
 from backend.engine.chpm.errors import RecoverableChpmError
@@ -116,14 +118,19 @@ class Recovery:
         *,
         remaining: int,
         protocol: str,
+        captured: Mapping | None = None,
     ) -> None:
         if self.used or remaining <= 0:
             raise RecoverableChpmError(str(error)) from error
         self.used = True
         message = (
-            str(error) + " No operation from the rejected response ran. Earlier successful "
-            "operations remain staged; do not repeat them. Correct the response within "
-            "the remaining rounds. This feedback supplies no new story facts."
+            str(error)
+            + " Rejected operations did not run; do not repeat earlier successful operations."
+        )
+        control = (
+            turn_controls.operation(captured, "tool_response").model_dump(exclude_none=True)
+            if captured is not None
+            else {}
         )
         history.append(
             {
@@ -131,6 +138,11 @@ class Recovery:
                 "content": json.dumps(
                     {
                         "host_protocol_feedback": {
+                            **{
+                                key: control[key]
+                                for key in ("attempt_id", "operation_id")
+                                if key in control
+                            },
                             "code": error.code,
                             "message": message,
                             "operations_applied": False,
@@ -141,6 +153,7 @@ class Recovery:
         )
         audit.append(
             {
+                **control,
                 "purpose": "Host protocol feedback",
                 "purpose_truncated": False,
                 "protocol": protocol,

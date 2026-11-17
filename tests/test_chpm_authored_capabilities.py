@@ -12,6 +12,7 @@ from backend.engine.chpm.agent_contracts import Lookup
 from backend.engine.chpm.state import load
 from backend.models.avatar import Avatar
 from backend.models.world_entity import WorldEntity
+from tests.chpm_reference_fixture import proposal as reference_proposal
 from tests.conftest import TestSessionLocal
 from tests.observable_state_support import tools_for, world
 from tests.test_chpm_host_state import mind
@@ -183,7 +184,7 @@ class KnowledgeRoles(ChpmRoles):
     async def proposal(self, body, model):
         raw = await super().simple("", json.dumps(body), model, phase="proposal")
         self.chpm_calls.pop()  # Reuse the existing offline proposal builder, no model request.
-        return json.loads(raw)
+        return reference_proposal(json.loads(raw), body)
 
     async def simple(self, system, payload, model, **kwargs):
         if kwargs.get("phase") not in {"agent_lookup", "integrated_decision"}:

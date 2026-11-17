@@ -4,13 +4,15 @@ from copy import deepcopy
 
 import pytest
 
+from backend.engine import turn_controls
 from backend.engine.chpm.schema import KernelState, Settings
 from backend.engine.chpm.state import KEY
 from backend.engine.clothing.visuals import session_objects
 from backend.engine.gameplay.manager import GameTurnManager
 from backend.engine.mutation_targets import validate_mutation_targets
+from backend.engine.visual_novel import player_items
 from backend.engine.visual_novel.continuity import possession_snapshot, prepare_intent
-from backend.engine.visual_novel.intent import VNProgressionIntent
+from backend.engine.visual_novel.intent import progression_schema
 from backend.engine.visual_novel.movement_recovery import resolve_event
 from backend.engine.visual_novel.movement_sources import prepare
 from backend.models.chat import ChatMessage
@@ -73,6 +75,7 @@ async def setup(db, *, text=REQUEST, settings=None, portable=True):
     manager = GameTurnManager(db, state.session_id, user, state=state, avatar=avatar)
     assert await manager.initialize()
     manager._vn_player_message_id = request.id
+    turn_controls.bind_input(manager, request)
     await prepare(manager)
     return manager, key, request
 
@@ -98,10 +101,15 @@ def placement(*, source=None, field="updated_entities", entity_id="BRASS_KEY"):
 
 async def apply(manager, raw, *, mutate=None):
     rows = await session_objects(manager.db, manager.game_id)
-    proposal = VNProgressionIntent.model_validate(raw)
+    proposal = progression_schema(manager.state).model_validate(raw)
     manager._vn_movement_proposal = proposal.model_copy(deep=True)
-    intent = prepare_intent(manager, proposal, rows)
+    captured = turn_controls.scope(manager, "preliminary_items")
+    plan = await player_items.prepare(
+        manager, proposal, rows, scope=player_items.capture(manager), captured=captured
+    )
+    intent = prepare_intent(manager, proposal, rows, control=captured, item_plan=plan)
     event = manager._build_progression_event(intent)
+    player_items.attach(event, plan)
     assert "movement_source" not in event.model_dump_json()
     if mutate is not None:
         mutate(event)
@@ -163,7 +171,7 @@ async def test_exact_current_player_placement_uses_the_saved_source_without_chan
 
 
 @pytest.mark.parametrize("changed", ["content", "revision", "role", "input", "scene"])
-async def test_changed_saved_player_source_defers_a_previously_prepared_placement(changed):
+async def test_changed_saved_player_source_cannot_apply_a_previously_prepared_event(changed):
     async with TestSessionLocal() as db:
         manager, key, request = await setup(db, text=PLACEMENT)
         if changed == "content":
@@ -177,9 +185,11 @@ async def test_changed_saved_player_source_defers_a_previously_prepared_placemen
         else:
             request.scene_id = "ANNEX"
         await db.commit()
-        _, notices = await apply(manager, placement(source=proof()))
+        with pytest.raises(ValueError):
+            await apply(manager, placement(source=proof()))
         await db.refresh(key)
-        assert current(manager, key) == "on the table" and notices
+        assert current(manager, key) == "on the table"
+        assert "notes" not in manager.state.entity_states.get(key.id, {})
 
 
 @pytest.mark.parametrize(

@@ -260,7 +260,7 @@ async def test_recall_cues_exclude_unperceived_player_narration(monkeypatch):
     )
     with pytest.raises(RuntimeError, match="probe"):
         await cognition.deliberate(
-            SimpleNamespace(),
+            SimpleNamespace(game_id=observed.session_id),
             Settings(),
             Usage(),
             "npc",

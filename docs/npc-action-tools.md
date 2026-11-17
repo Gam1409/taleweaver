@@ -73,6 +73,15 @@ arbitrary recipient-state setter or separate permission tool.
 6. Narration state and portrait cast are refreshed after applied commands. The
    narrator receives authoritative applied/attempted/blocked/stale/skipped
    outcomes, with earlier observations identified as preceding publication.
+   The command contract marks earlier observations and the host resolution as
+   preceding publication. Review, repair and ordinary continuation also expose
+   `host_resolution_time=before_command_publication`. Narration, review, bounded
+   repair and ordinary continuation use the same command-owner instructions:
+   applied commands supersede earlier conflicting results only for their exact
+   owned fields. Earlier failures remain visible, including unrelated failures;
+   attempted, blocked, stale, skipped or unconfirmed results establish no new
+   successful effects. This timing label adds no request, world mutation or
+   alternative state owner.
 7. Shared extraction cannot repeat or reverse command-owned inventory, wardrobe
    and travel effects. Only handled item-property dimensions are protected;
    independent body conditions, other dimensions and unrelated scene effects
@@ -176,6 +185,78 @@ command turn, and cancellation/retry use that owner. Timings and call usage use
 the existing diagnostics, without a separate event ledger.
 
 ## Validation
+
+Each turn invocation has a host-issued attempt ID, including retries that reuse a
+saved input. Tool operations and their results carry host-issued operation IDs;
+feedback correlates those IDs instead of relying on result order. A staged action
+retains its operation ID through publication and refers separately to its existing
+canonical command proof. Closed, foreign or changed-input records cannot authorize
+a current operation. An earlier invocation's cleanup cannot close a newer attempt.
+
+Model-facing pending plans and feedback retain operation handles and domain
+results, while complete input bindings and event metadata remain in host audit
+records. Repeated hashes and command proofs do not consume the context again
+for every staged step. This projection changes neither validation nor limits.
+
+Preliminary failures retain their phase and input revision, so they remain distinct
+from later applied commands in the same attempt. Refusal messages are rendered
+from typed reason codes; legacy owner errors receive a generic code. Snapshot
+fingerprints record before/after state for inspection and do not replace owner
+precondition checks or provide a database compare-and-swap revision. Publication's
+in-memory result cache is bounded to the active attempt. Item transfers have no
+durable operation registry; this contract does not promise durable exactly-once
+execution independently of the existing replay and rollback owners.
+
+### Rejected command previews
+
+The narrator, reviewer and existing prose repair also receive current
+`rejected_command_previews` from the selected decision's tool audit, including
+when every command was rejected and no publication plan exists. The projection
+checks the attempt, input revision/hash, actor, operation and tool-call binding.
+It exposes bounded action references and typed reason codes, excluding notebook
+arguments, private purposes, free descriptions and diagnostic details. Invalid
+arguments retain a typed rejection without inventing an item or target.
+
+These records are preview feedback, not physical failed attempts or world facts.
+Later applied publications supersede only the matching `superseded_fields`;
+unrelated denials remain relevant. A rejected operation never becomes successful
+retroactively. Valid refusal feedback does not abort the turn or require an
+additional model request. Historical audits without operation bindings and older
+hash-only summaries remain readable and gain no current control authority.
+Rejection status (such as `blocked`) is distinct from its typed reason code
+(such as `recipient_unavailable`). An unchanged cached decision's original audit
+is retained history, never rebound to a new attempt or reissued as current feedback.
+
+### Preliminary player operations
+
+With live integrated dialogue action control enabled, VN progression proposes at
+most six `player_item_actions` using canonical item/recipient IDs and the existing
+saved `player:pN` source references. Each proposal requires an explicit
+`performer_id`, separate from its recipient or clothing target. Only the supplied
+player executor with `basis=performed` can authorize custody changes here. NPC
+or explicitly unresolved performers remain deferred; omitting the performer
+does not default to the player. The host binds execution to its player owner.
+Final inventory, spawn, removal and deletion lists cannot independently authorize
+custody changes. Requests for an NPC's voluntary actions remain pending until
+that actor's action owner decides. Disabled, shadow and staged configurations
+retain their existing progression contract.
+
+Ordered player pickup, transfer, placement, theft and complete consumption/removal
+are validated on canonical working possessions and applied by the existing world
+owner. Saved source changes, a new attempt or changed custody invalidate the old
+plan. Receipts retain parent operation IDs and report actual post-guardrail custody;
+deferred proposals are distinct from failed actions. No additional model request
+or executable proposal is persisted.
+
+Fresh controlled-NPC wardrobe choices follow the same boundary. Player-performed
+assistance requires a matching player operation, while the clothing owner retains
+its consent, source, ownership, age, detail and coverage checks. Established-wear
+initialization and completed-narration recovery keep their existing owners.
+Independent condition changes remain outside the custody operation contract.
+
+These checks establish legal operations and source identity. They do not prove
+that a model correctly interpreted the performer or completion of arbitrary
+natural-language input; that distinction still requires live evaluation.
 
 Offline checks cover strict argument parsing and scope binding, copy-on-write
 previews, conflicting acquisitions, ordered transfers, property identity,

@@ -7,7 +7,7 @@ from sqlalchemy import select
 
 from backend.engine.chpm import control_settings
 from backend.engine.chpm.state import KEY
-from backend.engine.npc_actions.publication import publish
+from backend.engine.npc_actions.publication import publish, rejected_results
 from backend.models.chat import ChatMessage
 
 
@@ -29,17 +29,7 @@ async def publish_turn(manager: Any, turn: Any) -> None:
             continue
         valid = enabled and await _current_input(manager, turn.decisions[actor].observation)
         turn.action_outcomes[actor] = (
-            await publish(manager, draft)
-            if valid
-            else [
-                {
-                    "index": index,
-                    "tool": request.tool,
-                    "status": "stale",
-                    "message": "The controlling settings or input changed before publication.",
-                }
-                for index, request in enumerate(draft.requests)
-            ]
+            await publish(manager, draft) if valid else rejected_results(draft, "stale")
         )
 
 

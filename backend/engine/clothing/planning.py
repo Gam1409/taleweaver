@@ -8,6 +8,7 @@ from sqlalchemy import select
 from backend.engine.clothing.actions import GarmentCreation, WardrobeAction
 from backend.engine.clothing.context import actor_records, source_records
 from backend.engine.clothing.profiles import load_profile
+from backend.engine.npc_actions.prepass import defer_wardrobe
 from backend.engine.visual_novel.continuity import PLAYER, possession_snapshot
 from backend.models.chat import ChatMessage
 
@@ -82,6 +83,8 @@ def validate_plan(
     narration: str,
     entities: list[Any],
     scenes: list[Any],
+    *,
+    item_plan: Any = None,
 ) -> WardrobePlan:
     plan = WardrobePlan(
         str(getattr(manager, "_vn_player_message_id", "") or ""), manager.state.current_scene_id
@@ -90,6 +93,8 @@ def validate_plan(
     sources = source_records(manager, entities, scenes)
     possessions = possession_snapshot(manager, entities)
     for change in getattr(proposal, "wardrobe_actions", None) or []:
+        if defer_wardrobe(manager.state, change, item_plan=item_plan):
+            continue
         valid = bool(plan.message_id) and _grounded(
             change, actors.get(change.actor_id, {}), user_msg, narration
         )
@@ -99,7 +104,9 @@ def validate_plan(
             plan.errors.append(
                 "A wardrobe change lacked completed action evidence or character agency."
             )
-    for creation in getattr(proposal, "garment_creations", None) or []:
+    for index, creation in enumerate(getattr(proposal, "garment_creations", None) or []):
+        if defer_wardrobe(manager.state, creation, item_plan=item_plan, creation_ref=index):
+            continue
         actor = actors.get(creation.actor_id, {})
         valid = bool(plan.message_id) and _grounded(creation, actor, user_msg, narration)
         valid = valid and _creation_source_valid(creation, actor, sources, possessions, narration)
@@ -139,5 +146,11 @@ async def prepare_wardrobe_plan(
         else ""
     )
     event._vn_clothing_plan = validate_plan(
-        manager, proposal, user_msg, narration, entities, scenes
+        manager,
+        proposal,
+        user_msg,
+        narration,
+        entities,
+        scenes,
+        item_plan=getattr(event, "_vn_player_item_plan", None),
     )

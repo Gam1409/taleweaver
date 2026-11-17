@@ -14,7 +14,7 @@ MAX_PATH_LENGTH = 300
 INSTRUCTIONS = (
     "\nFIELD EDIT REPAIR: This round returns only the Corrections schema object. "
     "Earlier proposal rules still govern the reconstructed proposal's content and evidence. "
-    "Use exact allowed paths; replace a listed parent object or array for deeper changes. "
+    "Use each allowed path once; combine deeper changes in one full parent/array replacement. "
     "The host retains unedited fields and validates the complete result."
 )
 

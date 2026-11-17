@@ -1,5 +1,7 @@
 """Guidance for the optional host-validated action surface."""
 
+from collections.abc import Mapping
+
 INSTRUCTIONS = """
 When action functions are offered, choose your own feasible actions from your
 identity, motives and observed scene. You may act, decline, wait or reconsider;
@@ -21,10 +23,16 @@ invent quantities or replace identity. At zero remaining rounds submit your
 grounded decision alone. The host reports which approved actions actually applied.
 """
 
-NARRATION = """
+RESOLUTION_CHRONOLOGY = (
+    "\nhost_resolution/draft/outcome precedes authoritative_command_outcomes. Only status=applied "
+    "overrides earlier exact owned fields; unrelated failures stay. Other/missing statuses prove no success.\n"
+)
+
+NARRATION = (
+    """
 AUTHORITATIVE NPC COMMANDS: authoritative_command_outcomes lists host-checked
-effects already attempted before this narration. Applied effects and the updated
-current world state take precedence over pre-command observations and intentions.
+effects already attempted before this narration. Current state and applied effects
+override pre-command observations and intentions.
 Describe their compatible actions and emotional delivery without executing the
 same effect twice or reversing its final state. Blocked/stale/skipped operations
 did not complete; preserve successful earlier effects and leave missing outcomes
@@ -34,3 +42,20 @@ invent another acquisition, wardrobe change or departure for a
 tool-controlled actor outside its approved plan. Ordinary compatible gestures,
 dialogue and independent physical consequences remain free. Preserve player agency.
 """
+    + RESOLUTION_CHRONOLOGY
+)
+
+
+def resolution_timing(outcomes: Mapping[str, list[dict]]) -> dict[str, str]:
+    """Label the existing earlier resolution without replacing its facts or failures."""
+    return {"host_resolution_time": "before_command_publication"} if any(outcomes.values()) else {}
+
+
+def for_outcomes(outcomes: Mapping[str, list[dict]]) -> str:
+    """Use identical owner semantics for narration, review and bounded correction."""
+    return NARRATION if any(outcomes.values()) else ""
+
+
+def resolution_instructions(outcomes: Mapping[str, list[dict]]) -> str:
+    """Give later resolution consumers the same compact temporal precedence rule."""
+    return RESOLUTION_CHRONOLOGY if any(outcomes.values()) else ""

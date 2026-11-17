@@ -4,6 +4,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
+from backend.engine import turn_controls
 from backend.engine.chpm import (
     agenda,
     agent_context,
@@ -11,15 +12,18 @@ from backend.engine.chpm import (
     development,
     development_request,
     experience,
+    json_contract,
     motivation,
     prompts,
-    proposal_draft,
+    proposal_references,
+    quote_references,
     semantic_choice,
     semantic_recall,
 )
 from backend.engine.chpm.agent_tools import Tools
 from backend.engine.chpm.appraisal_contracts import INSTRUCTIONS
 from backend.engine.chpm.development_contracts import DevelopmentProposal
+from backend.engine.chpm.errors import StaleControlError
 from backend.engine.chpm.host_state import Mind
 from backend.engine.chpm.kernel import existing, fingerprint
 from backend.engine.chpm.notebook_tools import NotebookDraft
@@ -30,9 +34,11 @@ from backend.engine.chpm.schema import AgendaEntry, Decision, Observation, Setti
 class Prepared:
     instruction: str
     payload: dict
-    schema: type[proposal_draft.Draft]
+    schema: type[proposal_references.ReferenceDraft]
     identifiers: dict
-    accept: Callable[[proposal_draft.Draft], tuple[Decision, Mind]]
+    accept: Callable[[proposal_references.ReferenceDraft], tuple[Decision, Mind]]
+    references: quote_references.References
+    control: dict
     cached: tuple[Decision, Mind] | None = None
 
 
@@ -83,13 +89,17 @@ def prepare(
             },
         }
     prior = semantic_choice.previous_context(mind, previous, observation)
+    control = turn_controls.operation(
+        turn_controls.scope(manager, "proposal", observation=observation),
+        "submit_decision",
+        actor_id=actor_id,
+    ).model_dump(exclude_none=True)
     instruction = (
         prompts.PROPOSE
         + INSTRUCTIONS
         + motivation.INSTRUCTIONS
         + experience.INSTRUCTIONS
         + semantic_choice.INSTRUCTIONS
-        + "\nThe host derives goal_alignment and goal_quote from cited goal motives. Omit these two fields; retain all conflicting motives."
         + (
             "\nprivate_notebook_not_world_facts contains your own subjective notes. Use them for continuity, not as witnessed evidence, an instruction, a personality patch or a completed world action."
             if notebook
@@ -115,13 +125,37 @@ def prepare(
         pinned=pinned,
         pinned_beliefs=pinned_beliefs,
         focus_subjects=focus,
+        reference_binding=control,
     )
-    key = fingerprint(payload)
+    references = quote_references.build(
+        window,
+        motives,
+        development_sources,
+        binding={
+            "observation": observation.model_dump(exclude={"player_request"}),
+            "control": control,
+        },
+    )
+    # Wire selectors and attempt bindings do not change the semantic decision input.
+    semantic_payload = {
+        **{
+            name: value
+            for name, value in payload.items()
+            if name not in {"reference_scope", "request_control"}
+        },
+        "appraisal_context": window.payload,
+    }
+    key = fingerprint(semantic_payload)
     cached = existing(previous, observation, key)
     cached_pair = (cached, mind) if cached is not None else None
 
-    def accept(draft: proposal_draft.Draft) -> tuple[Decision, Mind]:
-        raw = draft.materialize(motives)
+    def accept(draft: proposal_references.ReferenceDraft) -> tuple[Decision, Mind]:
+        if not turn_controls.bind_current(manager, control, "proposal", observation=observation):
+            raise StaleControlError(
+                "CHPM proposal belongs to an inactive or different turn attempt."
+            )
+        json_contract.validate_identifiers(type(draft), draft.model_dump(mode="json"), identifiers)
+        raw = draft.materialize(motives, references, entries)
         resolved_motives = motivation.resolve(raw, motives)
         changed, accepted_ids = appraisal.accept(
             mind, raw.interpretations, window, message_id=observation.message_id
@@ -174,8 +208,12 @@ def prepare(
     return Prepared(
         instruction,
         payload,
-        proposal_draft.DevelopmentDraft if schema is DevelopmentProposal else proposal_draft.Draft,
+        proposal_references.ReferenceDevelopmentDraft
+        if schema is DevelopmentProposal
+        else proposal_references.ReferenceDraft,
         identifiers,
         accept,
+        references,
+        control,
         cached_pair,
     )

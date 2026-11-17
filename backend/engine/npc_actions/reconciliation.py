@@ -4,10 +4,12 @@ from typing import Any
 
 from pydantic import ValidationError
 
+from backend.engine import turn_controls
 from backend.engine.narrated_items import independent_state
 from backend.engine.narrated_items.participants import resolve_participants
 from backend.engine.narrated_items.schema import ItemExtraction
 from backend.engine.narrated_movement.schema import MovementProposal
+from backend.engine.npc_actions.control import validated_outcomes
 from backend.engine.physical_conditions.ledger import read
 from backend.engine.physical_conditions.schema import ConditionProposal, Ledger
 from backend.engine.physical_conditions.update_identity import normalize
@@ -28,11 +30,13 @@ def context(manager: Any) -> dict | None:
     turn = getattr(manager, "_chpm_turn", None)
     if turn is None or turn.input_id != getattr(manager, "_vn_player_message_id", None):
         return None
+    if not turn_controls.bind_current(manager, getattr(turn, "control", {})):
+        return None
     if turn.initial.settings.mode != "live" or not turn.initial.settings.action_tools:
         return None
     actors = set(turn.action_outcomes) if turn.simplified else set(turn.decisions)
     return (
-        {"controlled_actor_ids": sorted(actors), "outcomes": turn.action_outcomes}
+        {"controlled_actor_ids": sorted(actors), "outcomes": validated_outcomes(turn)}
         if actors
         else None
     )

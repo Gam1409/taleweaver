@@ -12,6 +12,7 @@ from backend.engine.scene_staging.commands import CommandProof, apply_command
 from backend.engine.scene_staging.schema import Placement, SceneExtraction
 from backend.engine.scene_staging.state import KEY, project
 from backend.engine.visual_novel.config import VnSettings, write_settings
+from tests.npc_control_support import bind_turn
 
 CAST = [{"id": actor, "name": actor} for actor in ("hero", "LINA", "SECOND")]
 TEXT = "Hero remains sitting. Second remains sitting. Lina crawls near Hero."
@@ -90,6 +91,8 @@ def fixture(*, current=True):
                 ]
             },
         )
+    if current:
+        bind_turn(host, host._chpm_turn)
     return host, rows
 
 
@@ -150,6 +153,7 @@ def test_unprepared_failure_does_not_treat_unknown_object_scope_as_an_empty_room
         host, "LINA", "on_all_fours", source="object-input", target="BENCH", kind="scene_object"
     )
     host._vn_player_message_id = host._chpm_turn.input_id = "object-input"
+    bind_turn(host, host._chpm_turn)
     current = deepcopy(host.state.entity_states[KEY]["actors"]["LINA"])
     assert shared.begin(host, TEXT)
     shared.complete(host, None, [])
@@ -242,6 +246,7 @@ def test_object_target_retention_uses_current_rows_and_overrides(current, change
                 ]
             },
         )
+        bind_turn(host, host._chpm_turn)
     fail_shared(host, rows, after_prepare=lambda: alter_object(rows, change))
     second = host.state.entity_states[KEY]["actors"]["SECOND"]
     assert ("placement" in second) is (change == "unchanged")

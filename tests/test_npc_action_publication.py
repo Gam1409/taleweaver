@@ -156,7 +156,7 @@ async def test_an_unsubmitted_plan_and_a_changed_input_cannot_publish():
         assert await publish(host, draft) == []
         draft.approved = True
         host._vn_player_message_id = "other-input"
-        assert (await publish(host, draft))[0]["status"] == "blocked"
+        assert (await publish(host, draft))[0]["status"] == "stale"
         assert (
             possession_snapshot(host, await session_objects(db, host.game_id)).owners["KEY"]
             == "__scene__"

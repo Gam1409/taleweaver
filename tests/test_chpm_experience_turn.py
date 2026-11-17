@@ -8,6 +8,7 @@ from sqlalchemy import select
 from backend.engine.chpm import inference, rendering
 from backend.engine.chpm.state import load
 from backend.models.chat import ChatMessage
+from tests.chpm_reference_fixture import evidence_text
 from tests.conftest import TestSessionLocal
 from tests.test_chpm_appraisal_turn import AppraisalRoles
 from tests.test_chpm_host_turn import configured, run
@@ -35,7 +36,7 @@ class ExperienceRoles(AppraisalRoles):
                 "about_id": None,
                 "level": "moderate",
                 "personal_motive_ids": ["character"],
-                "citations": [{"source_id": visible["source_id"], "quote": visible["text"]}],
+                "citations": [{"source_id": visible["source_id"], "quote": evidence_text(visible)}],
                 "explanation": "Demand may conflict with personal agency",
                 "alternatives": ["A misunderstanding"],
                 "unknowns": ["Intent behind the request"],

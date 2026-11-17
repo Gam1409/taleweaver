@@ -27,6 +27,7 @@ from backend.engine.rule_engine import (
 )
 from backend.engine.visual_novel.event_policy import enforce_vn_event_policy
 from backend.engine.visual_novel.ownership import sync_vn_ownership
+from backend.engine.visual_novel.player_items import validate_application as validate_player_items
 from backend.models.world_entity import WorldExit
 
 if TYPE_CHECKING:
@@ -125,6 +126,7 @@ class TurnStateApplier(
         """Applies technical mutations from a GameEvent to the database and session state. Returns messages for the UI."""
         enforce_vn_event_policy(event, self.adventure)
         await validate_mutation_targets(self.manager, event)
+        await validate_player_items(self.manager, event)
         with entity_state_updates(self.state) as states:
             return await self._apply_event_outcomes(event, states)
 

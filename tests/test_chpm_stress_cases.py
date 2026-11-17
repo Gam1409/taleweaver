@@ -11,6 +11,7 @@ from backend.engine.chpm.evaluation import (
     matrix_runner,
     memory_stress,
 )
+from tests.chpm_reference_fixture import evidence_text
 from tests.test_chpm_matrix import Models
 
 
@@ -58,5 +59,6 @@ async def test_stress_run_records_actual_proposal_memory_and_perception():
     assert result["status"] == "ok", result["error"]
     assert "npc-01" in result["perceptions"]
     call = next(call for call in result["calls"] if call["phase"] == "proposal")
-    assert memory_stress.OLD_FACT in json.dumps(call["context_audit"])
+    evidence = call["context_audit"]["appraisal_context"]["visible_evidence"]
+    assert any(" ".join(evidence_text(row).split()) == memory_stress.OLD_FACT for row in evidence)
     assert call["context_audit"]["context_packing"]["canonical_history_changed"] is False

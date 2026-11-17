@@ -14,6 +14,7 @@ from backend.engine.chpm.evaluation.contracts import Rating
 from backend.engine.chpm.evaluation.runner import run_arm
 from backend.engine.chpm.schema import Settings
 from tests.chpm_projection_fixture import public_projection
+from tests.chpm_reference_fixture import response as reference_response
 from tests.test_chpm_kernel import motivated_candidates, preferred_choice
 
 SPEECH = "Let us start with the joints."
@@ -32,8 +33,12 @@ class Models:
             provider="fake-provider",
             max_tokens=4096,
             request_timeout=10,
-            aexecute_simple_task=self.call,
+            aexecute_simple_task=self.reference_call,
         )
+
+    async def reference_call(self, system, content, model, **kwargs):
+        raw = await self.call(system, content, model, **kwargs)
+        return reference_response(raw, json.loads(content))
 
     async def call(self, system, content, model, **kwargs):
         phase = kwargs["phase"]

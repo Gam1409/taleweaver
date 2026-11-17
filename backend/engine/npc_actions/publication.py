@@ -4,6 +4,7 @@ from copy import deepcopy
 from dataclasses import replace
 from typing import Any, Literal
 
+from backend.engine import turn_controls
 from backend.engine.clothing.context import actor_records
 from backend.engine.clothing.runtime import _store_actor
 from backend.engine.clothing.visuals import detailed_for_state, session_objects
@@ -11,6 +12,7 @@ from backend.engine.gameplay.turn_state_applier import TurnStateApplier
 from backend.engine.narrated_items.commands import carried_after, transfer
 from backend.engine.narrated_items.persistence import publish_command
 from backend.engine.narrated_movement.context import context as movement_context
+from backend.engine.npc_actions import control
 from backend.engine.npc_actions.contracts import (
     Adjust,
     Approach,
@@ -26,7 +28,7 @@ from backend.engine.npc_actions.contracts import (
     Use,
     Wear,
 )
-from backend.engine.npc_actions.preview import Draft, Scope
+from backend.engine.npc_actions.preview import Draft, Scope, operation_identity
 from backend.engine.physical_conditions.schema import KEY as CONDITIONS_KEY
 from backend.engine.rule_engine import EntityMovement, GameEvent
 from backend.engine.scene_staging.shared import _cast
@@ -38,10 +40,12 @@ from backend.engine.visual_novel.continuity import possession_snapshot
 async def _fresh(manager: Any, scope: Scope) -> Scope:
     from backend.engine.chpm.observable_state import project
 
+    if not turn_controls.bind_current(manager, scope.control, observation=scope.observation):
+        raise control.CommandRejectedError("stale")
     if manager.game_id != scope.session_id or manager.state.current_scene_id != scope.scene_id:
-        raise ValueError("The command's scene or session changed.")
+        raise control.CommandRejectedError("stale")
     if getattr(manager, "_vn_player_message_id", None) != scope.input_id:
-        raise ValueError("The active input changed before command publication.")
+        raise control.CommandRejectedError("stale")
     rows = await session_objects(manager.db, manager.game_id)
     actors = actor_records(manager, rows)
     if scope.actor_id not in actors:
@@ -53,6 +57,8 @@ async def _fresh(manager: Any, scope: Scope) -> Scope:
         if scope.observation is not None
         else None
     )
+    if not turn_controls.bind_current(manager, scope.control, observation=scope.observation):
+        raise control.CommandRejectedError("stale")
     return replace(
         scope,
         actors=actors,
@@ -73,6 +79,9 @@ async def _fresh(manager: Any, scope: Scope) -> Scope:
         }
         if visible
         else scope.scene_objects,
+        control=turn_controls.scope(
+            manager, "npc_command_publication", observation=scope.observation
+        ),
     )
 
 
@@ -97,6 +106,10 @@ async def _transfer(
 
 
 async def _apply(manager: Any, scope: Scope, request: Request, preview: Draft) -> None:
+    if not turn_controls.bind_current(manager, scope.control, observation=scope.observation):
+        raise turn_controls.ControlBindingError(
+            "The command publication belongs to an inactive attempt."
+        )
     if isinstance(request, Interact):
         return
     if isinstance(request, (Take, Give, PutDown)):
@@ -135,42 +148,73 @@ async def publish(manager: Any, draft: Draft) -> list[dict]:
     """A failed prerequisite stops dependent commands; successful earlier commands remain explicit."""
     if not draft.approved:
         return []
+    if not turn_controls.bind_current(
+        manager, draft.scope.control, observation=draft.scope.observation
+    ):
+        return rejected_results(draft, "stale")
     if draft.published_results is not None:
         return deepcopy(draft.published_results)
     results: list[dict] = []
     blocked = False
+    operations = {operation.command_id: operation for operation in draft.operations}
     for index, request in enumerate(draft.requests):
-        base = {"index": index, "tool": request.tool}
+        identity, _ = operation_identity(draft.scope, request, draft.start_index + index)
+        operation = operations.get(identity)
+        if operation is None or operation.tool != request.tool:
+            raise control.CommandRejectedError("invalid_operation")
+        operation = operation.model_copy(update={"phase": "npc_command_publication"})
         if blocked:
-            results.append({**base, "status": "skipped_dependency"})
+            results.append(
+                control.result(
+                    operation, "skipped_dependency", index=index, reason_code="skipped_dependency"
+                )
+            )
             continue
         try:
             scope = await _fresh(manager, draft.scope)
+            operation = operation.model_copy(
+                update={"state_revision": scope.control["state_revision"]}
+            )
             preview = Draft(
                 scope,
-                start_index=index,
+                start_index=draft.start_index + index,
                 prior_receipts=tuple(
                     row["effect"] for row in results if row["status"] == "applied"
                 ),
             )
-            result = preview.execute(request)
+            result = preview.execute(request, operation=operation)
         except ValueError as exc:
             blocked = True
-            results.append({**base, "status": "blocked", "message": str(exc)[:320]})
+            results.append(control.owner_failure(operation, exc, index=index))
             continue
         if result["status"] != "staged":
             blocked = True
-            results.append({**base, **result, "status": "blocked", "reason_code": result["status"]})
+            results.append({**result, "index": index, "status": "blocked"})
             continue
         # Unexpected owner failures must reach turn recovery, never masquerade as
         # a safely blocked command after a partially changed transaction.
         await _apply(manager, scope, request, preview)
         results.append(
-            {
-                **base,
-                "status": "attempted" if isinstance(request, Interact) else "applied",
-                "effect": result["effect"],
-            }
+            control.result(
+                operation,
+                "attempted" if isinstance(request, Interact) else "applied",
+                index=index,
+                effect=result["effect"],
+                state_revision_before=scope.control["state_revision"],
+                state_revision_after=turn_controls.state_revision(manager),
+            )
         )
     draft.published_results = deepcopy(results)
     return results
+
+
+def rejected_results(draft: Draft, code: str) -> list[dict]:
+    return [
+        control.result(
+            operation.model_copy(update={"phase": "npc_command_publication"}),
+            "stale",
+            index=index,
+            reason_code=code,
+        )
+        for index, operation in enumerate(draft.operations)
+    ]

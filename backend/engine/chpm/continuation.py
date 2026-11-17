@@ -119,12 +119,13 @@ def activate(
 
 
 def contract(turn: "Turn") -> str:
-    from backend.engine.npc_actions.instructions import NARRATION as ACTION_NARRATION
+    from backend.engine.npc_actions.control import model_outcomes
+    from backend.engine.npc_actions.instructions import for_outcomes, resolution_timing
 
-    outcomes = getattr(turn, "action_outcomes", {})
+    outcomes = model_outcomes(turn)
     return (
         INSTRUCTION
-        + (ACTION_NARRATION if outcomes else "")
+        + for_outcomes(outcomes)
         + json.dumps(
             {
                 "npc_identities": turn.fallback_identities,
@@ -132,6 +133,7 @@ def contract(turn: "Turn") -> str:
                 **(
                     {
                         "authoritative_command_outcomes": outcomes,
+                        **resolution_timing(outcomes),
                         "identity_host_observation_time": "before_command_publication; current owner state and command outcomes take precedence",
                     }
                     if outcomes

@@ -5,6 +5,7 @@ from copy import deepcopy
 
 import pytest
 
+from backend.engine import turn_controls
 from backend.engine.chpm.agent_contracts import Lookup
 from backend.engine.chpm.notebook import NotebookWorkspace
 from backend.engine.chpm.notebook_tools import NotebookDraft
@@ -84,7 +85,13 @@ async def test_note_text_mistaken_for_a_handle_receives_guidance_then_correct_no
     assert hint["status"] == status and PRIVATE not in hint["message"]
     assert len(hint["message"]) <= 200
     assert handle_field in hint["message"] and producer in hint["message"]
-    assert audit[1]["results"] == [{"status": status}]
+    result = audit[1]["results"][0]
+    metadata = {key: result[key] for key in turn_controls.Operation.model_fields if key in result}
+    operation = turn_controls.Operation.model_validate(metadata)
+    assert operation.operation_id == audit[1]["requests"][0]["operation_id"]
+    assert [{key: value for key, value in result.items() if key not in metadata}] == [
+        {"status": status}
+    ]
     assert PRIVATE not in json.dumps(audit) and "message" not in audit[1]["results"][0]
 
 

@@ -15,3 +15,7 @@ class InferenceUnavailableError(RecoverableChpmError):
 
 class ProposalRejectedError(RecoverableChpmError):
     """A completed NPC proposal is invalid; shared transport and host state are intact."""
+
+
+class StaleControlError(RuntimeError):
+    """An expired host attempt cannot be repaired by another model request."""

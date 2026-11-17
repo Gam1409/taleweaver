@@ -33,12 +33,14 @@ def _bound_review_anchors(
     """Expose the existing one-anchor-per-actor limit to the prompt and decoder."""
     if "actor_id" not in identifiers:
         return
-    from backend.engine.chpm.passages import Review
+    from backend.engine.chpm.passages import Review, SharedReview
 
-    if schema is not Review:
+    if schema not in (Review, SharedReview):
         return
     capacity = len(set(identifiers["actor_id"]))
     for field in ("evidence", "actions", "agenda_evidence"):
+        if field not in contract["properties"]:
+            continue
         array = contract["properties"][field]
         array["maxItems"] = min(array["maxItems"], capacity)
 
@@ -111,6 +113,30 @@ def _bind_ids(node: Any, identifiers: dict[str, list[str]]) -> None:
 
 def parse(schema: type[T], text: str) -> T:
     return schema.model_validate(decode(text))
+
+
+def validate_identifiers(
+    schema: type[BaseModel], candidate: dict, identifiers: dict[str, list[str]] | None
+) -> None:
+    """Mirror offered finite ID allowlists before canonical readers can trim strings."""
+    if not getattr(schema, "reference_wire", False):
+        return
+    _validate_identifier_values(candidate, identifiers or {})
+
+
+def _validate_identifier_values(candidate: Any, identifiers: dict[str, list[str]]) -> None:
+    if isinstance(candidate, list):
+        for child in candidate:
+            _validate_identifier_values(child, identifiers)
+        return
+    if not isinstance(candidate, dict):
+        return
+    for key, value in candidate.items():
+        if key in identifiers and value is not None:
+            selected = list(value) if isinstance(value, (list, dict)) else [value]
+            if any(not isinstance(item, str) or item not in identifiers[key] for item in selected):
+                raise ValueError(f"CHPM {key} selects an unavailable identifier.")
+        _validate_identifier_values(value, identifiers)
 
 
 def decode(text: str) -> dict:

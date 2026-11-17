@@ -73,10 +73,19 @@ class Tools:
             self.mind.genesis.scope.observer_id,
             self.observation.message_id,
             self.observation.scene_id,
+            self.observation.revision_id,
         )
         return (
             self.actions
-            if (scope.session_id, scope.actor_id, scope.input_id, scope.scene_id) == expected
+            if (
+                scope.session_id,
+                scope.actor_id,
+                scope.input_id,
+                scope.scene_id,
+                scope.input_revision,
+            )
+            == expected
+            and (not scope.input_hash or scope.input_hash == self.observation.content_hash)
             else None
         )
 

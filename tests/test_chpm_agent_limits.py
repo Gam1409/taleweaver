@@ -13,6 +13,7 @@ from backend.engine.chpm.appraisal_contracts import Assessment, Revision
 from backend.engine.chpm.kernel import ChpmError
 from backend.engine.chpm.schema import Decision, KernelState, Settings, Verdict
 from backend.engine.chpm.state import load, save
+from tests.chpm_reference_fixture import proposal as reference_proposal
 from tests.test_chpm_appraisal import heard
 from tests.test_chpm_host_state import mind, source
 from tests.test_chpm_kernel import decision, observation, wire_proposal
@@ -197,7 +198,7 @@ async def test_two_round_cognition_reviewed_finish_and_fresh_reload_preserve_lim
                     "tool": "read_belief_basis",
                     "status": "partial",
                 }
-                return json.dumps(wire_proposal())
+                return json.dumps(reference_proposal(wire_proposal(), supplied))
             requests = (
                 [
                     {"tool": "inspect_beliefs", "argument": "@player"},

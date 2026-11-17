@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+from types import SimpleNamespace
 
 import pytest
 
@@ -12,6 +13,7 @@ from backend.engine.chpm.state import KEY, load
 from backend.engine.physical_conditions.ledger import read
 from backend.engine.turn_replay.snapshot import capture, restore
 from tests.conftest import TestSessionLocal
+from tests.npc_control_support import bind_turn
 from tests.test_chpm_host_turn import run
 from tests.test_chpm_native_notebook_loop import call, turn
 from tests.test_chpm_native_notebook_turn import initial_payload, tool_results
@@ -33,6 +35,7 @@ def test_fallback_keeps_applied_world_effects_after_abandoning_psychological_pro
             }
         ]
     }
+    bind_turn(SimpleNamespace(game_id="session", _vn_player_message_id="input"), current)
     continuation.activate(current, "review_unavailable")
     content = continuation.contract(current)
     assert "authoritative_command_outcomes" in content and "KEY" in content

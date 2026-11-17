@@ -8,6 +8,7 @@ import pytest
 from backend.engine.chpm import agent, capacity, inference, rendering
 from backend.engine.chpm.schema import KernelState, Settings, Usage
 from backend.engine.chpm.state import KEY, load
+from tests.chpm_reference_fixture import evidence_text
 from tests.conftest import TestSessionLocal
 from tests.test_chpm_host_state import mind
 from tests.test_chpm_host_turn import configured, run
@@ -85,7 +86,9 @@ async def test_agent_turn_commits_only_after_review_and_failures_keep_original_s
             "validation",
         ]
         evidence = roles.proposal_inputs[0]["appraisal_context"]["visible_evidence"]
-        assert any(e["source_id"].startswith("a") and "HIDDEN_RING" in e["text"] for e in evidence)
+        assert any(
+            e["source_id"].startswith("a") and "HIDDEN_RING" in evidence_text(e) for e in evidence
+        )
         assert saved.minds["LINA"].genesis.identity.description == "Values honesty."
 
 

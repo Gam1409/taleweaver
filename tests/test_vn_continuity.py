@@ -123,7 +123,7 @@ def test_unknown_item_rejects_whole_transfer_batch_without_losing_player_item():
     )
     assert not intent.new_inventory_items and not intent.removed_inventory_item_ids
     assert intent.updated_entities[0].inventory is None
-    assert "did not occur" in intent.narrative_description
+    assert "The preliminary item proposal was not applied." in intent.narrative_description
     assert owner.avatar.inventory == [{"id": "key", "name": "Key"}]
 
 

@@ -3,6 +3,7 @@
 import asyncio
 import json
 import logging
+from copy import deepcopy
 from typing import Any, TypeVar
 
 from pydantic import BaseModel, ValidationError
@@ -166,9 +167,13 @@ async def request(
         candidate = json_contract.decode(result)
         candidate, corrections = wire_normalization.normalize(schema, candidate, identifiers)
         usage.format_repairs += len(corrections)
+        # Shape errors and the existing choice-ground hint share one bounded repair.
+        # Check handles against the untouched raw object before canonical conversion.
+        parsed = schema.model_validate(deepcopy(candidate))
+        json_contract.validate_identifiers(schema, candidate, identifiers)
         if corrections:
             logger.info("CHPM wire format corrected: phase=%s fields=%s", phase, corrections)
-        return schema.model_validate(candidate)
+        return parsed
     except ValueError as exc:
         check_output_budget(
             completions, llm.max_tokens, phase, invalid_json=isinstance(exc, json.JSONDecodeError)

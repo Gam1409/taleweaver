@@ -47,10 +47,11 @@ from backend.engine.visual_novel.story_prompts import PROGRESS_REMINDER
 from backend.engine.visual_novel.continuity import prepare_intent
 from backend.engine.visual_novel.concurrency import SessionLease, guard_session_turn
 from backend.engine.visual_novel.intent import (
-    VNProgressionIntent,
     build_progression_context,
     progression_prompt as vn_progression_prompt,
+    progression_schema as vn_progression_schema,
 )
+from backend.engine.visual_novel import player_items
 from backend.engine.gameplay.turn_helpers import (
     TurnCombatStateHelper,
     TurnProgressionBuilder,
@@ -82,6 +83,8 @@ from backend.engine.gameplay.language import (
     resolve_content_language,
 )
 from backend.engine.gameplay import progression_request
+from backend.engine import turn_controls
+from backend.engine.npc_actions.control import CommandRejectedError
 from backend.core.llm_router import GameMasterLLM
 from backend.engine.command_parser import CommandParser
 from backend.engine.debug_transcript import debug_message_scope, is_debug_message, without_debug
@@ -90,7 +93,11 @@ from backend.engine.narration_focus import narration_focus
 from backend.engine.gameplay.entity_state_updates import replace_entity_states
 from backend.engine.narrated_items.runtime import reconcile_items
 from backend.engine.narrated_movement.runtime import finish as finish_narrated_movement
-from backend.engine.visual_novel.item_rejections import rejected_targets, rejection_reason
+from backend.engine.visual_novel.item_rejections import (
+    current_rejection,
+    rejected_targets,
+    rejection_reason,
+)
 from backend.engine.physical_conditions.runtime import finish as finish_physical_conditions
 from backend.engine.scene_continuity.runtime import finish as finish_scene_continuity
 from backend.engine.visual_novel.time_passage import apply as apply_time_passage
@@ -740,7 +747,9 @@ class GameTurnManager:
         return self._session_helper.build_compressed_history_prompt_block()
 
     @staticmethod
-    def _build_progression_event(intent: AdventureGeneratorToolIntent) -> GameEvent:
+    def _build_progression_event(
+        intent: AdventureGeneratorToolIntent | ChatProgressionIntent,
+    ) -> GameEvent:
         return TurnProgressionBuilder.build_progression_event(intent)
 
     async def initialize(self) -> bool:
@@ -1764,6 +1773,8 @@ class GameTurnManager:
                 for_story_initiative=policy.vn,
             )
 
+            preliminary_control = turn_controls.scope(self, "preliminary_items")
+            player_item_scope = player_items.capture(self) if policy.vn else None
             try:
                 await release_for_model(self)
                 progression_intent = await progression_request.request(
@@ -1778,10 +1789,13 @@ class GameTurnManager:
                     + prompt_block(self.state),
                     progression_user_prompt,
                     response_model=intent_schema(
-                        VNProgressionIntent if policy.vn else ChatProgressionIntent, self.state
+                        vn_progression_schema(self.state) if policy.vn else ChatProgressionIntent,
+                        self.state,
                     ),
                     model=small_model,
                 )
+                if not turn_controls.bind_current(self, preliminary_control, "preliminary_items"):
+                    raise CommandRejectedError("stale")
             except Exception as e:
                 user_safe_error = _friendly_llm_error_message(e)
                 if user_safe_error:
@@ -1806,9 +1820,30 @@ class GameTurnManager:
                 yield f"event: status\ndata: {json.dumps({'content': 'Preparing local place...'})}\n\n"
             await resolve_proposal(self, progression_intent, user_msg, history, language)
             clothing_proposal = progression_intent
+            player_item_plan = None
             if policy.vn:
-                progression_intent = prepare_intent(self, progression_intent, all_entities)
-            game_event = self._build_progression_event(progression_intent)
+                if player_item_scope is None:
+                    raise RuntimeError("The VN player item scope was not captured.")
+                player_item_plan = await player_items.prepare(
+                    self,
+                    progression_intent,
+                    all_entities,
+                    scope=player_item_scope,
+                    captured=preliminary_control,
+                )
+                progression_intent = prepare_intent(
+                    self,
+                    progression_intent,
+                    all_entities,
+                    control=preliminary_control,
+                    item_plan=player_item_plan,
+                )
+            # The runtime schema is trimmed; restore the engine contract before application.
+            canonical_progression = ChatProgressionIntent.model_validate(
+                progression_intent.model_dump(exclude_none=True)
+            )
+            game_event = self._build_progression_event(canonical_progression)
+            player_items.attach(game_event, player_item_plan)
             if policy.vn:
                 apply_time_passage(
                     self, game_event, getattr(clothing_proposal, "time_passage", None), user_msg
@@ -1983,7 +2018,13 @@ class GameTurnManager:
         from backend.engine.chpm import runtime as chpm_runtime
 
         yield f"event: status\ndata: {json.dumps({'content': 'Preparing NPC responses...'})}\n\n"
-        chpm_context = await chpm_runtime.prepare(self, user_msg, all_entities)
+        host_rejections = turn_controls.rule_rejections(self, rule_violations)
+        item_rejection = current_rejection(self)
+        if item_rejection is not None:
+            host_rejections.append(item_rejection)
+        chpm_context = await chpm_runtime.prepare(
+            self, user_msg, all_entities, host_rejections=host_rejections
+        )
         chpm_buffered = chpm_runtime.buffered(self)
         npc_turn = chpm_runtime.current(self)
         if npc_turn and any(
@@ -2168,8 +2209,7 @@ class GameTurnManager:
                 response_text,
                 completed=narration_completed,
                 resolution=draft_narration + "\n" + outcome_json,
-                blocked=bool(rule_violations)
-                or draft_narration.startswith("The attempted item change did not occur;"),
+                blocked=bool(rule_violations) or current_rejection(self) is not None,
                 blocked_reason=rejection_reason(self, rule_violations),
                 blocked_targets=rejected_targets(self, rule_violations),
             )

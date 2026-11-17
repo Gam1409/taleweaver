@@ -1,8 +1,8 @@
 """Resolve reviewer citations without asking a model to reproduce long quotations."""
 
-from typing import Any
+from typing import Any, ClassVar, Literal
 
-from pydantic import Field, StrictBool
+from pydantic import ConfigDict, Field, StrictBool
 
 from backend.core import text_passages
 from backend.engine.chpm.kernel import ChpmError
@@ -29,6 +29,74 @@ class Review(Contract):
     causal_updates: list[Any] = Field(default_factory=list, max_length=20)
 
 
+class SharedReference(Reference):
+    model_config = ConfigDict(str_strip_whitespace=False)
+
+
+class SharedHeardReference(HeardReference):
+    model_config = ConfigDict(str_strip_whitespace=False)
+
+
+class SharedReview(Contract):
+    """One own-speech selector also anchors a selected agenda change."""
+
+    model_config = ConfigDict(str_strip_whitespace=False)
+    reference_wire: ClassVar[bool] = True
+    review_scope: str = Field(min_length=1, max_length=100)
+    matches: StrictBool
+    rejections: list["ReviewRejection"] = Field(default_factory=list, max_length=8)
+    evidence: list[SharedReference] = Field(default_factory=list, max_length=20)
+    actions: list[SharedReference] = Field(default_factory=list, max_length=20)
+    heard: list[SharedHeardReference] = Field(default_factory=list, max_length=12)
+    causal_updates: list[Any] = Field(default_factory=list, max_length=20)
+
+    @property
+    def issues(self) -> list[str]:
+        return [_REASONS[item.reason_code] for item in self.rejections]
+
+
+class ReviewRejection(Contract):
+    model_config = ConfigDict(str_strip_whitespace=False)
+    reason_code: Literal[
+        "intention",
+        "agenda",
+        "attribution",
+        "agency",
+        "world",
+        "knowledge",
+        "identity",
+        "continuity",
+        "inference",
+        "inactive",
+    ]
+    actor_id: str | None = None
+    passage_id: str | None = Field(default=None, min_length=1, max_length=32)
+
+
+_REASONS = {
+    "intention": "The expression changes the selected intention.",
+    "agenda": "The spoken agenda differs from the selected change.",
+    "attribution": "The expression has invalid speaker or action attribution.",
+    "agency": "The narration chooses another participant's voluntary response.",
+    "world": "The narration claims an unsupported world effect.",
+    "knowledge": "The narration exposes unavailable knowledge.",
+    "identity": "The expression contradicts the supplied identity.",
+    "continuity": "The expression contradicts the retained course or current host state.",
+    "inference": "The narration treats an unsupported inference as a fact.",
+    "inactive": "An inactive controlled actor has a new expression.",
+}
+
+
+def validate_shared(review: SharedReview, scope: str, available: dict, actors: set[str]) -> None:
+    if review.review_scope != scope:
+        raise ChpmError("CHPM review references another prepared narration scope.")
+    for item in review.rejections:
+        if item.actor_id is not None and item.actor_id not in actors:
+            raise ChpmError("CHPM review rejection names an unavailable actor.")
+        if item.passage_id is not None and item.passage_id not in available:
+            raise ChpmError("CHPM review rejection names an unavailable passage.")
+
+
 def index(text: str) -> dict[str, str]:
     return text_passages.index(text)
 
@@ -53,6 +121,27 @@ def resolve(review: Review, available: dict[str, str], *, text: str | None = Non
             },
         }
     )
+
+
+def resolve_shared(
+    review: SharedReview,
+    available: dict[str, str],
+    *,
+    agenda_actors: set[str],
+    text: str,
+) -> Verdict:
+    """Resolve the new producer shape without changing conflicting legacy anchors."""
+    review = SharedReview.model_validate(review.model_dump())
+    legacy = Review.model_validate(
+        {
+            **review.model_dump(exclude={"review_scope", "rejections"}),
+            "issues": review.issues,
+            "agenda_evidence": [
+                entry.model_dump() for entry in review.evidence if entry.actor_id in agenda_actors
+            ],
+        }
+    )
+    return resolve(legacy, available, text=text)
 
 
 def _resolve_entry(

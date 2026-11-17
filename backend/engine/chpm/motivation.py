@@ -19,6 +19,18 @@ class Catalogue:
     sources: dict[str, MotiveSource]
     observer_id: str
 
+    def identifiers(self) -> dict[str, list[str]]:
+        return {
+            "motive_id": list(self.sources),
+            "motive_ids": list(self.sources),
+            "personal_motive_ids": [
+                key
+                for key, source in self.sources.items()
+                if source.status in {"authored", "declared"}
+                and source.subject_id == self.observer_id
+            ],
+        }
+
     def payload(self) -> dict:
         return {
             "policy": POLICY,
