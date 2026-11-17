@@ -244,7 +244,7 @@ async def _review(manager: Any, turn: Turn, text: str, resolution: str) -> Verdi
         agenda.validate_evidence(turn.decisions, verdict)
     except ChpmError as exc:
         _reject_review(turn, text, resolution, [str(exc)], verdict, payload)
-        raise RecoverableChpmError(str(exc)) from exc
+        return Verdict(matches=False, issues=[str(exc)])
     return verdict
 
 

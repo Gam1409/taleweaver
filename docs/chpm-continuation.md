@@ -73,6 +73,11 @@ That known violation cannot be released as an unavailable-review fallback.
 An invalid attribution or a quote absent from the candidate remains an
 unconfirmed review; it is not proof that the narration violated the contract.
 
+A completed review with invalid agenda evidence uses the existing bounded
+narration repair and repeat review. The same exact owner-speech evidence checks
+still apply; another invalid result cannot update the agenda. This does not add
+requests to the configured reserve or retry an uncertain transport failure.
+
 If no usable decision survives, the existing whole-turn recovery policy applies.
 Shared perception, transport, cancellation, exhausted shared budgets and persistence failures are
 not reclassified as one bad intention. Strict mode still stops the whole turn.
