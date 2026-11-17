@@ -62,6 +62,16 @@ silently turn on a server grammar. Where a structural decoder requires explicit
 types, unrestricted JSON is represented with all six JSON kinds rather than an
 object-only substitute. Local canonical validation still decides acceptance.
 
+When the configured provider policy selects JSON Schema, the portable port also
+binds each function name to its canonical parameter schema. This prevents a
+well-formed envelope from accepting an incomplete decision or arguments belonging
+to another tool. Local definition references retain each tool's scope; arbitrary
+notebook JSON remains unrestricted. The selected schema counts against the
+existing input-character allowance. Unsupported reference scopes or provider
+projections retain the existing envelope constraints and log a warning rather
+than silently claiming argument enforcement. Prompt and JSON-object modes keep
+their existing behavior.
+
 Changing a profile preserves minds, memories, dormant preferences and existing
 request limits. Standard, Observe, disabled rounds and unsupported game-mode
 combinations do not become new autonomous execution paths.
