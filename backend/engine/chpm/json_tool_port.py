@@ -129,17 +129,12 @@ def _reference_results(conversation: list[dict]) -> list[dict]:
 
 
 def _schema_annotations(node: Any) -> Any:
-    if isinstance(node, list):
-        return [_schema_annotations(item) for item in node]
-    if not isinstance(node, dict):
-        return node
-    return {
-        key: {name: _schema_annotations(schema) for name, schema in value.items()}
-        if key in {"properties", "$defs"}
-        else _schema_annotations(value)
-        for key, value in node.items()
-        if key not in {"title", "default"}
-    }
+    return _map_schema(
+        node,
+        lambda schema: {
+            key: value for key, value in schema.items() if key not in {"title", "default"}
+        },
+    )
 
 
 def _map_schema(node: Any, visit: Callable[[dict], dict]) -> Any:
