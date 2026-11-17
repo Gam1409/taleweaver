@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from backend.engine.clothing.schema import Region
 from backend.engine.physical_conditions.schema import ITEM_PART_PATTERN
+from backend.engine.scene_staging.schema import Posture
 
 Identifier = Annotated[str, Field(min_length=1, max_length=100)]
 
@@ -18,6 +19,23 @@ class Request(BaseModel):
 class Move(Request):
     tool: Literal["move_to"]
     destination_scene_id: Identifier
+
+
+class Pose(Request):
+    tool: Literal["set_pose"]
+    posture: Posture
+
+
+class Approach(Request):
+    tool: Literal["approach"]
+    target_id: Identifier
+    mode: Literal["walk", "crawl", "run"] = "walk"
+
+
+class Interact(Request):
+    tool: Literal["interact"]
+    target_id: Identifier
+    action: str = Field(min_length=4, max_length=240)
 
 
 class Item(Request):
@@ -76,12 +94,27 @@ class Discard(Request):
 
 
 ActionRequest = Annotated[
-    Move | Take | PutDown | Give | Wear | TakeOff | Adjust | ChangeState | Use | Discard,
+    Move
+    | Pose
+    | Approach
+    | Interact
+    | Take
+    | PutDown
+    | Give
+    | Wear
+    | TakeOff
+    | Adjust
+    | ChangeState
+    | Use
+    | Discard,
     Field(discriminator="tool"),
 ]
 
 ACTION_MODELS: dict[str, type[Request]] = {
     "move_to": Move,
+    "set_pose": Pose,
+    "approach": Approach,
+    "interact": Interact,
     "take_item": Take,
     "put_down_item": PutDown,
     "give_item": Give,

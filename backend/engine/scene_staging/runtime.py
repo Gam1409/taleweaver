@@ -10,7 +10,7 @@ from backend.core.llm_router import GameMasterLLM
 from backend.core.state_rejection_trace import reject
 from backend.engine.clothing.visuals import session_objects
 from backend.engine.narrated_items import evidence, reference_schema, response_sections
-from backend.engine.scene_staging import props
+from backend.engine.scene_staging import command_guard, props
 from backend.engine.scene_staging.proposals import StagingProposal
 from backend.engine.scene_staging.schema import INSTRUCTIONS
 from backend.engine.scene_staging.shared import apply_extraction, consume
@@ -45,7 +45,10 @@ async def reconcile_narration(manager: Any, narration: str, *, completed: bool) 
             narration_characters=len(narration),
             limit=MAX_NARRATION,
         )
-        state.entity_states = {**(state.entity_states or {}), KEY: result}
+        state.entity_states = {
+            **(state.entity_states or {}),
+            KEY: command_guard.preserve(manager, result),
+        }
         props.invalidate(state)
         return
     from backend.engine.gameplay.world import AdventureLogic
@@ -78,6 +81,7 @@ async def reconcile_narration(manager: Any, narration: str, *, completed: bool) 
             "owned_items": items,
             "previous_staging": project(state, cast),
             "current_narration": catalog.narration_passages,
+            **command_guard.metadata(manager, cast),
         },
         ensure_ascii=False,
     )
@@ -92,7 +96,10 @@ async def reconcile_narration(manager: Any, narration: str, *, completed: bool) 
             cast=cast,
         )
         result.update(reason="Staging context exceeds the text budget.", cast_size=len(cast))
-        state.entity_states = {**(state.entity_states or {}), KEY: result}
+        state.entity_states = {
+            **(state.entity_states or {}),
+            KEY: command_guard.preserve(manager, result),
+        }
         props.invalidate(state)
         return
     # The turn's mutation lease and recovery record protect this short commit.
@@ -102,7 +109,8 @@ async def reconcile_narration(manager: Any, narration: str, *, completed: bool) 
         llm = GameMasterLLM.for_role(manager.user, "small")
         response = await asyncio.wait_for(
             llm.aexecute_complex_task(
-                INSTRUCTIONS,
+                INSTRUCTIONS
+                + (command_guard.INSTRUCTIONS if command_guard.metadata(manager, cast) else ""),
                 payload,
                 StagingProposal,
                 llm.model,
@@ -136,4 +144,7 @@ async def reconcile_narration(manager: Any, narration: str, *, completed: bool) 
     finally:
         if not applied:
             props.invalidate(state)
-            state.entity_states = {**(state.entity_states or {}), KEY: result}
+            state.entity_states = {
+                **(state.entity_states or {}),
+                KEY: command_guard.preserve(manager, result),
+            }

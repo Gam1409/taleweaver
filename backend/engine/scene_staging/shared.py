@@ -13,7 +13,7 @@ from backend.engine.clothing.context import actor_records
 from backend.engine.visual_novel.config import read_settings
 from backend.engine.visual_novel.continuity import PLAYER
 
-from . import bindings, props
+from . import bindings, command_guard, props
 from .proposals import validate
 from .state import KEY, digest, project, reconcile
 
@@ -84,6 +84,7 @@ def prepare(manager: Any, actors: dict, rows: list[Any]) -> dict | None:
         "scene_id": pending.scene_id,
         "present_cast": people,
         "previous_staging": previous,
+        **command_guard.metadata(manager, pending.cast),
         "owned_items": [
             {
                 "item_id": item["item_id"],
@@ -120,20 +121,21 @@ def approve_items(manager: Any, accepted: list[dict]) -> None:
         pending.accepted = deepcopy(accepted)
 
 
-def invalidate(state: Any, narration: str, reason: str) -> None:
+def invalidate(state: Any, narration: str, reason: str, *, manager: Any = None) -> None:
     reject(
         "scene_staging", "unconfirmed", reason, narration=narration, scene_id=state.current_scene_id
     )
     props.invalidate(state)
+    result = {
+        "scene_id": state.current_scene_id,
+        "status": "unconfirmed",
+        "source_hash": digest(narration),
+        "reason": reason,
+        "actors": {},
+    }
     state.entity_states = {
         **(state.entity_states or {}),
-        KEY: {
-            "scene_id": state.current_scene_id,
-            "status": "unconfirmed",
-            "source_hash": digest(narration),
-            "reason": reason,
-            "actors": {},
-        },
+        KEY: command_guard.preserve(manager, result) if manager is not None else result,
     }
 
 
@@ -150,6 +152,8 @@ def apply_extraction(
     proposals = extraction
     validated = validate(extraction)
     extraction, rejected = bindings.resolve(validated.value, manager.avatar.id, accepted or [])
+    protected = command_guard.capture(manager, cast)
+    extraction = command_guard.filter_changes(extraction, protected)
     result = reconcile(
         manager.state,
         cast,
@@ -163,6 +167,7 @@ def apply_extraction(
     )
     result["explicit_rejected"] += validated.rejected["explicit"]
     result["rejected_prop_references"] = rejected
+    result = command_guard.restore(result, protected)
     record_staging(result, len(extraction.changes) + validated.rejected["changes"])
     valid = props.candidates(
         manager.avatar, rows, manager.state, {row.id for row in rows if row.entity_type == "NPC"}
@@ -234,12 +239,17 @@ def consume(manager: Any, narration: str, *, completed: bool) -> bool:
         or pending.scene_id != manager.state.current_scene_id
         or pending.source_hash != digest(narration)
     ):
-        invalidate(manager.state, narration, "The shared staging source no longer matches.")
+        invalidate(
+            manager.state,
+            narration,
+            "The shared staging source no longer matches.",
+            manager=manager,
+        )
         return True
     if pending.error:
         if pending.reuse:
             return True
-        invalidate(manager.state, narration, pending.error)
+        invalidate(manager.state, narration, pending.error, manager=manager)
         return True
     try:
         current_cast = _cast(manager, actor_records(manager, pending.rows), pending.rows)
@@ -256,5 +266,10 @@ def consume(manager: Any, narration: str, *, completed: bool) -> bool:
         )
     except Exception:
         logger.exception("Shared scene staging failed for session %s", manager.state.session_id)
-        invalidate(manager.state, narration, "The shared staging response could not be confirmed.")
+        invalidate(
+            manager.state,
+            narration,
+            "The shared staging response could not be confirmed.",
+            manager=manager,
+        )
     return True

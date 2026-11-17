@@ -51,8 +51,25 @@ def retained(state: Any, cast: list[dict]) -> dict:
             or placement.get("target_origin") != _origin(present[placement["target"]])
         ):
             row.pop("placement", None)
+        if (
+            placement.get("target_kind") == "scene_object"
+            and placement.get("source_kind") == "command"
+            and _object_unavailable(state, placement.get("target_id"))
+        ):
+            row.pop("placement", None)
         actors[person["id"]] = row
     return actors
+
+
+def _object_unavailable(state: Any, identifier: Any) -> bool:
+    if not isinstance(identifier, str) or not identifier:
+        return True
+    override = (state.entity_states or {}).get(identifier, {})
+    return not isinstance(override, dict) or bool(
+        override.get("is_hidden")
+        or override.get("is_in_inventory")
+        or override.get("current_scene_id", state.current_scene_id) != state.current_scene_id
+    )
 
 
 def _validate_explicit(
@@ -155,14 +172,7 @@ def reconcile(
     for actor_id in uncertain:
         actors.pop(actor_id, None)
     moved.update(uncertain)
-    for actor_id, row in actors.items():
-        placement_data = row.get("placement", {})
-        if (
-            actor_id not in explicit_placements
-            and placement_data.get("target_kind") == "character"
-            and placement_data.get("target") in moved
-        ):
-            row.pop("placement", None)
+    invalidate_relations(actors, moved, explicit_placements)
     explicit, explicit_rejected = _validate_explicit(extraction, known, narration, source)
     return {
         "scene_id": state.current_scene_id,
@@ -180,14 +190,35 @@ def _apply_change(row: dict, change: SceneDelta, known: dict, source: str) -> di
     proof: dict[str, Any] = {"evidence": change.evidence, "source_hash": source}
     if change.evidence_span is not None:
         proof["evidence_span"] = change.evidence_span.model_dump()
-    if change.posture is not None:
-        if change.posture != row.get("posture", {}).get("value"):
+    if change.posture is not None or change.placement is not None:
+        row.pop("command", None)
+    return apply_fields(
+        row,
+        actor_id=change.entity_id,
+        posture=change.posture,
+        placement=change.placement,
+        known=known,
+        proof=proof,
+    )
+
+
+def apply_fields(
+    row: dict,
+    *,
+    actor_id: str,
+    posture: Posture | None,
+    placement: Placement | None,
+    known: dict,
+    proof: dict,
+) -> dict:
+    """Apply owner-validated staging fields with their actual producer's provenance."""
+    if posture is not None:
+        if posture != row.get("posture", {}).get("value"):
             row.pop("placement", None)
         row.pop("posture", None)
-        if change.posture != "unknown":
-            row["posture"] = {"value": change.posture, **proof}
-    placement = change.placement
-    row["origin"] = _origin(known[change.entity_id])
+        if posture != "unknown":
+            row["posture"] = {"value": posture, **proof}
+    row["origin"] = _origin(known[actor_id])
     if placement is None:
         return row
     row.pop("placement", None)
@@ -197,6 +228,18 @@ def _apply_change(row: dict, change: SceneDelta, known: dict, source: str) -> di
     if placement.target_kind == "character":
         row["placement"]["target_origin"] = _origin(known[placement.target])
     return row
+
+
+def invalidate_relations(actors: dict, moved: set[str], explicit_placements: set[str]) -> None:
+    """A new actor position/pose cannot silently preserve another actor's old relation."""
+    for actor_id, row in actors.items():
+        placement = row.get("placement", {})
+        if (
+            actor_id not in explicit_placements
+            and placement.get("target_kind") == "character"
+            and placement.get("target") in moved
+        ):
+            row.pop("placement", None)
 
 
 def project(state: Any, cast: list[dict]) -> dict[str, dict]:

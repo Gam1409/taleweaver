@@ -33,6 +33,7 @@ The view includes the following where known:
 - Known wear state and confirmed physical placement, kept separate from ownership.
 - Current recorded conditions and their existing IDs, kinds, properties and statuses.
 - Visible clothing and confirmed surface conditions of another present actor.
+- Owner-confirmed posture and local placement when scene staging is enabled.
 
 The observer can read its own conditions and possessions. Other characters' bags,
 covered clothing, private conditions, thoughts and notebooks remain unavailable.

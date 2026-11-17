@@ -20,7 +20,11 @@ def build_archive_template(
 ) -> AdventureTemplate:
     return AdventureTemplate(
         npc_personality_settings=personality_defaults(
-            adv_data.get("npc_personality_settings", manifest_data.get("npc_personality_settings"))
+            adv_data.get("npc_personality_settings", manifest_data.get("npc_personality_settings")),
+            mode=enforcement_mode,
+            living_world=adv_data.get(
+                "living_world_settings", manifest_data.get("living_world_settings")
+            ),
         ),
         living_world_settings=stored_defaults(
             adv_data.get("living_world_settings", manifest_data.get("living_world_settings"))

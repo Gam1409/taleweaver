@@ -14,7 +14,7 @@ from backend.engine.clothing.profiles import (
     owned_items,
 )
 from backend.engine.clothing.visuals import detailed_for_state
-from backend.engine.clothing.wear_provenance import source_matches
+from backend.engine.clothing.wear_provenance import command_matches, source_matches
 from backend.engine.debug_transcript import not_debug_sql
 from backend.engine.physical_conditions.item_state import project as item_states
 from backend.models.chat import ChatMessage
@@ -105,8 +105,12 @@ async def equipment_rows(
         if (
             source is None
             or message is None
-            or message.role != source.source_role
-            or not source_matches(source.model_dump(), message.content)
+            or not (
+                command_matches(source, message, actor_id=actor["id"], item_id=row.item_id)
+                if source.source_role == "command"
+                else message.role == source.source_role
+                and source_matches(source.model_dump(), message.content)
+            )
         ):
             continue
         age = profile.appearance.age_years

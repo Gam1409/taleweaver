@@ -43,11 +43,12 @@ function chpmFixture(t, request, session = ref('session')) {
 
 test('session mode gates notebook controls while legacy Unicode labels remain escaped', async () => {
   let mounted = 0
+  let hostMode = 'vn'
   const chpm = component('components/game/ChpmSettings.vue', { '@/composables/useChpmSettings': {
     useChpmSettings() {
       mounted++
       return {
-        status: ref({ ...status(), notebook: { document: 'INERT_NOTEBOOK_SENTINEL' } }), draft: ref(preferences()),
+        status: ref({ ...status(), host_mode: hostMode, notebook: { document: 'INERT_NOTEBOOK_SENTINEL' } }), draft: ref(preferences()),
         busy: ref(false), error: ref(''), minimumCalls: ref(6), budgetWarning: ref(false), historyWarnings: ref([]),
         load() {}, save() {}, selectStandard() {}, setNotebookEnabled() {},
       }
@@ -63,15 +64,17 @@ test('session mode gates notebook controls while legacy Unicode labels remain es
     '../editor/StoryVisualPresets.vue': { default: { render: () => h('div') } },
   })
   for (const mode of ['rpg', 'chat', 'story', 'vn']) {
+    hostMode = mode
     const before = mounted
     const html = await renderToString(createSSRApp({ render: () => h(modal, { mode, sessionId: 'session' }) }))
-    assert.equal(mounted - before, Number(mode === 'vn'), mode)
+    assert.equal(mounted - before, Number(mode === 'vn' || mode === 'rpg'), mode)
     assert.equal(html.includes('Private NPC notebooks'), mode === 'vn', mode)
     assert.doesNotMatch(html, /INERT_NOTEBOOK_SENTINEL|<b>Keeper/)
     if (mode === 'vn') {
       assert.match(html, /雪 &amp; &lt;b&gt;Keeper&lt;\/b&gt;/)
       assert.doesNotMatch(html, /name="npc-private-notebooks"[^>]* checked/)
     }
+    if (mode === 'rpg') assert.match(html, /NPC combat actions/)
   }
 })
 

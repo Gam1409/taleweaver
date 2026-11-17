@@ -22,6 +22,7 @@ from backend.api.routes.adventures.session_start_avatar import resolve_start_ava
 from backend.core.config import settings
 from backend.core.game_modes import mode_policy, normalize_vn_template
 from backend.engine.chpm.template_settings import initial_states as personality_initial_states
+from backend.engine.chpm.template_settings import stored_defaults as personality_defaults
 from backend.engine.clothing.settings import with_clothing_settings
 from backend.engine.gameplay.world import AdventureLogic
 from backend.engine.generation_bounds import GenerationBounds
@@ -145,10 +146,10 @@ def build_template(
         owner_id=owner_id,
         title=payload.title,
         living_world_settings=stored_defaults(payload.living_world_settings),
-        npc_personality_settings=(
-            payload.npc_personality_settings.model_dump(mode="json")
-            if payload.npc_personality_settings
-            else None
+        npc_personality_settings=personality_defaults(
+            payload.npc_personality_settings,
+            mode=payload.rule_enforcement_mode,
+            living_world=stored_defaults(payload.living_world_settings),
         ),
         original_prompt=payload.original_prompt,
         strict_rules=policy.mechanics,

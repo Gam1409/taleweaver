@@ -6,6 +6,7 @@ from typing import Any
 from backend.engine.clothing.context import actor_records, detail_settings
 from backend.engine.clothing.profiles import garment_for_item, load_profile, owned_items
 from backend.engine.clothing.visuals import character_visuals
+from backend.engine.clothing.wear_provenance import command_bound
 from backend.engine.physical_conditions.presentation import narration_block
 from backend.engine.physical_conditions.scope import item_scope
 from backend.engine.visual_novel.continuity import PLAYER
@@ -37,6 +38,12 @@ def _known_placements(actor: dict, detailed: bool) -> list[dict]:
         if worn.item_id not in items or not (worn.uncovered_regions or worn.attachment_slot):
             continue
         if worn.source is None and actor["id"] != PLAYER:
+            continue
+        if (
+            worn.source
+            and worn.source.source_role == "command"
+            and not command_bound(worn.source, actor_id=actor["id"], item_id=worn.item_id)
+        ):
             continue
         garment = garment_for_item(items[worn.item_id])
         if (worn.attachment_slot and not adult) or (

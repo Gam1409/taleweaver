@@ -185,7 +185,57 @@ def _replace_fragment(node: dict, signature: str, reference: dict) -> dict:
     return cast(dict, _map_schema(node, replace))
 
 
+def _parameter_target(schema: dict, reference: str) -> dict:
+    if reference == "#":
+        return schema
+    node: Any = schema
+    for raw in reference.removeprefix("#/").split("/"):
+        part = raw.replace("~1", "/").replace("~0", "~")
+        node = node[int(part)] if isinstance(node, list) else node[part]
+    if not isinstance(node, dict):
+        raise ValueError("A parameter schema reference must select a schema object.")
+    return node
+
+
+def _global_parameters(schema: dict, definitions: dict) -> dict:
+    """Give each local reference a stable payload-root handle before factoring moves nodes."""
+    references: dict[str, str] = {}
+    pending: list[tuple[str, dict]] = []
+
+    def address(reference: str) -> str:
+        if reference not in references:
+            key = f"d{len(definitions)}"
+            definitions[key] = {}
+            references[reference] = f"#/$defs/{key}"
+            pending.append((key, _parameter_target(schema, reference)))
+        return references[reference]
+
+    def relocate(node: dict) -> dict:
+        reference = node.get("$ref")
+        if isinstance(reference, str) and reference.startswith("#"):
+            node["$ref"] = address(reference)
+        node.pop("$defs", None)
+        return node
+
+    def mapped(node: dict) -> dict:
+        return cast(
+            dict,
+            _map_schema({key: value for key, value in node.items() if key != "$defs"}, relocate),
+        )
+
+    for name in schema.get("$defs", {}):
+        address("#/$defs/" + name.replace("~", "~0").replace("/", "~1"))
+    result = mapped(schema)
+    index = 0
+    while index < len(pending):
+        name, node = pending[index]
+        definitions[name] = mapped(node)
+        index += 1
+    return result
+
+
 def _catalog(tools: list[dict]) -> dict:
+    definitions: dict = {}
     result: dict = {
         "functions": [
             {
@@ -194,17 +244,22 @@ def _catalog(tools: list[dict]) -> dict:
                     for key, value in tool["function"].items()
                     if key not in {"parameters", "strict"}
                 },
-                "parameters": _schema_annotations(tool["function"]["parameters"]),
+                "parameters": _global_parameters(
+                    _schema_annotations(tool["function"]["parameters"]), definitions
+                ),
             }
             for tool in tools
         ],
         "parameter_schemas": {},
     }
+    if definitions:
+        result["$defs"] = definitions
     for _ in range(16):
         found: dict = {}
         for schema in [
             *(item["parameters"] for item in result["functions"]),
             *result["parameter_schemas"].values(),
+            *definitions.values(),
         ]:
             _schema_fragments(schema, found)
         reference = {"$ref": f"#/parameter_schemas/p{len(result['parameter_schemas'])}"}
@@ -224,6 +279,12 @@ def _catalog(tools: list[dict]) -> dict:
             for name, schema in result["parameter_schemas"].items()
         }
         result["parameter_schemas"][reference["$ref"].rsplit("/", 1)[-1]] = value
+        definitions.update(
+            {
+                name: _replace_fragment(schema, signature, reference)
+                for name, schema in definitions.items()
+            }
+        )
     return result
 
 

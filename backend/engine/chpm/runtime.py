@@ -185,7 +185,11 @@ def contract(turn: Turn) -> str:
 @step("npc.prepare")
 async def prepare(manager: Any, message: str, actors: list[Any]) -> str:
     settings = control_settings.read((manager.state.entity_states or {}).get(KEY))
-    if settings.mode == "off" or not is_vn(manager.adventure):
+    if (
+        settings.mode == "off"
+        or settings.control_scope != "dialogue"
+        or not is_vn(manager.adventure)
+    ):
         return ""
     from backend.engine.chpm.template_settings import ensure_session_compatible
 

@@ -934,6 +934,9 @@ class GameTurnManager:
         from backend.engine.turn_replay.commands import prepare_command
 
         await prepare_command(self, user_msg)
+        from backend.engine.npc_actions.combat_binding import bind as bind_npc_combat_tools
+
+        bind_npc_combat_tools(self, user_msg)
         cmd_parts = user_msg.strip().split(None, 1)
         if cmd_parts and cmd_parts[0].lower() in PLAYAGENT_COMMANDS:
             cmd_args = cmd_parts[1].strip() if len(cmd_parts) > 1 else ""

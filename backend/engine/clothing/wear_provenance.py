@@ -4,8 +4,14 @@ from copy import deepcopy
 from hashlib import sha256
 from typing import Any
 
+from pydantic import ValidationError
+
+from backend.engine.clothing.body_schema import WearSource
+
 
 def source_matches(source: dict, text: str) -> bool:
+    if source.get("source_role") == "command":
+        return False
     quote = source.get("evidence")
     span = source.get("evidence_span")
     return (
@@ -21,6 +27,45 @@ def source_matches(source: dict, text: str) -> bool:
             and 0 <= span["start"] < span["end"] <= len(text)
             and text[span["start"] : span["end"]] == quote
         )
+    )
+
+
+def _command_source(source: WearSource | dict | None) -> WearSource | None:
+    try:
+        parsed = WearSource.model_validate(
+            source.model_dump() if isinstance(source, WearSource) else source
+        )
+    except ValidationError:
+        return None
+    return parsed if parsed.source_role == "command" and parsed.command is not None else None
+
+
+def command_bound(source: WearSource | dict | None, *, actor_id: str, item_id: str) -> bool:
+    parsed = _command_source(source)
+    proof = parsed.command if parsed else None
+    return bool(
+        proof and proof.input_id and proof.actor_id == actor_id and proof.item_id == item_id
+    )
+
+
+def command_matches(
+    source: WearSource | dict | None, message: Any, *, actor_id: str, item_id: str
+) -> bool:
+    """Check the real input anchor; a command digest is never a narrative text hash."""
+    parsed = _command_source(source)
+    proof = parsed.command if parsed else None
+    if (
+        proof is None
+        or not command_bound(parsed, actor_id=actor_id, item_id=item_id)
+        or message is None
+    ):
+        return False
+    return (
+        message.id == proof.input_id
+        and message.role == "user"
+        and not getattr(message, "is_debug", False)
+        and getattr(message, "revision_id", None) == proof.input_revision
+        and sha256(message.content.encode()).hexdigest() == proof.input_hash
     )
 
 
@@ -71,6 +116,10 @@ def remap_profile(raw: Any, message_ids: dict[str, str]) -> Any:
         for key in ("request_id", "source_message_id"):
             value = source.get(key)
             source[key] = message_ids.get(value) if isinstance(value, str) else None
+        command = source.get("command")
+        if source.get("source_role") == "command" and isinstance(command, dict):
+            value = command.get("input_id")
+            command["input_id"] = message_ids.get(value) if isinstance(value, str) else None
     return result
 
 

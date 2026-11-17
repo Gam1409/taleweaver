@@ -1,8 +1,10 @@
 """Canonical item transfers for actor commands without fabricated narration evidence."""
 
+from collections.abc import Iterable
 from copy import deepcopy
 from typing import Literal
 
+from backend.engine.clothing.profiles import garment_for_item
 from backend.engine.clothing.projection import known_worn_item_ids
 from backend.engine.narrated_items.apply import _receive, _remove
 from backend.engine.visual_novel.continuity import PLAYER, SCENE, Possessions
@@ -23,6 +25,39 @@ def _destination(
     return str(recipient)
 
 
+def carried_after(actor_id: str, receipts: Iterable[dict]) -> frozenset[str]:
+    """Read ordered host receipts; this transient proof never assesses unknown other clothing."""
+    carried: set[str] = set()
+    for receipt in receipts:
+        identifier = receipt.get("item_id")
+        if not isinstance(identifier, str):
+            continue
+        if "destination_owner" in receipt:
+            carried.discard(identifier)
+            if receipt["destination_owner"] == actor_id and receipt.get("disposition") == "carried":
+                carried.add(identifier)
+        elif receipt.get("operation") in {"wear", "adjust", "remove"}:
+            carried.discard(identifier)
+            if receipt["operation"] == "remove":
+                carried.add(identifier)
+    return frozenset(carried)
+
+
+def _require_carried(
+    owner: dict, item: dict, item_id: str, carried_item_ids: frozenset[str]
+) -> None:
+    worn = known_worn_item_ids(
+        owner["visual_profile"], owner["resolved_inventory"], equipment=owner["equipment"]
+    )
+    wearable = garment_for_item(item) is not None or bool(item.get("wearable_slots"))
+    if worn is None and wearable and item_id not in carried_item_ids:
+        raise ValueError(
+            "Current garment placement is unknown; establish its wear state before transferring it."
+        )
+    if worn and item_id in worn:
+        raise ValueError("This item is worn; take it off before transferring it.")
+
+
 def transfer(
     actors: dict,
     snapshot: Possessions,
@@ -33,6 +68,7 @@ def transfer(
     detailed: bool,
     recipient_id: str | None = None,
     position: str | None = None,
+    carried_item_ids: frozenset[str] = frozenset(),
 ) -> tuple[dict, Possessions, dict]:
     """Validate against present custody, then change working copies through item owners."""
     if operation not in {"take", "give", "put_down"} or actor_id not in actors:
@@ -42,12 +78,7 @@ def transfer(
         raise ValueError("The item is unavailable for this transfer under its current custody.")
     destination = _destination(actor_id, operation, recipient_id, actors)
     if source != SCENE:
-        owner = actors[source]
-        worn = known_worn_item_ids(
-            owner["visual_profile"], owner["resolved_inventory"], equipment=owner["equipment"]
-        )
-        if worn and item_id in worn:
-            raise ValueError("This item is worn; take it off before transferring it.")
+        _require_carried(actors[source], snapshot.items[item_id], item_id, carried_item_ids)
     changed = deepcopy(actors)
     after = deepcopy(snapshot)
     item = deepcopy(snapshot.items[item_id])

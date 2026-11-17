@@ -65,6 +65,7 @@ _VALUE = {
     "description": "Any strict JSON value: null, boolean, number, string, array or object with freely chosen keys. No fixed notebook layout. Each value's canonical JSON must fit 8192 characters."
 }
 _KNOWN_TOOL_NAMES = frozenset((*_LOOKUPS, *_NOTEBOOKS, *ACTION_MODELS))
+_METADATA_TOOL_NAMES = _KNOWN_TOOL_NAMES | {"use_ability", "keep_default"}
 
 
 def known_tool_names() -> frozenset[str]:
@@ -74,7 +75,7 @@ def known_tool_names() -> frozenset[str]:
 
 def canonical_tool_name(name: object) -> str:
     """Keep only declared names in audit and feedback metadata."""
-    return name if type(name) is str and name in _KNOWN_TOOL_NAMES else "unknown_tool"
+    return name if type(name) is str and name in _METADATA_TOOL_NAMES else "unknown_tool"
 
 
 class NativeToolArgumentError(ValueError):
@@ -326,6 +327,8 @@ def _field(location: tuple, default: str) -> str:
 
 
 def _validation_issues(error: ValidationError, name: str) -> list[_Issue]:
+    if name in ACTION_MODELS:
+        return _action_validation_issues(error, ACTION_MODELS[name].model_json_schema())
     result = []
     for entry in error.errors(include_input=False, include_url=False, include_context=False):
         field = _field(entry["loc"], "argument" if name in _LOOKUPS else "arguments")
@@ -333,6 +336,60 @@ def _validation_issues(error: ValidationError, name: str) -> list[_Issue]:
         hint = _HINTS.get(leaf, "operation object with op, path and value")
         result.append((field, "invalid_arguments", hint))
     return result
+
+
+def _action_schema_node(schema: dict, node: dict) -> dict:
+    reference = node.get("$ref", "")
+    if reference.startswith("#/$defs/"):
+        node = schema.get("$defs", {}).get(reference.rsplit("/", 1)[-1], node)
+    alternatives = [entry for entry in node.get("anyOf", []) if entry.get("type") != "null"]
+    return alternatives[0] if len(alternatives) == 1 else node
+
+
+def _action_constraint(schema: dict, raw: dict) -> str:
+    node = _action_schema_node(schema, raw)
+    if "enum" in node:
+        return "one of " + ", ".join(str(value) for value in node["enum"])
+    kind = node.get("type", "declared value")
+    constraints = [str(kind)]
+    if kind == "array":
+        constraints.append("items: " + _action_constraint(schema, node.get("items", {})))
+    bounds = {
+        "minLength": "minimum length",
+        "maxLength": "maximum length",
+        "maxItems": "maximum items",
+        "minimum": "minimum",
+        "maximum": "maximum",
+        "pattern": "pattern",
+    }
+    constraints.extend(f"{label} {node[key]}" for key, label in bounds.items() if key in node)
+    return "; ".join(constraints)
+
+
+def _action_validation_issues(error: ValidationError, schema: dict) -> list[_Issue]:
+    issues = []
+    for entry in error.errors(include_input=False, include_url=False, include_context=False):
+        node, field = schema, ""
+        for part in entry["loc"]:
+            node = _action_schema_node(schema, node)
+            if type(part) is int and node.get("type") == "array" and field:
+                field += f"[{part}]"
+                node = node.get("items", {})
+            elif type(part) is str and part in node.get("properties", {}):
+                field += ("." if field else "") + part
+                node = node["properties"][part]
+            else:
+                field = "arguments"
+                break
+        hint = _action_constraint(schema, node)
+        if field == "arguments":
+            hint = "only declared fields: " + ", ".join(
+                key for key in schema["properties"] if key != "tool"
+            )
+        if field == "uncovered_regions" and entry["type"] == "value_error":
+            hint += "; supply each final region once"
+        issues.append((field or "arguments", "invalid_arguments", hint))
+    return issues
 
 
 def _issue_order(item: tuple[str, tuple[str, str]]) -> tuple[int, str]:

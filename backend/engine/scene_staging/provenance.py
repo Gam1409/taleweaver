@@ -17,7 +17,9 @@ def _actors(data: dict) -> dict[str, dict]:
 
 def _actor_facts(actor: dict) -> list[dict]:
     return [
-        actor[field] for field in ("posture", "placement") if isinstance(actor.get(field), dict)
+        actor[field]
+        for field in ("posture", "placement", "command")
+        if isinstance(actor.get(field), dict)
     ]
 
 
@@ -53,7 +55,11 @@ def stamp(state: Any, message: Any) -> None:
     }
     data.update(source)
     for fact in _facts(data):
-        if not fact.get("source_revision_id") and fact.get("source_hash") == data["source_hash"]:
+        if (
+            fact.get("source_kind") != "command"
+            and not fact.get("source_revision_id")
+            and fact.get("source_hash") == data["source_hash"]
+        ):
             fact.update(source)
     state.entity_states = {**(state.entity_states or {}), KEY: data}
 

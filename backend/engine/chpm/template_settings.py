@@ -7,10 +7,11 @@ from pydantic import model_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.core.game_modes import is_vn
+from backend.core.game_modes import mode_policy
 from backend.engine.chpm.capacity import required_calls
 from backend.engine.chpm.schema import KernelState, Settings
 from backend.engine.chpm.state import KEY
+from backend.engine.npc_actions.settings import configure as configure_actions
 from backend.models.world_entity import WorldEntity
 
 
@@ -22,21 +23,48 @@ class Defaults(Settings):
         return self
 
 
-def stored_defaults(raw: Any) -> dict | None:
-    return None if raw is None else Defaults.model_validate(raw).model_dump(mode="json")
+def settings_for_mode(raw: Any, mode: str | None) -> Settings:
+    """Derive controller authority from the host, before inspecting budgets or conflicts."""
+    values = raw.model_dump() if isinstance(raw, Settings) else raw
+    if not isinstance(values, dict):
+        return Settings.model_validate(values)
+    host_mode = mode_policy(mode).mode
+    settings = Settings.model_validate(
+        {**values, "control_scope": "combat_actions" if host_mode == "rpg" else "dialogue"}
+    )
+    if settings.mode != "off" and host_mode not in {"vn", "rpg"}:
+        raise ValueError("NPC Personality requires a Visual Novel or RPG combat session.")
+    return settings
+
+
+def stored_defaults(raw: Any, *, mode: str | None, living_world: dict | None = None) -> dict | None:
+    if raw is None:
+        return None
+    settings = Defaults.model_validate(settings_for_mode(raw, mode).model_dump())
+    ensure_compatible(settings, living_world)
+    return settings.model_dump(mode="json")
 
 
 def initial_states(adventure: Any, entity_states: dict) -> dict:
     raw = getattr(adventure, "npc_personality_settings", None)
-    if raw is None or not is_vn(adventure):
+    if raw is None:
         return entity_states
-    settings = Defaults.model_validate(raw)
+    mode = mode_policy(getattr(adventure, "rule_enforcement_mode", None)).mode
+    if mode != "vn" and isinstance(raw, dict) and raw.get("mode", "off") == "off":
+        Settings.model_validate(raw)
+        return entity_states
+    settings = Defaults.model_validate(settings_for_mode(raw, mode).model_dump())
     ensure_compatible(settings, getattr(adventure, "living_world_settings", None))
-    return {**entity_states, KEY: KernelState(settings=settings).model_dump(mode="json")}
+    return configure_actions(
+        {**entity_states, KEY: KernelState(settings=settings).model_dump(mode="json")},
+        enabled=settings.control_scope == "dialogue"
+        and settings.action_tools
+        and settings.mode == "live",
+    )
 
 
 def ensure_compatible(settings: Settings | None, living_world: dict | None) -> None:
-    if not settings or settings.mode != "live":
+    if not settings or settings.mode != "live" or settings.control_scope != "dialogue":
         return
     from backend.engine.living_world.schema import Settings as LivingWorldSettings
 
@@ -62,16 +90,21 @@ def ensure_session_compatible(state: Any, settings: Settings | None = None) -> N
 
 
 async def validate_update(db: AsyncSession, adventure: Any, updates: dict) -> None:
-    if not {"npc_personality_settings", "living_world_settings"} & updates.keys():
+    triggers = {"npc_personality_settings", "living_world_settings", "rule_enforcement_mode"}
+    if not triggers & updates.keys():
         return
     raw = updates.get("npc_personality_settings", adventure.npc_personality_settings)
-    settings = Defaults.model_validate(raw) if raw is not None else None
     try:
-        ensure_compatible(
-            settings, updates.get("living_world_settings", adventure.living_world_settings)
+        normalized = stored_defaults(
+            raw,
+            mode=updates.get("rule_enforcement_mode", adventure.rule_enforcement_mode),
+            living_world=updates.get("living_world_settings", adventure.living_world_settings),
         )
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
+    if normalized is not None or "npc_personality_settings" in updates:
+        updates["npc_personality_settings"] = normalized
+    settings = Defaults.model_validate(normalized) if normalized is not None else None
     if settings is None or settings.mode == "off":
         return
     ids = set(

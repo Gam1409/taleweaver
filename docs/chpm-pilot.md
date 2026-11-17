@@ -28,7 +28,10 @@ organized current JSON document, up to 16,000,000 UTF-8 bytes. They default to
 off and reuse existing agent tool rounds. Notes are subjective and may be wrong;
 Undo and Chronicles keep the latest notebook without storing notebook history.
 
-CHPM is an opt-in Visual Novel session feature. Existing sessions default to
+Full CHPM psychology is an opt-in Visual Novel session feature. The separate
+[action-tools interface](npc-action-tools.md) also offers authored ability choices
+in RPG combat, through that mode's existing initiative and resource owners.
+It does not activate VN psychology in RPG. Existing sessions default to
 **Standard** and make no CHPM model requests. No separate inference server or
 Concordia installation is required. The pilot uses the configured Small or Complex
 role through the existing router and shared admission queue.

@@ -9,6 +9,7 @@ defineProps<{
   personality?: ChpmSettings | null
   characters: { id: string; name: string }[]
   isVn: boolean
+  hostMode?: 'vn' | 'rpg' | 'story' | 'chat'
   busy: boolean
 }>()
 const emit = defineEmits<{
@@ -27,8 +28,8 @@ const emit = defineEmits<{
       </p>
     </header>
     <p v-if="!isVn" class="rounded-xl border border-amber-400/20 p-4 text-sm text-amber-200">
-      These features run in Visual Novel mode. You can prepare defaults here; other modes keep
-      standard behavior.
+      Concordia and dialogue personality run in Visual Novel mode. RPG sessions can enable NPC
+      authored combat abilities below. Other modes keep standard behavior.
     </p>
     <fieldset :disabled="busy" class="space-y-6 disabled:opacity-60">
       <section class="space-y-3 rounded-2xl border border-teal-400/20 bg-slate-950/40 p-5">
@@ -45,10 +46,11 @@ const emit = defineEmits<{
       <NpcPersonalityDefaults
         :model-value="personality"
         :characters="characters"
+        :host-mode="hostMode"
         @update:model-value="emit('update:personality', $event)"
       />
       <p
-        v-if="personality?.mode === 'live' && livingWorld?.deliberation_enabled"
+        v-if="isVn && personality?.mode === 'live' && livingWorld?.deliberation_enabled"
         role="alert"
         class="text-sm text-amber-200"
       >

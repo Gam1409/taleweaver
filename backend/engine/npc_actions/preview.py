@@ -3,19 +3,22 @@
 from copy import deepcopy
 from dataclasses import dataclass, field
 from hashlib import sha256
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from backend.engine.clothing.changes import preview as wardrobe_preview
 from backend.engine.clothing.profiles import garment_for_item
 from backend.engine.clothing.projection import known_worn_item_ids
-from backend.engine.narrated_items.commands import transfer
+from backend.engine.narrated_items.commands import carried_after, transfer
 from backend.engine.npc_actions.contracts import (
     Adjust,
+    Approach,
     ChangeState,
     Discard,
     Give,
+    Interact,
     Item,
     Move,
+    Pose,
     PutDown,
     Request,
     Take,
@@ -26,6 +29,9 @@ from backend.engine.npc_actions.contracts import (
 from backend.engine.physical_conditions.command_source import CommandProof
 from backend.engine.physical_conditions.item_commands import apply_command
 from backend.engine.visual_novel.continuity import SCENE, Possessions
+
+if TYPE_CHECKING:
+    from backend.engine.chpm.schema import Observation
 
 MAX_ACTIONS = 16
 
@@ -43,12 +49,20 @@ class Scope:
     destinations: frozenset[str]
     detailed: bool = False
     minute: int = 0
+    input_hash: str = ""
+    input_revision: str | None = None
+    player_id: str = "@player"
+    cast: tuple[dict, ...] = ()
+    scene_objects: dict[str, str] = field(default_factory=dict)
+    staging_enabled: bool = False
+    observation: "Observation | None" = None
 
 
 @dataclass
 class Draft:
     scope: Scope
     start_index: int = 0
+    prior_receipts: tuple[dict, ...] = field(default=(), kw_only=True, repr=False)
     requests: list[Request] = field(default_factory=list)
     receipts: list[dict] = field(default_factory=list)
     approved: bool = False
@@ -89,6 +103,9 @@ class Draft:
             return names
         if self.scope.destinations:
             names.add("move_to")
+        names.add("interact")
+        if self.scope.staging_enabled:
+            names.update({"set_pose", "approach"})
         reachable = {
             key
             for key, owner in self._possessions.owners.items()
@@ -101,7 +118,7 @@ class Draft:
             # each operation still checks actual custody on the working copy.
             names.update({"put_down_item", "give_item", "change_item_state", "use_item"})
         if any(garment_for_item(self._possessions.items[key]) is not None for key in reachable):
-            names.add("wear_item")
+            names.update({"wear_item", "take_off_item", "adjust_clothing"})
         actor = self._actors[self.scope.actor_id]
         worn = known_worn_item_ids(
             actor["visual_profile"], actor["resolved_inventory"], equipment=actor["equipment"]
@@ -147,6 +164,14 @@ class Draft:
                 "status": "unavailable_entity",
                 "message": "Use an exact currently accessible item ID; find or inspect it first.",
             }
+        if (
+            isinstance(request, (Approach, Interact))
+            and request.target_id not in self.scope.accessible_ids
+        ):
+            return {
+                "status": "unavailable_entity",
+                "message": "Choose a currently accessible target ID; search or inspect first.",
+            }
         return None
 
     def _preview(self, request: Request) -> dict:
@@ -155,6 +180,19 @@ class Draft:
                 raise ValueError("The destination is not an available permitted route.")
             self._departed = True
             return {"destination_scene_id": request.destination_scene_id}
+        if isinstance(request, (Pose, Approach)):
+            from backend.engine.npc_actions.pose_actions import apply as pose_preview
+
+            self._states, effect = pose_preview(
+                self.scope, self._states, request, self.start_index + len(self.requests)
+            )
+            return effect
+        if isinstance(request, Interact):
+            return {
+                "target_id": request.target_id,
+                "own_action_attempt": request.action,
+                "consequences": "unresolved; requires existing world and narration checks",
+            }
         if isinstance(request, (Take, Give, PutDown)):
             return self._transfer(request)
         if isinstance(request, (Wear, TakeOff, Adjust)):
@@ -180,6 +218,9 @@ class Draft:
             detailed=self.scope.detailed,
             recipient_id=request.recipient_id if isinstance(request, Give) else None,
             position=request.position if isinstance(request, PutDown) else None,
+            carried_item_ids=carried_after(
+                self.scope.actor_id, (*self.prior_receipts, *self.receipts)
+            ),
         )
         self._actors, self._possessions = changed, possessions
         return {key: value for key, value in receipt.items() if key != "item"} | {
@@ -187,6 +228,8 @@ class Draft:
         }
 
     def _wardrobe(self, request: Wear | TakeOff | Adjust) -> dict:
+        from backend.engine.clothing.body_schema import WearCommandProof
+
         operation: Literal["wear", "remove", "adjust"] = (
             "wear"
             if isinstance(request, Wear)
@@ -195,12 +238,28 @@ class Draft:
             else "adjust"
         )
         regions = request.uncovered_regions if isinstance(request, Adjust) else []
+        proof = None
+        if isinstance(request, (Wear, Adjust)):
+            identity, digest = operation_identity(
+                self.scope, request, self.start_index + len(self.requests)
+            )
+            proof = WearCommandProof(
+                command_id=identity,
+                actor_id=self.scope.actor_id,
+                item_id=request.item_id,
+                input_id=self.scope.input_id,
+                input_hash=self.scope.input_hash,
+                input_revision=self.scope.input_revision,
+                request_hash=digest,
+                operation=request.tool,
+            )
         actor = wardrobe_preview(
             self._actors[self.scope.actor_id],
             request.item_id,
             operation,
             regions,
             detailed=self.scope.detailed,
+            proof=proof,
         )
         self._actors[self.scope.actor_id] = actor
         return {"item_id": request.item_id, "operation": operation, "uncovered_regions": regions}
@@ -240,9 +299,14 @@ class Draft:
 
 
 def command_proof(scope: Scope, request: ChangeState | Use, index: int) -> tuple[CommandProof, str]:
+    identity, digest = operation_identity(scope, request, index)
+    proof = CommandProof(id=identity, actor_id=scope.actor_id, operation=request.tool)
+    return proof, digest
+
+
+def operation_identity(scope: Scope, request: Request, index: int) -> tuple[str, str]:
     digest = sha256(request.model_dump_json().encode()).hexdigest()
     identity = sha256(
         f"{scope.session_id}:{scope.input_id}:{scope.actor_id}:{index}:{digest}".encode()
     ).hexdigest()
-    proof = CommandProof(id="command_" + identity, actor_id=scope.actor_id, operation=request.tool)
-    return proof, digest
+    return "command_" + identity, digest

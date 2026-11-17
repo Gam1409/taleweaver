@@ -27,6 +27,8 @@ def required_calls(settings: Settings, count: int | None = None) -> int:
     if settings.mode == "off":
         return 0
     actors = roster.active_limit(settings) if count is None else count
+    if settings.control_scope == "combat_actions":
+        return actors * settings.agent_steps
     # Perception + proposals; live also needs review and a repair/review pair.
     return actors * (1 + (settings.agent_steps if settings.mode == "live" else 0)) + (
         5 if settings.mode == "live" else 1

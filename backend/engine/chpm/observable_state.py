@@ -162,6 +162,7 @@ def project(manager: Any, rows: list[Any], observer_id: str, observation: Observ
         )
         for key, actor in actors.items()
     }
+    _add_poses(manager, rows, actors, entities)
     available: dict[str, str] = {
         key: SCENE for key in scope.public_ids if snapshot.owners.get(key, SCENE) == SCENE
     }
@@ -195,6 +196,29 @@ def project(manager: Any, rows: list[Any], observer_id: str, observation: Observ
         observation.scene_id,
         entities,
     )
+
+
+def _add_poses(manager: Any, rows: list, actors: dict, entities: dict) -> None:
+    from backend.engine.scene_staging.shared import _cast
+    from backend.engine.scene_staging.state import project as poses
+
+    try:
+        current = poses(manager.state, _cast(manager, actors, rows))
+    except (KeyError, TypeError, ValueError):
+        return
+    for identifier, pose in current.items():
+        actor = "@player" if identifier == manager.avatar.id else identifier
+        if actor not in entities:
+            continue
+        public = dict(pose)
+        placement = pose.get("placement")
+        if (
+            placement
+            and placement.get("target_kind") == "character"
+            and placement.get("target") == manager.avatar.id
+        ):
+            public["placement"] = {**placement, "target": "@player"}
+        entities[actor].update(public)
 
 
 def _add_worn(available: dict[str, str], visuals: dict[str, dict | None], owners: dict) -> None:

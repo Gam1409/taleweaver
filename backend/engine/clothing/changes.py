@@ -3,6 +3,7 @@
 from copy import deepcopy
 from typing import Literal
 
+from backend.engine.clothing.body_schema import WearCommandProof, WearSource
 from backend.engine.clothing.classification import classify_garment
 from backend.engine.clothing.profiles import (
     garment_for_item,
@@ -29,7 +30,12 @@ def _id(value: object) -> object:
 
 
 def mutate(
-    actor: dict, item_id: str, operation: Operation, uncovered_regions: list[Region]
+    actor: dict,
+    item_id: str,
+    operation: Operation,
+    uncovered_regions: list[Region],
+    *,
+    source: WearSource | None = None,
 ) -> None:
     """Change an already authorized working copy; callers own policy/source validation."""
     if operation not in {"wear", "remove", "adjust"}:
@@ -45,7 +51,9 @@ def mutate(
     if operation == "remove":
         worn.pop(item_id, None)
     else:
-        worn[item_id] = WornItem(item_id=item_id, uncovered_regions=uncovered_regions)
+        worn[item_id] = WornItem(
+            item_id=item_id, uncovered_regions=uncovered_regions, source=source
+        )
     profile.worn = list(worn.values())
     actor["visual_profile"] = validate_profile(
         profile, actor["resolved_inventory"], equipment=actor["equipment"]
@@ -68,6 +76,7 @@ def preview(
     uncovered_regions: list[Region],
     *,
     detailed: bool,
+    proof: WearCommandProof | None = None,
 ) -> dict:
     """Validate on a copy without fabricating narration or changing the previous actor."""
     item = owned_items(actor["resolved_inventory"], equipment=actor["equipment"]).get(item_id)
@@ -83,6 +92,18 @@ def preview(
         raise ValueError(
             "Detailed garment tracking is unavailable for current settings or known age."
         )
+    source = _command_source(actor, item_id, operation, proof)
     changed = deepcopy(actor)
-    mutate(changed, item_id, operation, uncovered_regions)
+    mutate(changed, item_id, operation, uncovered_regions, source=source)
     return changed
+
+
+def _command_source(
+    actor: dict, item_id: str, operation: Operation, proof: WearCommandProof | None
+) -> WearSource | None:
+    if proof is None:
+        return None
+    expected = {"wear": "wear_item", "adjust": "adjust_clothing"}.get(operation)
+    if proof.actor_id != actor["id"] or proof.item_id != item_id or proof.operation != expected:
+        raise ValueError("The command proof does not match its bound actor, item or operation.")
+    return WearSource.from_command(proof)

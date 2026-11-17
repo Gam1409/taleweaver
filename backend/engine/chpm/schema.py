@@ -21,6 +21,7 @@ class Contract(BaseModel):
 
 
 class Settings(Contract):
+    control_scope: Literal["dialogue", "combat_actions"] = "dialogue"
     workflow: Literal["staged", "integrated"] = "staged"
     npc_concurrency: int = Field(default=1, ge=1, le=4, strict=True)
     mode: Literal["off", "shadow", "live"] = "off"
@@ -41,6 +42,12 @@ class Settings(Contract):
     @model_validator(mode="after")
     def valid_selection(self) -> "Settings":
         if (
+            self.control_scope == "combat_actions"
+            and self.mode != "off"
+            and (self.mode != "live" or not self.action_tools)
+        ):
+            raise ValueError("Combat action control requires enabled action tools.")
+        if (
             self.action_tools
             and self.mode == "live"
             and (self.workflow != "integrated" or not self.agent_steps)
@@ -54,7 +61,12 @@ class Settings(Contract):
             raise ValueError("Invalid NPC identifier.")
         if self.mode != "off" and not self.actor_ids:
             raise ValueError("Choose at least one NPC.")
-        minimum = min(len(self.actor_ids), self.max_active_npcs) + (1 if self.mode == "live" else 0)
+        actors = min(len(self.actor_ids), self.max_active_npcs)
+        minimum = (
+            actors * self.agent_steps
+            if self.control_scope == "combat_actions"
+            else actors + (1 if self.mode == "live" else 0)
+        )
         if self.mode != "off" and self.max_calls_per_turn < minimum:
             raise ValueError("The call budget must cover the selected NPCs and live validation.")
         return self

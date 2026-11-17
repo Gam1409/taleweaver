@@ -4,6 +4,9 @@ from backend.engine.npc_actions.contracts import ACTION_MODELS
 
 DESCRIPTIONS = {
     "move_to": "Stage your travel along a permitted current-room route. Ends this scene's action plan.",
+    "set_pose": "Stage your own final posture through the scene-state owner. Never changes another actor's body.",
+    "approach": "Stage local approach to an accessible actor/object in this room. Walk/run end standing; crawl ends on all fours. Does not change rooms.",
+    "interact": "Stage your own action attempt toward an accessible actor/object or yourself. Does not guarantee another character's response or physical consequences. Use specific item/travel/pose functions for their state changes.",
     "take_item": "Stage taking an accessible loose item. Its canonical ID and properties are preserved.",
     "put_down_item": "Stage putting down an item you carry; optional position describes its placement.",
     "give_item": "Stage giving your carried item to a present recipient. No voluntary recipient response is implied.",

@@ -3,6 +3,7 @@
 from backend.engine.chpm import (
     agent_beliefs,
     agent_observable,
+    authored_capabilities,
     continuation,
     host_observations,
     narrative_context,
@@ -24,6 +25,7 @@ def build(
     return {
         "observer_id": mind.genesis.scope.observer_id,
         "identity": mind.genesis.identity.model_dump(mode="json"),
+        **authored_capabilities.context_fields(supplied, mind.genesis.scope.observer_id),
         "observation": observation.model_dump(),
         "current_state": {
             key: value
