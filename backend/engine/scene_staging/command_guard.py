@@ -4,9 +4,12 @@ from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any
 
+from pydantic import ValidationError
+
 from backend.engine.npc_actions.reconciliation import context as command_context
+from backend.engine.scene_staging.commands import CommandProof
 from backend.engine.scene_staging.schema import SceneExtraction
-from backend.engine.scene_staging.state import KEY, _object_unavailable, retained
+from backend.engine.scene_staging.state import KEY, _object_unavailable, project, retained
 
 FIELDS = frozenset({"posture", "placement"})
 INSTRUCTIONS = """
@@ -174,6 +177,71 @@ def restore(result: dict, protected: dict[str, ProtectedActor]) -> dict:
     return value
 
 
-def preserve(manager: Any, result: dict) -> dict:
-    """A failed extractor can unconfirm unrelated staging, never an applied command."""
-    return restore(result, capture(manager))
+def _command_fact(source: Any, actor: str, scene: str) -> bool:
+    if not isinstance(source, dict) or source.get("source_kind") != "command":
+        return False
+    try:
+        proof = CommandProof.model_validate(
+            {
+                "command_id": source.get("command_id"),
+                "actor_id": source.get("command_actor_id"),
+                "scene_id": source.get("command_scene_id"),
+                "input_id": source.get("source_message_id"),
+                "input_revision": source.get("source_revision_id"),
+                "request_hash": source.get("source_hash"),
+                "operation": source.get("command_operation"),
+            }
+        )
+    except ValidationError:
+        return False
+    return (proof.actor_id, proof.scene_id) == (actor, scene)
+
+
+def _available_objects(state: Any, rows: list[Any]) -> set[str]:
+    return {
+        row.id
+        for row in rows
+        if row.entity_type == "OBJECT" and not _object_unavailable(state, row.id, row)
+    }
+
+
+def _available_placement(fact: Any, objects: set[str]) -> bool:
+    return (
+        not isinstance(fact, dict)
+        or fact.get("target_kind") != "scene_object"
+        or fact.get("target_id") in objects
+    )
+
+
+def _carry_commands(state: Any, result: dict, cast: list[dict], objects: set[str]) -> dict:
+    valid = project(state, cast)
+    actors = {}
+    for actor, row in retained(state, cast).items():
+        facts = {
+            name: deepcopy(row[name])
+            for name in FIELDS.intersection(valid.get(actor, {}))
+            if _command_fact(row.get(name), actor, state.current_scene_id)
+            and (name != "placement" or _available_placement(row[name], objects))
+        }
+        if not facts:
+            continue
+        actors[actor] = {"origin": row.get("origin", ""), **facts}
+        if _command_fact(row.get("command"), actor, state.current_scene_id):
+            actors[actor]["command"] = deepcopy(row["command"])
+    if not actors:
+        return result
+    return {**result, "actors": actors, "status": "ready"}
+
+
+def preserve(
+    manager: Any, result: dict, cast: list[dict] | None = None, rows: list[Any] | None = None
+) -> dict:
+    """Failed extraction preserves retained command facts without locking future updates."""
+    objects = _available_objects(manager.state, rows or [])
+    carried = _carry_commands(manager.state, result, cast, objects) if cast is not None else result
+    protected = capture(manager, cast)
+    if cast is not None and rows is not None:
+        for record in protected.values():
+            if not _available_placement(record.fields.get("placement"), objects):
+                record.fields["placement"] = None
+    return restore(carried, protected)

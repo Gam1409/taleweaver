@@ -98,7 +98,7 @@ async def reconcile_narration(manager: Any, narration: str, *, completed: bool) 
         result.update(reason="Staging context exceeds the text budget.", cast_size=len(cast))
         state.entity_states = {
             **(state.entity_states or {}),
-            KEY: command_guard.preserve(manager, result),
+            KEY: command_guard.preserve(manager, result, cast, rows),
         }
         props.invalidate(state)
         return
@@ -146,5 +146,5 @@ async def reconcile_narration(manager: Any, narration: str, *, completed: bool) 
             props.invalidate(state)
             state.entity_states = {
                 **(state.entity_states or {}),
-                KEY: command_guard.preserve(manager, result),
+                KEY: command_guard.preserve(manager, result, cast, rows),
             }

@@ -80,6 +80,11 @@ arbitrary recipient-state setter or separate permission tool.
    only the command's explicit final posture/placement, including explicit clears.
    Unrelated staging facts remain eligible for normal extraction.
 
+A missing or failed staging extraction preserves still-valid earlier command
+facts when the current cast is known. It keeps their original sources and does
+not lock them against supported later changes. Scene, presence, position and
+target checks still discard stale relations; no additional model request is used.
+
 Command property provenance is explicitly `command`, anchored to the saved input
 with a host-issued operation identity and request hash. It is never labeled as
 an invented narrated quotation. Existing condition IDs are reused for later

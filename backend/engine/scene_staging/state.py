@@ -61,14 +61,17 @@ def retained(state: Any, cast: list[dict]) -> dict:
     return actors
 
 
-def _object_unavailable(state: Any, identifier: Any) -> bool:
+def _object_unavailable(state: Any, identifier: Any, entity: Any = None) -> bool:
     if not isinstance(identifier, str) or not identifier:
         return True
     override = (state.entity_states or {}).get(identifier, {})
     return not isinstance(override, dict) or bool(
-        override.get("is_hidden")
-        or override.get("is_in_inventory")
-        or override.get("current_scene_id", state.current_scene_id) != state.current_scene_id
+        override.get("is_hidden", getattr(entity, "is_hidden", False))
+        or override.get("is_in_inventory", getattr(entity, "is_in_inventory", False))
+        or override.get(
+            "current_scene_id", getattr(entity, "current_scene_id", state.current_scene_id)
+        )
+        != state.current_scene_id
     )
 
 

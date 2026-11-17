@@ -121,7 +121,15 @@ def approve_items(manager: Any, accepted: list[dict]) -> None:
         pending.accepted = deepcopy(accepted)
 
 
-def invalidate(state: Any, narration: str, reason: str, *, manager: Any = None) -> None:
+def invalidate(
+    state: Any,
+    narration: str,
+    reason: str,
+    *,
+    manager: Any = None,
+    cast: list[dict] | None = None,
+    rows: list[Any] | None = None,
+) -> None:
     reject(
         "scene_staging", "unconfirmed", reason, narration=narration, scene_id=state.current_scene_id
     )
@@ -135,7 +143,7 @@ def invalidate(state: Any, narration: str, reason: str, *, manager: Any = None) 
     }
     state.entity_states = {
         **(state.entity_states or {}),
-        KEY: command_guard.preserve(manager, result) if manager is not None else result,
+        KEY: command_guard.preserve(manager, result, cast, rows) if manager is not None else result,
     }
 
 
@@ -246,14 +254,26 @@ def consume(manager: Any, narration: str, *, completed: bool) -> bool:
             manager=manager,
         )
         return True
-    if pending.error:
-        if pending.reuse:
-            return True
-        invalidate(manager.state, narration, pending.error, manager=manager)
+    if pending.error and pending.reuse:
         return True
+    current_cast = None
     try:
-        current_cast = _cast(manager, actor_records(manager, pending.rows), pending.rows)
-        if current_cast != pending.cast:
+        current_cast = (
+            _cast(manager, actor_records(manager, pending.rows), pending.rows)
+            if pending.cast
+            else None
+        )
+        if pending.error:
+            invalidate(
+                manager.state,
+                narration,
+                pending.error,
+                manager=manager,
+                cast=current_cast,
+                rows=pending.rows,
+            )
+            return True
+        if current_cast is None or current_cast != pending.cast:
             raise ValueError("The present cast or its position changed during extraction.")
         apply_extraction(
             manager,
@@ -271,5 +291,7 @@ def consume(manager: Any, narration: str, *, completed: bool) -> bool:
             narration,
             "The shared staging response could not be confirmed.",
             manager=manager,
+            cast=current_cast,
+            rows=pending.rows,
         )
     return True
