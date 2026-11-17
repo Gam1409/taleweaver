@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from backend.core.llm_schema_choices import prune_unavailable
+from backend.core.llm_schema_compaction import map_schema
 from backend.core.llm_schema_merge import SchemaProjectionError, intersect
 from backend.core.llm_schema_values import json_equal
 
@@ -22,7 +23,20 @@ class Projection:
 def project(schema: dict) -> Projection:
     local: set[str] = set()
     result = _node(prune_unavailable(schema), local)
-    return Projection(prune_unavailable(result), tuple(sorted(local)))
+    # Resolve intersections before spelling out unconstrained values for decoders.
+    represented = map_schema(prune_unavailable(result), _explicit_json_value)
+    return Projection(represented, tuple(sorted(local)))
+
+
+def _explicit_json_value(node: dict) -> dict:
+    if node:
+        return node
+    # Some decoders interpret {} as object-only; retain its actual any-JSON meaning.
+    return {
+        "anyOf": [
+            {"type": kind} for kind in ("null", "boolean", "number", "string", "array", "object")
+        ]
+    }
 
 
 def _node(value: Any, local: set[str]) -> Any:
