@@ -24,6 +24,7 @@ from backend.engine.chpm.errors import RecoverableChpmError
 from backend.engine.chpm.host_state import Mind
 from backend.engine.chpm.proposal_references import ReferenceDraft
 from backend.engine.chpm.schema import Decision, Settings, Usage
+from backend.engine.npc_actions.instructions import submission
 
 FINAL = integrated_protocol.FINAL
 NOTEBOOK_INSTRUCTIONS = """If personal_notebook is available it is your freely organized private JSON data,
@@ -65,7 +66,7 @@ def _definitions(prepared: cognitive_proposal.Prepared, tools: Tools, remaining:
             "type": "function",
             "function": {
                 "name": FINAL,
-                "description": "Submit this observer's complete proposal for host validation.",
+                "description": submission(offered),
                 "strict": False,
                 "parameters": share_schema(
                     json_contract.response_schema(

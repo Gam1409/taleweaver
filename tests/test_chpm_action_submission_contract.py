@@ -7,7 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from backend.engine.chpm import cognition, prompts
+from backend.engine.chpm import cognition, integrated_request, prompts
 from backend.engine.chpm.proposal_draft import Draft
 from backend.engine.chpm.schema import ProposalOptions, Settings, Usage
 from tests.observable_state_support import tools_for, world
@@ -127,8 +127,18 @@ async def test_legacy_shadow_proposal_still_names_its_declared_intention_field()
 
 @pytest.mark.parametrize("protocol", ["native", "json"])
 async def test_action_instructions_require_staging_before_submission_and_world_facts_stay_owned(
+    monkeypatch,
     protocol,
 ):
+    definitions = integrated_request._definitions
+    descriptions = []
+
+    def recorded(*args):
+        offered = definitions(*args)
+        descriptions.append(offered[-1]["function"]["description"])
+        return offered
+
+    monkeypatch.setattr(integrated_request, "_definitions", recorded)
     _, usage, draft, scope, system = await deliberate(
         protocol,
         [[("take_item", {"item_id": "KEY"})], [("submit_decision", proposal())]],
@@ -137,8 +147,8 @@ async def test_action_instructions_require_staging_before_submission_and_world_f
     assert "Choose necessary offered private memory tools OR" not in system
     assert "Submit immediately when current information is sufficient;" not in system
     assert "each chosen API-owned change is staged" in system
-    assert "message_plan alone does not stage or execute" in system
-    assert "no-action choices need no action call" in system
+    assert all("message_plan alone does not stage or execute" in text for text in descriptions)
+    assert all("no-action choices need no action call" in text for text in descriptions)
     assert draft.approved and len(draft.requests) == 1
     assert draft.requests[0].tool == "take_item"
     assert scope.possessions.owners["KEY"] == "__scene__"
