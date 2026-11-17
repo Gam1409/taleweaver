@@ -4,6 +4,10 @@ from backend.engine.clothing.profiles import attachment_item_allowed, garment_fo
 from backend.engine.narrated_items.schema import ItemAction
 from backend.engine.rule_engine import InventoryItem
 
+CURRENT_BASES = frozenset(
+    {"completed", "observed_wear", "observed_placement", "observed_possession"}
+)
+
 _EFFECT_FIELDS = {
     name
     for name in InventoryItem.model_fields

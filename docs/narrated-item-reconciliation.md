@@ -177,6 +177,25 @@ Dynamic-location confirmation includes currently present NPCs and evidence for c
 
 Explicit current worn-garment descriptions now use `observed_wear`. They must cite the completed response and identify the wearer as both source and destination; these garment observations cannot transfer or remove possessions. A missing appearance profile can be initialized without inventing appearance details. Malformed existing profiles still require review. Repeated observations preserve existing worn coverage. Later changes in the response take precedence; recognizing their semantics remains a model responsibility.
 
+Explicit current carried or held possessions can use `observed_possession`, with the
+same present actor as source and destination. This registers intrinsic metadata for
+a newly described possession without inventing an acquisition event. It cannot take
+an existing item from the scene or another canonical owner, change wear or body
+placement, or equip anything. A source-valid observation of an existing owned item
+is a no-op: inventory order, item metadata, equipment, wear and staged placement
+remain intact. Same-item completed transfers and removals retain their existing
+ordered, atomic validation; observations cannot bypass an invalid step. The live
+schema and its conditional coverage correction share the six-action limit and exact
+current-source requirements. Clothing recovery retains its separate existing bases.
+
+Possession observations still require semantic interpretation. Object presence,
+study, pointing or contact alone does not establish custody; an ordinary object may
+remain a scene fact or prose without becoming an inventory card. The host validates
+the proposed basis, exact source, identity and ownership. It does not independently
+understand arbitrary prose: a model that incorrectly labels contact as a completed
+acquisition can still propose a structurally valid transfer. Mocked/schema tests
+establish the admission boundary, not a measured reduction in those semantic errors.
+
 An existing object's directly established current body placement uses
 `observed_placement`. Literary narration can establish this fact without a new
 placement verb, such as a sealed sensor remaining secured in a character's assigned

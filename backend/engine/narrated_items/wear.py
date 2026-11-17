@@ -19,6 +19,9 @@ def unchanged_observation(
     request_id: str = "",
     verified_sources: set[tuple[str, str]] | None = None,
 ) -> bool:
+    # An ownership observation cannot remove, equip, reposition or reorder a known item.
+    if action.basis == "observed_possession":
+        return action.item_id is not None
     profile = load_profile(actor.get("visual_profile"))
     if action.basis not in {"observed_wear", "observed_placement"} or profile is None:
         return False

@@ -68,15 +68,7 @@ class ItemAction(WithEvidenceSpan):
         max_length=7,
         description="For worn clothing only: the final regions this garment no longer covers. Null preserves its known placement; [] explicitly restores normal coverage. Partial removal remains worn.",
     )
-    basis: Literal[
-        "completed",
-        "observed_wear",
-        "observed_placement",
-        "attempt",
-        "claim",
-        "hypothetical",
-        "uncertain",
-    ]
+    basis: Literal[LegacyItemBasis, "observed_placement", "observed_possession"]
     attachment_slot: BodySlot | None = Field(
         default=None,
         description="Explicit confirmed current body placement of this owned item, from a completed action or observed_placement. Worn only, with uncovered_regions=null. Null preserves an existing body placement for the same wearer.",
@@ -86,6 +78,16 @@ class ItemAction(WithEvidenceSpan):
     def one_identity(self) -> "ItemAction":
         if bool(self.item_id) == bool(self.new_item):
             raise ValueError("Use an existing ID or a new item, never both.")
+        if self.basis == "observed_possession" and (
+            self.source_owner != self.destination_owner
+            or self.source_owner == "__scene__"
+            or self.disposition not in {"carried", "held"}
+            or self.uncovered_regions is not None
+            or self.attachment_slot is not None
+        ):
+            raise ValueError(
+                "A possession observation requires the same actor and carried/held disposition, without placement changes."
+            )
         if self.basis == "observed_placement" and (
             not self.item_id
             or self.disposition != "worn"
@@ -134,7 +136,7 @@ class ExistingItemAction(ItemAction):
 
 
 class NewItemAction(ItemAction):
-    basis: LegacyItemBasis
+    basis: Literal[LegacyItemBasis, "observed_possession"]
     item_id: None = None
     new_item: Annotated[NewOrdinaryItem | NewClothingItem, Field(discriminator="kind")] = Field(
         description="Required intrinsic metadata. Clothing requires garment metadata and at least one wearable slot; never an ID."

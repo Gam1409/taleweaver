@@ -38,12 +38,31 @@ def placement_rules(schema: dict) -> None:
 
 def _observation_rule(schema: dict) -> None:
     bases = schema["properties"]["basis"].get("enum", [])
-    if "observed_placement" not in bases:
+    observations = {"observed_placement", "observed_possession"}
+    if not observations.intersection(bases):
         return
-    legacy = [value for value in bases if value != "observed_placement"]
+    legacy = [value for value in bases if value not in observations]
     observed = deepcopy(schema["oneOf"][-1])
     for alternative in schema["oneOf"]:
         alternative["properties"]["basis"] = {"enum": legacy}
+    if "observed_placement" in bases:
+        _placement_observation(schema, observed)
+    if "observed_possession" in bases:
+        schema["oneOf"].append(
+            {
+                "properties": {
+                    "basis": {"const": "observed_possession"},
+                    "disposition": {"enum": ["carried", "held"]},
+                    "source_owner": {"not": {"const": "__scene__"}},
+                    "destination_owner": {"not": {"const": "__scene__"}},
+                    "uncovered_regions": {"type": "null"},
+                    "attachment_slot": {"type": "null"},
+                }
+            }
+        )
+
+
+def _placement_observation(schema: dict, observed: dict) -> None:
     observed["required"].append("item_id")
     observed["properties"].update(
         basis={"const": "observed_placement"},

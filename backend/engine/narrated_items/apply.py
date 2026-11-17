@@ -17,7 +17,7 @@ from backend.engine.clothing.schema import VisualProfile, WornItem
 from backend.engine.item_logic import normalize_equipment_keys
 from backend.engine.narrated_items import transitions
 from backend.engine.narrated_items.errors import ItemFailure, ItemPolicyError
-from backend.engine.narrated_items.observations import validate_observation
+from backend.engine.narrated_items.observations import CURRENT_BASES, validate_observation
 from backend.engine.narrated_items.participants import resolve_participants
 from backend.engine.narrated_items.schema import ItemAction, ItemExtraction
 from backend.engine.narrated_items.wear import placement, unchanged_observation, validate_wear
@@ -138,7 +138,7 @@ def _receive(
 def _resolve(
     action: ItemAction, actors: dict, snapshot: Possessions, narration: str, **creation_options: Any
 ) -> dict:
-    if action.basis not in {"completed", "observed_wear", "observed_placement"}:
+    if action.basis not in CURRENT_BASES:
         raise ValueError(
             f"Action basis '{action.basis}' is not a completed action or current observation."
         )
