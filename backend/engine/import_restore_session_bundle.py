@@ -148,7 +148,12 @@ async def restore_session_bundle(
         )
         db.add(restored_state)
         message_ids = restore_details(
-            db, restored_state, old_state, data.get("chat_history") or [], avatar=new_avatar
+            db,
+            restored_state,
+            old_state,
+            data.get("chat_history") or [],
+            avatar=new_avatar,
+            previous_avatar_id=old_avatar.get("id"),
         )
         await restore_world(db, restored_state, new_template.id, data, message_ids=message_ids)
 

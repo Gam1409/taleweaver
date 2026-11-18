@@ -119,3 +119,75 @@ def remap(entity_states: dict, message_ids: dict[str, str]) -> dict:
         return result
     data["source_message_id"] = source_id
     return result
+
+
+def _actor_reference(record: dict, field: str, previous: str, current: str) -> None:
+    if record.get(field) == previous:
+        record[field] = current
+
+
+def _placement_actor(value: Any, previous: str, current: str) -> None:
+    if isinstance(value, dict) and value.get("target_kind") == "character":
+        _actor_reference(value, "target", previous, current)
+
+
+def _actor_references(actor: dict, previous: str, current: str) -> None:
+    _placement_actor(actor.get("placement"), previous, current)
+    for fact in _actor_facts(actor):
+        _actor_reference(fact, "command_actor_id", previous, current)
+        _placement_actor(fact.get("requested_placement"), previous, current)
+        if isinstance(cause := fact.get("cause"), dict):
+            _actor_reference(cause, "performer_id", previous, current)
+
+
+def _ancillary_records(data: dict, field: str) -> list[dict]:
+    values = data.get(field)
+    return (
+        [value for value in values if isinstance(value, dict)] if isinstance(values, list) else []
+    )
+
+
+def _stage_references(data: dict, previous: str, current: str) -> None:
+    for field in ("unconfirmed_actors", "invalidated_placements"):
+        if isinstance(values := data.get(field), list):
+            data[field] = [current if value == previous else value for value in values]
+    for atom in _ancillary_records(data, "explicit"):
+        if isinstance(atom.get("participants"), list):
+            atom["participants"] = [
+                current if value == previous else value for value in atom["participants"]
+            ]
+    protected = data.get("command_protected_fields")
+    if isinstance(protected, dict) and previous in protected:
+        if current in protected:
+            raise ValueError("Ambiguous staging protected fields cannot be merged during a copy.")
+        protected[current] = protected.pop(previous)
+    for denial in _ancillary_records(data, "rejected_command_pose_changes"):
+        _actor_reference(denial, "actor_id", previous, current)
+
+
+def _staging_actor(data: dict, previous: str, current: str) -> None:
+    actors = _actors(data)
+    if previous in actors:
+        if current in actors:
+            raise ValueError("Ambiguous staging actors cannot be merged during a session copy.")
+        actors[current] = actors.pop(previous)
+    for actor in actors.values():
+        _actor_references(actor, previous, current)
+    _stage_references(data, previous, current)
+
+
+def _prop_actor(data: dict, previous: str, current: str) -> None:
+    for item in _ancillary_records(data, "items"):
+        _actor_reference(item, "owner_id", previous, current)
+
+
+def remap_actor(entity_states: dict, previous: Any, current: str) -> dict:
+    """Rebind an avatar's schema-defined staging references, never evidence or request hashes."""
+    result = deepcopy(entity_states)
+    if not isinstance(previous, str) or not previous or previous == current:
+        return result
+    if isinstance(data := result.get(KEY), dict):
+        _staging_actor(data, previous, current)
+    if isinstance(placed := result.get(props.KEY), dict):
+        _prop_actor(placed, previous, current)
+    return result

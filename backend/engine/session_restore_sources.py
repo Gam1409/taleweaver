@@ -8,10 +8,18 @@ from backend.engine.living_world.portability import remap_intentions
 from backend.engine.memory_rag.lifecycle import restore_memory
 from backend.engine.physical_conditions.ledger import remap
 from backend.engine.scene_illustrations.snapshots import remap_illustrations
+from backend.engine.scene_staging.provenance import remap_actor
 from backend.engine.visual_novel.lifecycle import remap_social_state
 
 
-def restore_sources(avatar: Any, state: Any, raw_state: dict, message_ids: dict[str, str]) -> None:
+def restore_sources(
+    avatar: Any,
+    state: Any,
+    raw_state: dict,
+    message_ids: dict[str, str],
+    *,
+    previous_avatar_id: str | None = None,
+) -> None:
     state.living_world = remap_intentions(getattr(state, "living_world", None), message_ids)
     avatar.visual_profile = remap_profile(avatar.visual_profile, message_ids)
     restore_memory(state, raw_state, message_ids)
@@ -21,4 +29,7 @@ def restore_sources(avatar: Any, state: Any, raw_state: dict, message_ids: dict[
         ),
         message_ids,
         state.session_id,
+    )
+    state.entity_states = remap_actor(
+        state.entity_states, previous_avatar_id or raw_state.get("avatar_id"), avatar.id
     )

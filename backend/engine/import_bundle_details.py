@@ -48,13 +48,14 @@ def restore_details(
     history: list[dict],
     *,
     avatar: Avatar,
+    previous_avatar_id: str | None = None,
 ) -> dict[str, str]:
     """Restore saved fields and sources, returning their new local message identities."""
     for field in STATE_FIELDS:
         if field in old_state:
             setattr(state, field, deepcopy(old_state[field]))
     ids = restore_messages(db, state.session_id, history)
-    restore_sources(avatar, state, old_state, ids)
+    restore_sources(avatar, state, old_state, ids, previous_avatar_id=previous_avatar_id)
     return ids
 
 

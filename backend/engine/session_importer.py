@@ -290,7 +290,13 @@ class SessionImporter:
                 db.add(session_state)
 
                 message_ids = restore_messages(db, new_session_id, chat_messages_data)
-                restore_sources(avatar, session_state, session_state_data, message_ids)
+                restore_sources(
+                    avatar,
+                    session_state,
+                    session_state_data,
+                    message_ids,
+                    previous_avatar_id=avatar_data.get("id") or game_session_data.get("avatar_id"),
+                )
 
                 # 7. Create WorldScenes
                 for sc in world_scenes_data:
