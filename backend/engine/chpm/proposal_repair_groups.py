@@ -16,6 +16,7 @@ class Report:
     groups: list[dict]
     error_count: int
     missing: bool
+    additional_count: int = 0
 
 
 def _within(path: str, parent: str) -> bool:
@@ -37,13 +38,24 @@ def _targets(paths: set[str], allowed: set[str]) -> set[str]:
     return {_cover(path, grouped) for path in grouped}
 
 
-def inspect(candidate: dict, schema: type[BaseModel], allowed_paths: list[str]) -> Report | None:
+def inspect(
+    candidate: dict,
+    schema: type[BaseModel],
+    allowed_paths: list[str],
+    *,
+    additional_errors: list[dict] | tuple = (),
+) -> Report | None:
     """None selects the existing full-response fallback rather than truncating issues."""
+    errors: list[dict] = []
     try:
         schema.model_validate(deepcopy(candidate))
     except ValidationError as exc:
-        errors = exc.errors(include_input=False, include_url=False, include_context=False)
-    else:
+        errors = [
+            dict(error)
+            for error in exc.errors(include_input=False, include_url=False, include_context=False)
+        ]
+    errors.extend(additional_errors)
+    if not errors:
         return Report([], 0, False)
     if len(errors) > proposal_edits.MAX_PATHS:
         return None
@@ -72,4 +84,5 @@ def inspect(candidate: dict, schema: type[BaseModel], allowed_paths: list[str]) 
         [{"path": path, "issues": details} for path, details in grouped.items()],
         len(errors),
         any(error["type"] == "missing" for error in errors),
+        len(additional_errors),
     )

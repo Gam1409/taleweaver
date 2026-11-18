@@ -126,7 +126,7 @@ class ReferenceDraft(ReferenceContract):
             self.model_dump(mode="json"),
             {key: list(values) for key, values in references.identifiers.items()},
         )
-        body = self.model_dump(exclude={"reference_scope"})
+        body = self.model_dump(exclude={"reference_scope", "additional_actions"})
         for key in ("new_beliefs", "belief_revisions", "experiences"):
             for item in body[key]:
                 item["citations"] = [references.quote(c["fragment_id"]) for c in item["citations"]]

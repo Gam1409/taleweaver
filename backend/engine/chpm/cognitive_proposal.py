@@ -14,7 +14,9 @@ from backend.engine.chpm import (
     experience,
     json_contract,
     motivation,
+    motivation_diagnostics,
     prompts,
+    proposal_actions,
     proposal_references,
     quote_references,
     semantic_choice,
@@ -40,6 +42,7 @@ class Prepared:
     references: quote_references.References
     control: dict
     cached: tuple[Decision, Mind] | None = None
+    diagnose: Callable[[dict], list[dict]] | None = None
 
 
 def prepare(
@@ -60,6 +63,9 @@ def prepare(
     notebook: NotebookDraft | None,
     tools: Tools | None = None,
 ) -> Prepared:
+    action_draft = (
+        tools.current_actions() if tools is not None and tools.actions is not None else None
+    )
     if tools is not None:
         mind, pinned, pinned_beliefs = tools.mind, tools.pins, tools.beliefs
         supplied = {
@@ -201,19 +207,25 @@ def prepare(
                 "candidate_motives": resolved_motives,
             }
         )
-        if tools is not None and tools.actions is not None:
-            tools.actions.approved = True
+        if action_draft is not None:
+            extra = (
+                draft.additional_actions
+                if isinstance(
+                    draft, (proposal_actions.ActionDraft, proposal_actions.ActionDevelopmentDraft)
+                )
+                else None
+            )
+            proposal_actions.approve(action_draft, complete.selected.kind, extra)
         return complete, changed
 
     return Prepared(
         instruction,
         payload,
-        proposal_references.ReferenceDevelopmentDraft
-        if schema is DevelopmentProposal
-        else proposal_references.ReferenceDraft,
+        proposal_actions.wire_schema(schema is DevelopmentProposal, action_draft is not None),
         identifiers,
         accept,
         references,
         control,
         cached_pair,
+        lambda candidate: motivation_diagnostics.inspect(candidate, motives),
     )

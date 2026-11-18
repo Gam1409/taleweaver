@@ -28,6 +28,7 @@ def prepare(
     instruction: str,
     identifiers: dict,
     limit: int,
+    motive_errors: list[dict] | tuple = (),
 ) -> Prepared:
     full = payload_for(
         payload,
@@ -37,15 +38,19 @@ def prepare(
         instruction=instruction,
         identifiers=identifiers,
         limit=limit,
+        motive_errors=motive_errors,
     )
     omitted = "rejected_proposal_omitted" in full["proposal_feedback"]
     if candidate is None or (not issubclass(schema, (Draft, ReferenceDraft)) and not omitted):
         return Prepared(full, identifiers)
     allowed = proposal_edits.paths(candidate, schema)
-    structural = proposal_repair_groups.inspect(candidate, schema, allowed)
+    structural = proposal_repair_groups.inspect(
+        candidate, schema, allowed, additional_errors=motive_errors
+    )
     if structural is None:
         return Prepared(full, identifiers)
     details = dict(full["proposal_feedback"])
+    details.pop("motive_errors", None)
     details.pop("rejected_proposal_omitted", None)
     details.update(
         rejected_proposal=candidate,
@@ -65,9 +70,9 @@ def prepare(
             "Keep explanations short; retain exact citations, negations and conditions."
         ),
     )
-    if structural.error_count > 1:
+    if structural.error_count > 1 or structural.additional_count:
         details["recommended_repair_groups"] = structural.groups
-        details["structural_error_count"] = structural.error_count
+        details["structural_error_count"] = structural.error_count - structural.additional_count
     if structural.missing:
         details["original_response_schema"] = json_contract.response_schema(schema, identifiers)
     edited = {**payload, "proposal_feedback": details}
@@ -90,6 +95,7 @@ def payload_for(
     instruction: str,
     identifiers: dict,
     limit: int,
+    motive_errors: list[dict] | tuple = (),
 ) -> dict:
     details: dict = {
         "error": feedback,
@@ -106,6 +112,16 @@ def payload_for(
         ),
     }
     result = {**payload, "proposal_feedback": details}
+    if motive_errors:
+        details["motive_error_count"] = len(motive_errors)
+        details["motive_errors"] = [
+            {
+                "path": proposal_edits.pointer(error["loc"]),
+                "type": error["type"],
+                "message": error["msg"],
+            }
+            for error in motive_errors
+        ]
     if candidate is None:
         return result
     details["rejected_proposal"] = candidate

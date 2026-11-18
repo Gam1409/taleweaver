@@ -3,6 +3,7 @@
 import json
 from collections.abc import Callable
 from copy import deepcopy
+from dataclasses import replace
 from typing import Any
 
 from backend.core.llm_schema_compaction import share_schema
@@ -15,6 +16,7 @@ from backend.engine.chpm import (
     json_contract,
     offered_tools,
     parallel_budget,
+    proposal_actions,
     proposal_attempt,
     tool_operations,
     wire_normalization,
@@ -60,13 +62,14 @@ response did not run; earlier successful operations must not be repeated.
 
 def _definitions(prepared: cognitive_proposal.Prepared, tools: Tools, remaining: int) -> list[dict]:
     offered = offered_tools.definitions(tools) if remaining else []
+    additional = "additional_actions" in prepared.schema.model_fields
     return [
         *offered,
         {
             "type": "function",
             "function": {
                 "name": FINAL,
-                "description": submission(offered),
+                "description": submission(offered, additional=additional),
                 "strict": False,
                 "parameters": share_schema(
                     json_contract.response_schema(
@@ -129,6 +132,11 @@ def _messages(
             )
             + ACTION_INSTRUCTIONS
         )
+        if "additional_actions" in prepared.schema.model_fields:
+            instruction = instruction.replace(
+                "API-owned change is staged;",
+                "API-owned change is staged or in additional_actions;",
+            )
     return [
         {
             "role": "system",
@@ -137,6 +145,31 @@ def _messages(
         {"role": "user", "content": json.dumps(payload, ensure_ascii=False, separators=(",", ":"))},
         *history,
     ]
+
+
+def _wire(
+    prepared: cognitive_proposal.Prepared,
+    tools: Tools,
+    remaining: int,
+    history: list[dict],
+    llm: Any,
+    limit: int,
+) -> tuple[cognitive_proposal.Prepared, list[dict], list[dict]]:
+    messages = _messages(prepared, tools, remaining, history)
+    offered = _definitions(prepared, tools, remaining)
+    if (
+        "additional_actions" in prepared.schema.model_fields
+        and inference.tool_input_size(llm, messages, offered) > limit
+    ):
+        # Preserve the existing actor context and ordinary tool rounds in tight windows.
+        # The parser uses the same reduced schema that is sent to the model.
+        schema = proposal_actions.wire_schema(
+            issubclass(prepared.schema, proposal_actions.ActionDevelopmentDraft), False
+        )
+        prepared = replace(prepared, schema=schema)
+        messages = _messages(prepared, tools, remaining, history)
+        offered = _definitions(prepared, tools, remaining)
+    return prepared, messages, offered
 
 
 async def _submit(
@@ -177,6 +210,7 @@ async def _submit(
         prepared.identifiers,
         prepared.accept,
         initial=initial,
+        diagnose=prepared.diagnose,
     )
 
 
@@ -217,13 +251,15 @@ async def request(
             if prepared.cached is not None:
                 return prepared.cached
             remaining = settings.agent_steps - index
-            offered = _definitions(prepared, tools, remaining)
+            prepared, messages, offered = _wire(
+                prepared, tools, remaining, history, llm, settings.max_input_chars
+            )
             try:
                 turn = await integrated_protocol.read(
                     manager,
                     settings,
                     usage,
-                    _messages(prepared, tools, remaining, history),
+                    messages,
                     offered,
                     seen_ids=seen_ids,
                     llm=llm,

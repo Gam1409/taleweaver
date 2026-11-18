@@ -60,6 +60,18 @@ arbitrary recipient-state setter or separate permission tool.
 3. Successful final cognitive acceptance approves the pending plan. A rejected
    or unsubmitted decision cannot publish it. `discard_actions` abandons the plan
    without rolling back successful private notebook edits.
+
+   In live VN action mode, the NPC can also include up to two ordered steps in
+   the same final submission. For example, the NPC can choose to put down its
+   cup and then sit, including both commands under `additional_actions`.
+   The `for_choice` field binds them to the selected candidate. The available
+   step types cover taking, giving, putting down, wearing, removing or adjusting
+   an item and setting one's own posture. The host stages both against the
+   pending plan in order. If either check fails, the pending plan keeps its
+   original contents and the existing proposal repair can correct the submission.
+   Both steps count toward the ordinary command limit. A tight input budget can
+   omit this optional field from a round while the regular tool path stays available
+   under its normal round limit. A step that appears only in prose carries no authority.
 4. After all cognitive jobs finish, the host checks the actual saved input and
    controller settings, then publishes in stable NPC order. Each command rechecks
    current custody, presence, wardrobe prerequisites or movement permissions.

@@ -186,6 +186,15 @@ async def request(
         ) from exc
 
 
+def tool_input_size(llm: Any, messages: list[dict], tools: list[dict]) -> int:
+    sizing = getattr(llm, "input_size", None)
+    return (
+        sizing(messages, tools)
+        if callable(sizing)
+        else len(json.dumps({"messages": messages, "tools": tools}, ensure_ascii=False))
+    )
+
+
 async def tool_request(
     manager: Any,
     settings: Settings,
@@ -202,13 +211,7 @@ async def tool_request(
 
     if getattr(llm, "protocol", "native") != "json":
         tool_profiles.validate_native(settings.tool_profile, tools)
-    sizing = getattr(llm, "input_size", None)
-    size = (
-        sizing(messages, tools)
-        if callable(sizing)
-        else len(json.dumps({"messages": messages, "tools": tools}, ensure_ascii=False))
-    )
-    reserve(settings, usage, size)
+    reserve(settings, usage, tool_input_size(llm, messages, tools))
     parallel_budget.dispatched(phase)
     llm.max_tokens = min(llm.max_tokens, settings.max_output_tokens, output_limit)
     llm.enable_thinking = False

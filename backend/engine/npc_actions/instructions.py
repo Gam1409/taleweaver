@@ -30,12 +30,18 @@ SUBMISSION_ACTIONS = (
 )
 
 
-def submission(offered: list[dict]) -> str:
+def submission(offered: list[dict], *, additional: bool = False) -> str:
     """Place execution guidance at the terminal choice only while actions are offered."""
     description = "Submit this observer's complete proposal for host validation."
     actions = ACTION_MODELS.keys() - {"discard_actions"}
     if any(item["function"]["name"] in actions for item in offered):
-        return description + " " + SUBMISSION_ACTIONS
+        guidance = SUBMISSION_ACTIONS
+        if additional:
+            guidance = guidance.replace(
+                "before submitting.",
+                "before submitting or include an eligible step in additional_actions.",
+            )
+        return description + " " + guidance
     return description
 
 

@@ -1,5 +1,6 @@
 """Turn-local NPC command previews; inspecting or planning never changes the world."""
 
+from collections.abc import Sequence
 from copy import deepcopy
 from dataclasses import dataclass, field, replace
 from hashlib import sha256
@@ -31,7 +32,7 @@ from backend.engine.npc_actions.contracts import (
 )
 from backend.engine.physical_conditions.command_source import CommandProof
 from backend.engine.physical_conditions.item_commands import apply_command
-from backend.engine.visual_novel.continuity import SCENE, Possessions
+from backend.engine.visual_novel.continuity import PLAYER, SCENE, Possessions
 
 if TYPE_CHECKING:
     from backend.engine.chpm.schema import Observation
@@ -186,11 +187,40 @@ class Draft:
             operation, "staged", index=len(self.requests) - 1, effect=receipt, world_changed=False
         )
 
+    def append_selected(self, steps: Sequence[Request]) -> None:
+        # A failed second step or repair must never leak the first into this plan.
+        # The captured scope is read-only; only the working state is copied.
+        trial = deepcopy(self, {id(self.scope): self.scope})
+        for index, request in enumerate(steps):
+            if request.tool not in trial.available_tools():
+                raise ValueError(
+                    f"additional_actions/steps/{index}: {request.tool} is unavailable."
+                )
+            result = trial.execute(request)
+            if result["status"] != "staged":
+                reason = result.get("reason_code", result["status"])
+                raise ValueError(f"additional_actions/steps/{index}: {request.tool} ({reason}).")
+        self.requests, self.receipts, self.operations = (
+            trial.requests,
+            trial.receipts,
+            trial.operations,
+        )
+        self._actors, self._possessions, self._states = (
+            trial._actors,
+            trial._possessions,
+            trial._states,
+        )
+        self._departed = trial._departed
+
     def _rejection(self, request: Request) -> str | None:
         if len(self.requests) >= MAX_ACTIONS:
             return "action_limit"
         if self._departed:
             return "scene_frame_ended"
+        if isinstance(request, Give):
+            recipient = "@player" if request.recipient_id == PLAYER else request.recipient_id
+            if recipient not in self.scope.accessible_ids:
+                return "unavailable_entity"
         if isinstance(request, Item) and request.item_id not in self.scope.accessible_ids:
             return "unavailable_entity"
         if (

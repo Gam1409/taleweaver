@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 from typing import Final
 
+from backend.engine.chpm import motivation_diagnostics
 from backend.engine.chpm.appraisal_context import Window
 from backend.engine.chpm.appraisal_contracts import GroundedProposal
 from backend.engine.chpm.errors import RecoverableChpmError
@@ -155,38 +156,19 @@ def _agenda_sources(entries: list[AgendaEntry], actor: str) -> list[MotiveSource
 
 
 def resolve(raw: GroundedProposal, catalogue: Catalogue) -> dict[ActionKind, list[ResolvedMotive]]:
+    errors = motivation_diagnostics.inspect(raw.model_dump(mode="json"), catalogue, canonical=True)
+    if errors:
+        raise ChpmError("; ".join(error["msg"] for error in errors))
     result: dict[ActionKind, list[ResolvedMotive]] = {}
     for kind, candidate in raw.candidates.items():
-        ids = [motive.motive_id for motive in candidate.motives]
-        if len(ids) != len(set(ids)) or not set(ids) <= catalogue.sources.keys():
-            raise ChpmError(f"CHPM {kind} motives repeat or reference unavailable sources.")
         resolved = [
             ResolvedMotive(
                 source=catalogue.sources[m.motive_id], effect=m.effect, relevance=m.relevance
             )
             for m in candidate.motives
         ]
-        if not any(_own_support(motive, catalogue.observer_id) for motive in resolved):
-            raise ChpmError(f"CHPM {kind} lacks a supporting character or active agenda motive.")
-        alignment = candidate.goal_alignment
-        if alignment in {"supports", "conflicts"} and not any(
-            motive.source.kind == "authored_goal"
-            and candidate.goal_quote
-            and candidate.goal_quote in motive.source.text
-            and motive.effect == ("supports" if alignment == "supports" else "tension")
-            for motive in resolved
-        ):
-            raise ChpmError(f"CHPM {kind} goal alignment disagrees with its cited motive.")
         result[kind] = resolved
     return result
-
-
-def _own_support(motive: ResolvedMotive, actor: str) -> bool:
-    return (
-        motive.effect == "supports"
-        and motive.source.subject_id == actor
-        and motive.source.status in {"authored", "declared"}
-    )
 
 
 INSTRUCTIONS = """

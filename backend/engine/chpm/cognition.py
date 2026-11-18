@@ -197,4 +197,5 @@ async def deliberate(
         prepared.schema,
         prepared.identifiers,
         prepared.accept,
+        diagnose=prepared.diagnose,
     )

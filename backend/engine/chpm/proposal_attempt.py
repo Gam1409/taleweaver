@@ -38,6 +38,7 @@ async def request(
     accept: Callable[[T], R],
     *,
     initial: Callable[[], Awaitable[T]] | None = None,
+    diagnose: Callable[[dict], list[dict]] | None = None,
 ) -> R:
     phase = "proposal"
     repair = None
@@ -138,6 +139,7 @@ async def request(
             instruction=instruction,
             identifiers=identifiers,
             limit=settings.max_input_chars,
+            motive_errors=diagnose(candidate) if diagnose and isinstance(candidate, dict) else (),
         )
         payload = repair.payload
         request_schema = proposal_edits.Corrections if repair.original is not None else schema
