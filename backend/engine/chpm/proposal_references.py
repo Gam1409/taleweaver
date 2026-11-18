@@ -12,7 +12,7 @@ from backend.engine.chpm.core.limits import MAX_PROPOSED_FACT_CITATIONS
 from backend.engine.chpm.core.relationships import Domain
 from backend.engine.chpm.motivation import Catalogue
 from backend.engine.chpm.proposal_draft import DevelopmentDraft, Draft
-from backend.engine.chpm.quote_references import References
+from backend.engine.chpm.quote_references import References, goal_fragments
 from backend.engine.chpm.schema import (
     ActionKind,
     AgendaEntry,
@@ -188,14 +188,15 @@ class GoalReferenceProposal(ReferenceContract):
     ) -> Proposal:
         if self.reference_scope != scope:
             raise ValueError("CHPM authored goal references another prepared source window.")
+        fragments = goal_fragments(goal)
         body = self.model_dump(exclude={"reference_scope"})
         for kind, candidate in self.candidates.items():
             selected = candidate.goal_ref
-            if selected is not None and (selected != "authored_goal" or not 0 < len(goal) <= 300):
+            if selected is not None and selected not in fragments:
                 raise ValueError("CHPM selected an unavailable authored goal reference.")
             current = body["candidates"][kind]
             current.pop("goal_ref")
-            current["goal_quote"] = goal if selected else ""
+            current["goal_quote"] = fragments[selected] if selected else ""
             resolved = agenda_references.materialize(candidate.agenda_change, entries, actor_id)
             current["agenda_change"] = resolved.model_dump() if resolved else None
         return ProposalOptions.model_validate(body).canonical()

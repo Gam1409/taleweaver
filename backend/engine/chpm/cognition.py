@@ -15,6 +15,7 @@ from backend.engine.chpm import (
     prompts,
     proposal_attempt,
     proposal_references,
+    quote_references,
     semantic_choice,
     semantic_recall,
 )
@@ -48,6 +49,11 @@ async def decide(
     if cached is not None:
         return cached
     goal = supplied["authored_goal"]
+    fragments = quote_references.goal_fragments(goal)
+    payload = dict(supplied)
+    if len(goal) > quote_references.MAX_FRAGMENT_CHARS:
+        payload.pop("authored_goal")
+        payload["authored_goal_fragments"] = fragments
     operation = turn_controls.operation(
         turn_controls.scope(manager, "proposal", observation=observation),
         "submit_decision",
@@ -60,9 +66,11 @@ async def decide(
         settings,
         usage,
         proposal_references.instructions(prompts.PROPOSE.replace("message_plan", "intention"))
-        + "\nFor goal alignment supports/conflicts select goal_ref='authored_goal'; neutral/unknown uses null.",
+        + "\nFor goal alignment supports/conflicts select an offered goal_ref. "
+        "authored_goal_fragments, when supplied, contains the complete authored goal "
+        "as exact bounded excerpts; otherwise use authored_goal. Neutral/unknown uses null.",
         {
-            **supplied,
+            **payload,
             "proposal_contract": "goal-reference-v1",
             "reference_scope": scope,
             "request_control": turn_controls.request_view(operation),
@@ -70,7 +78,7 @@ async def decide(
         proposal_references.GoalReferenceProposal,
         "proposal",
         identifiers={
-            "goal_ref": ["authored_goal"] if 0 < len(goal) <= 300 else [],
+            "goal_ref": list(fragments),
             "entry_id": agenda_references.active_ids(entries, actor_id),
             "reference_scope": [scope],
         },

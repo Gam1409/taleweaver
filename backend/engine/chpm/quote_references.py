@@ -17,6 +17,18 @@ from backend.engine.chpm.motivation import Catalogue
 MAX_FRAGMENT_CHARS = 300
 
 
+def goal_fragments(goal: str) -> dict[str, str]:
+    """Keep short-goal handles while making every longer source excerpt selectable."""
+    if not goal.strip():
+        return {}
+    if len(goal) <= MAX_FRAGMENT_CHARS:
+        return {"authored_goal": goal}
+    return {
+        f"authored_goal_{index}": fragment
+        for index, fragment in enumerate(_fragments(goal, split_sentences=False))
+    }
+
+
 @dataclass(frozen=True)
 class References:
     observer_id: str
@@ -126,12 +138,17 @@ def build(
     )
 
 
-def _fragments(text: str) -> list[str]:
+def _fragments(text: str, *, split_sentences: bool = True) -> list[str]:
+    passages = (
+        [passage.text for passage in text_passages.spans(text).values()]
+        if split_sentences
+        else [text]
+    )
     result = [
         piece
-        for passage in text_passages.spans(text).values()
-        for offset in range(0, len(passage.text), MAX_FRAGMENT_CHARS)
-        if (piece := passage.text[offset : offset + MAX_FRAGMENT_CHARS].strip())
+        for passage in passages
+        for offset in range(0, len(passage), MAX_FRAGMENT_CHARS)
+        if (piece := passage[offset : offset + MAX_FRAGMENT_CHARS].strip())
     ]
     if "".join("".join(result).split()) != "".join(text.split()):
         raise ChpmError("CHPM evidence selectors did not preserve the complete visible excerpt.")

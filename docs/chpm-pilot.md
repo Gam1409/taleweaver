@@ -431,7 +431,12 @@ the supplied `reference_scope`. Development selects dated `episode_id` values.
 The host materializes existing canonical source/quote records and still checks
 visibility, ownership, current triggers, identity and source provenance. Motives
 select their existing catalogue IDs; goal quotations are host-derived. Observe
-mode selects `goal_ref` instead of reproducing authored goal text. An agenda
+mode selects `goal_ref` instead of reproducing authored goal text. Goals up to
+300 characters keep the `authored_goal` handle. Longer goals are supplied once in
+`authored_goal_fragments`, with exact excerpts of at most 300 characters; the host
+materializes the selected excerpt while retaining the complete original goal for
+scope binding and decision caching. Saved goal quotations keep their existing
+300-character limit. An agenda
 closure returns only its action and active owned `entry_id`; the owner supplies
 the existing entry text. Generated quotes, unknown/padded/foreign IDs and stale
 scope bindings reject; no fuzzy matching or legacy-quote conversion occurs in
