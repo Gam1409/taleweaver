@@ -11,7 +11,7 @@ from backend.engine import turn_controls
 from backend.engine.chpm import inference, rendering, runtime
 from backend.engine.chpm.errors import StaleControlError
 from backend.engine.npc_actions import execution_frame
-from backend.engine.npc_actions.contracts import Take
+from backend.engine.npc_actions.contracts import Adjust, Give, Take
 from backend.engine.npc_actions.publication import publish
 from tests.conftest import TestSessionLocal
 from tests.test_npc_execution_frame import prepared
@@ -19,10 +19,11 @@ from tests.test_npc_execution_frame import prepared
 TEXT = 'Lina: "I will examine it."\nLina takes the key.'
 
 
-async def published(db, *, empty=False):
+async def published(db, *, empty=False, requests=None):
     manager, observed, draft, turn = await prepared(db)
-    if not empty:
-        assert draft.execute(Take(tool="take_item", item_id="KEY"))["status"] == "staged"
+    proposed = [] if empty else (requests or [Take(tool="take_item", item_id="KEY")])
+    for request in proposed:
+        assert draft.execute(request)["status"] == "staged"
     draft.approved = True
     turn.action_outcomes = {"LINA": await publish(manager, draft)}
     turn.control = turn_controls.scope(manager, "narration_review", observation=observed)
@@ -33,14 +34,14 @@ async def published(db, *, empty=False):
     return manager, turn
 
 
-def claim(turn):
-    row = runtime.contract_data(turn)["LINA"]["authoritative_command_outcomes"][0]
+def claim(turn, index=0):
+    row = runtime.contract_data(turn)["LINA"]["authoritative_command_outcomes"][index]
     return {
         "actor_id": "LINA",
         "passage_id": "p1",
         "operation_id": row["operation_id"],
         "tool": row["tool"],
-        "target_id": "KEY",
+        "target_id": row["effect"].get("item_id", "LINA"),
     }
 
 
@@ -215,3 +216,36 @@ async def test_bad_claim_uses_the_existing_one_prose_repair_and_rechecks(monkeyp
         assert "unissued-operation" not in "".join(
             event for event in events if event.startswith("event: chunk")
         )
+
+
+@pytest.mark.parametrize("regions,expected", [(["arms", "torso"], True), ([], False)])
+async def test_actual_wardrobe_result_uses_region_sets_not_prose_or_array_order(
+    monkeypatch, regions, expected
+):
+    async with TestSessionLocal() as db:
+        manager, turn = await published(
+            db,
+            requests=[
+                Adjust(tool="adjust_clothing", item_id="COAT", uncovered_regions=["torso", "arms"])
+            ],
+        )
+        proposed = {**claim(turn), "uncovered_regions": regions}
+        reviewer(monkeypatch, [proposed])
+        verdict = await rendering._review(manager, turn, TEXT, "")
+        assert verdict.matches is expected
+
+
+@pytest.mark.parametrize("recipient,expected", [("SECOND", True), ("__player__", False)])
+async def test_actual_chained_give_binds_the_specific_recipient(monkeypatch, recipient, expected):
+    async with TestSessionLocal() as db:
+        manager, turn = await published(
+            db,
+            requests=[
+                Take(tool="take_item", item_id="KEY"),
+                Give(tool="give_item", item_id="KEY", recipient_id="SECOND"),
+            ],
+        )
+        proposed = {**claim(turn, 1), "recipient_id": recipient}
+        reviewer(monkeypatch, [proposed])
+        verdict = await rendering._review(manager, turn, TEXT, "")
+        assert verdict.matches is expected

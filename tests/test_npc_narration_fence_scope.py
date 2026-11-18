@@ -149,7 +149,7 @@ def test_a_forged_nonempty_publication_still_fails_its_existing_owner_guard():
 def test_free_object_labels_do_not_become_deterministic_pose_conflicts():
     host, rows = pose_fixture()
     pose_command(
-        host, "LINA", "standing", source="current-input", target="BENCH", kind="scene_object"
+        host, "LINA", "standing", source="object-input", target="BENCH", kind="scene_object"
     )
     proposed = SceneDelta(
         entity_id="LINA",
