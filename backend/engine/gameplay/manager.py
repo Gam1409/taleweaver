@@ -1988,7 +1988,6 @@ class GameTurnManager:
         reminders: list[str] = [
             location_resolution(scene_id_before_turn, self.state.current_scene_id)
             + clarification_block(self, scene_id_before_turn),
-            movement_resolution(all_entities, self.state, game_event),
             getattr(self, "_vn_movement_resolution", ""),
             getattr(self, "_group_movement_resolution", ""),
         ]
@@ -2034,6 +2033,7 @@ class GameTurnManager:
         ):
             await self._llm_context_builder.refresh_narration_state(ctx)
             all_entities = ctx.all_entities
+        reminders.append(movement_resolution(ctx.all_entities, self.state, game_event))
         portrait_turn = portrait_presentation.prepare(self, all_entities)
         narration_prompt = "\n\n".join(filter(None, (narration_prompt, portrait_turn.prompt)))
         reminders.append(portrait_turn.reminder)

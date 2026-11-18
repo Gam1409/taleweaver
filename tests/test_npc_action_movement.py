@@ -1,6 +1,8 @@
 """NPC movement commands use current routes without moving the player or advancing time."""
 
+import json
 from hashlib import sha256
+from types import SimpleNamespace
 
 import pytest
 from sqlalchemy import func, select
@@ -8,9 +10,12 @@ from sqlalchemy import func, select
 from backend.engine.chpm.observable_state import capture as capture_views
 from backend.engine.chpm.schema import Observation
 from backend.engine.gameplay.manager import GameTurnManager
+from backend.engine.gameplay.turn_prompt_layout import build_narration_turn_block
 from backend.engine.npc_actions.contracts import Move, Take
 from backend.engine.npc_actions.preparation import capture as capture_actions
 from backend.engine.npc_actions.publication import publish
+from backend.engine.npc_presence import movement_resolution
+from backend.engine.rule_engine import EntityMovement, GameEvent
 from backend.models.chat import ChatMessage
 from backend.models.session_state import SessionState
 from backend.models.world_entity import WorldEntity, WorldExit, WorldScene
@@ -157,3 +162,49 @@ async def test_reverse_one_way_and_forbidden_destinations_never_stage_a_departur
         )
         assert draft.requests == []
         assert manager.state.current_scene_id == "START"
+
+
+async def test_narrator_sees_one_final_cast_after_preliminary_and_command_departures():
+    async with TestSessionLocal() as db:
+        manager, _, _, _, draft = await movement_fixture(db)
+        first = WorldEntity(
+            id="VISITOR",
+            name="Visitor",
+            entity_type="NPC",
+            description="A visitor.",
+            current_scene_id="START",
+            session_id=manager.game_id,
+        )
+        db.add(first)
+        manager.state.entity_states = {
+            **manager.state.entity_states,
+            first.id: {"current_scene_id": "ANNEX", "remembered": True},
+        }
+        await db.flush()
+        builder = manager._llm_context_builder
+        world = await builder._load_world()
+        preliminary = GameEvent(
+            moved_entities=[EntityMovement(entity_id=first.id, to_scene_id="ANNEX")]
+        )
+        movement_note = movement_resolution(world.all_entities, manager.state, preliminary)
+
+        assert (
+            draft.execute(Move(tool="move_to", destination_scene_id="ANNEX"))["status"] == "staged"
+        )
+        draft.approved = True
+        assert (await publish(manager, draft))[0]["status"] == "applied"
+        context = SimpleNamespace(global_unlock_rules_prompt_block="", narration_addendum="")
+        await builder.refresh_narration_state(context)
+
+        prompt = build_narration_turn_block(
+            context.narration_state_block, "", "{}", [], reminders=(movement_note,)
+        )
+        header = "CURRENT NPC PRESENCE (authoritative, not historical memory):"
+        casts = [
+            json.JSONDecoder().raw_decode(part.lstrip())[0] for part in prompt.split(header)[1:]
+        ]
+        assert casts == [[]]
+        assert (
+            '"npc_id": "VISITOR"' in movement_note
+            and '"current_scene_id": "ANNEX"' in movement_note
+        )

@@ -10,7 +10,7 @@ The existing movement confirmation checks the player's actual contribution and a
 
 NPC destinations accept exact IDs, case variants and unique exact labels. Unknown destinations and ambiguous duplicate labels are rejected before changing a character's location. Semantic matching of differently worded places uses the separate [location identity check](dynamic-locations.md), not an exact-name alias guessed by the host.
 
-The narrator receives the resulting location and cast, including NPCs already at the destination. Earlier dialogue cannot bring departed characters back. These are state and prompt safeguards; they cannot prove that a model's prose obeys every fact.
+After preliminary travel and NPC commands have resolved, the narrator receives one current cast, including NPCs already at the destination. Movement reminders describe resolved travel separately. Earlier dialogue cannot bring departed characters back. These are state and prompt safeguards; they cannot prove that a model's prose obeys every fact.
 
 ## Repair an existing session
 

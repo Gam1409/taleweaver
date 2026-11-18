@@ -114,6 +114,14 @@ async def test_group_arrival_normalizes_labels_and_case_before_filtering_scene_c
         assert all("moved to" not in text for text in arrivals)
         prompt = json.dumps(roles.prompts, ensure_ascii=False, default=str)
         assert "NPC MOVEMENT RESOLUTION" in prompt
+        # Only the final scene snapshot may name the cast available to the narrator.
+        latest = roles.prompts[-1][1]["messages"][-1]["content"]
+        _, marker, cast_and_rest = latest.partition(
+            "CURRENT NPC PRESENCE (authoritative, not historical memory):"
+        )
+        assert marker and marker not in cast_and_rest
+        cast, _ = json.JSONDecoder().raw_decode(cast_and_rest.lstrip())
+        assert {row["id"] for row in cast} == {"LINA", "MIKI", "PROFESSOR"}
         assert "A researcher waiting by the centrifuge." in prompt
         assert classifier.await_count == 1
         assert "immediate group commands" in classifier.call_args.args[1]

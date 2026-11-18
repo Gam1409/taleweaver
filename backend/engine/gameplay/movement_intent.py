@@ -124,7 +124,7 @@ def _keep_companions(
     ]
     manager._group_movement_resolution = (
         "GROUP MOVEMENT RESOLUTION: The proposed shared departure was not confirmed. "
-        "The player and accompanying NPCs remain in the current scene. Do not narrate "
-        "them as having arrived elsewhere or invent an obstacle. If the destination "
+        "Use each participant's current location. Do not describe arrival from this "
+        "unconfirmed proposal or invent an obstacle. If the destination "
         "was unclear, clarify it naturally within the roleplay."
     )
