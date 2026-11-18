@@ -236,11 +236,14 @@ def test_real_reconciliation_schema_fits_existing_budget_without_removing_source
             )
 
 
-def test_larger_optional_staging_context_keeps_data_and_respects_prepared_admission(monkeypatch):
+@pytest.mark.parametrize("mode", ["prompt", "json_object", "json_schema"])
+def test_larger_optional_staging_context_keeps_data_and_respects_prepared_admission(
+    monkeypatch, mode
+):
     from backend.core.llm_structured_execution import require_input_budget
 
     instructions, payload, schema, model = reconciliation_fixture(staging=True, passages=36)
-    built = router(monkeypatch, "json_schema")._build_structured_request(
+    built = router(monkeypatch, mode)._build_structured_request(
         instructions, payload, model, "local-model", response_schema=schema
     )
     assert built.kwargs["messages"][1]["content"] == payload

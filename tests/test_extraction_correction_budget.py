@@ -13,7 +13,7 @@ from tests.test_extraction_repair import example
 from tests.test_llm_structured_single_attempt import router
 
 
-@pytest.mark.parametrize("mode", ["prompt", "json_schema"])
+@pytest.mark.parametrize("mode", ["prompt", "json_object", "json_schema"])
 async def test_large_visual_context_cannot_prevent_an_independent_state_correction(
     monkeypatch, mode
 ):
@@ -159,7 +159,7 @@ async def test_prepared_size_check_does_not_dispatch_or_log_a_model_call(monkeyp
     emit.assert_not_called()
 
 
-@pytest.mark.parametrize("mode", ["prompt", "json_schema"])
+@pytest.mark.parametrize("mode", ["prompt", "json_object", "json_schema"])
 def test_correction_input_exact_limit_and_irreducible_context(monkeypatch, mode):
     catalog, _, _ = example()
     llm = router(monkeypatch, mode)
