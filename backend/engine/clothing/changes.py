@@ -7,22 +7,14 @@ from backend.engine.clothing.body_schema import WearCommandProof, WearSource
 from backend.engine.clothing.classification import classify_garment
 from backend.engine.clothing.profiles import (
     garment_for_item,
-    load_profile,
     owned_items,
+    placement_profile,
     validate_profile,
 )
 from backend.engine.clothing.resolution_facts import inner_details_allowed
-from backend.engine.clothing.schema import Region, VisualProfile, WornItem
+from backend.engine.clothing.schema import Region, WornItem
 
 Operation = Literal["wear", "remove", "adjust"]
-
-
-def _profile(actor: dict) -> VisualProfile:
-    current = actor["visual_profile"]
-    profile = load_profile(current)
-    if profile is None and current:
-        raise ValueError("Unsupported visual profile was preserved.")
-    return profile or VisualProfile()
 
 
 def _id(value: object) -> object:
@@ -40,7 +32,9 @@ def mutate(
     """Change an already authorized working copy; callers own policy/source validation."""
     if operation not in {"wear", "remove", "adjust"}:
         raise ValueError("Unsupported wardrobe operation.")
-    profile = _profile(actor)
+    profile = placement_profile(
+        actor["visual_profile"], actor["resolved_inventory"], item_id, equipment=actor["equipment"]
+    )
     items = owned_items(actor["resolved_inventory"], equipment=actor["equipment"])
     if item_id not in items:
         raise ValueError("The character does not own that garment.")

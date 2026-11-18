@@ -50,14 +50,13 @@ class Check:
         bound = evidence.bind(body, self.catalog.narration, catalog=self.catalog)
         extracted, failures, denied, indices = independent_state.unpack(bound, self.actors)
         extracted, indices, command_errors = protect_commands(self.manager, extracted, indices)
-        if (
-            command_errors
-            or failures
-            or denied
-            or (extracted.actions and not self.item_changes_allowed)
-        ):
+        scoped = self._item_scope(extracted, indices, len(original.actions))
+        if command_errors or failures or denied or scoped is None:
             return False
-        if self._blocked(extracted) or _item_chain_conflict(extracted, len(original.actions)):
+        extracted, indices = scoped
+        if self._blocked(extracted) or _item_chain_conflict(
+            extracted, len(original.actions), indices
+        ):
             return False
         _, accepted, errors = apply_actions(
             extracted,
@@ -94,6 +93,20 @@ class Check:
         after = read_conditions(changed)
         return all(_changed(before.conditions.get(key), after.conditions[key]) for key in added)
 
+    def _item_scope(
+        self, extraction: ItemExtraction, indices: tuple[int, ...] | None, original_count: int
+    ) -> tuple[ItemExtraction, tuple[int, ...] | None] | None:
+        if self.item_changes_allowed:
+            return extraction, indices
+        if not self.blocked_targets and extraction.actions:
+            return None
+        extraction, indices, failures = independent_state.items(
+            extraction, self.actors, self.snapshot, set(self.blocked_targets), indices
+        )
+        if any(f.action_index is not None and f.action_index >= original_count for f in failures):
+            return None
+        return extraction, indices
+
     def _blocked(self, extraction: ItemExtraction) -> bool:
         if not self.blocked_targets:
             return False
@@ -106,9 +119,18 @@ class Check:
         return bool(rejected)
 
 
-def _item_chain_conflict(extraction: ItemExtraction, count: int) -> bool:
-    original = {row.item_id for row in extraction.actions[:count]} - {None}
-    additional = {row.item_id for row in extraction.actions[count:]} - {None}
+def _item_chain_conflict(
+    extraction: ItemExtraction, count: int, indices: tuple[int, ...] | None = None
+) -> bool:
+    pairs = list(
+        zip(
+            extraction.actions,
+            indices if indices is not None else range(len(extraction.actions)),
+            strict=True,
+        )
+    )
+    original = {row.item_id for row, index in pairs if index < count} - {None}
+    additional = {row.item_id for row, index in pairs if index >= count} - {None}
     return bool(original & additional)
 
 

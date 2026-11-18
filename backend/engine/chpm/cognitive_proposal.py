@@ -95,7 +95,7 @@ def prepare(
         actor_id=actor_id,
     ).model_dump(exclude_none=True)
     instruction = (
-        prompts.PROPOSE
+        prompts.proposal(command_owned=tools is not None and tools.actions is not None)
         + INSTRUCTIONS
         + motivation.INSTRUCTIONS
         + experience.INSTRUCTIONS

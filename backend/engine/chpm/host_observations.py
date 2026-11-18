@@ -6,7 +6,8 @@ from typing import Any
 from backend.engine.chpm import physical_observations
 from backend.engine.chpm.host_observation_contracts import HostFacts, ObservedScene, Possession
 from backend.engine.chpm.host_state import Mind
-from backend.engine.clothing.profiles import load_profile, owned_items
+from backend.engine.clothing.profiles import owned_items
+from backend.engine.clothing.projection import known_worn_item_ids
 from backend.engine.scene_continuity.npc import difference as scene_difference
 from backend.engine.scene_continuity.npc import observations as scene_observations
 from backend.engine.scene_staging.npc import observations as staging_observations
@@ -30,9 +31,10 @@ def capture(
     inventory = override.get(
         "inventory", authored if authored is not None else metadata.get("inventory")
     )
-    profile = load_profile(override.get("visual_profile", getattr(actor, "visual_profile", None)))
+    raw = override.get("visual_profile", getattr(actor, "visual_profile", None))
     possessions = owned_items(inventory)
     known_inventory = isinstance(inventory, (list, tuple, dict))
+    worn = known_worn_item_ids(raw, inventory) if known_inventory else None
     poses, placed, staging_omissions = (
         staging_observations(state, staging_cast, placed_items or [], actor.id, player_id)
         if staging_cast is not None
@@ -59,9 +61,7 @@ def capture(
             scene_description=scene_description,
         ),
         # Invalid/missing profiles are unknown, never proof of undressing.
-        worn_item_ids=tuple(sorted(w.item_id for w in profile.worn))
-        if profile and known_inventory and all(w.item_id in possessions for w in profile.worn)
-        else None,
+        worn_item_ids=tuple(sorted(worn)) if worn is not None else None,
     )
 
 

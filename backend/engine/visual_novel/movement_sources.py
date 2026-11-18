@@ -11,6 +11,7 @@ from backend.engine.chpm.kernel import digest
 from backend.engine.chpm.movement_feedback import read
 from backend.engine.debug_transcript import is_debug_message
 from backend.engine.narrated_movement.outcomes import MovementOutcome
+from backend.engine.npc_actions import source_control
 from backend.models.chat import ChatMessage
 
 MAX_SOURCE_CHARS = 4000
@@ -27,6 +28,7 @@ class Source:
     text: str
     passages: dict[str, Passage]
     outcomes: tuple[MovementOutcome, ...] = ()
+    command_control: source_control.Snapshot | None = None
 
     def matches(self, message: Any, session_id: str) -> bool:
         return bool(
@@ -38,6 +40,11 @@ class Source:
             and digest(message.content) == self.content_hash
             and message.scene_id == self.scene_id
             and (message.npc_journal or {}).get("status") != "incomplete"
+            and (
+                self.command_control is None
+                or self.command_control.valid
+                and self.command_control == source_control.read(message)
+            )
         )
 
 
@@ -58,6 +65,7 @@ def _source(message: Any, namespace: str, outcomes: tuple[MovementOutcome, ...] 
         message.content,
         selected,
         outcomes,
+        command_control=source_control.read(message),
     )
 
 

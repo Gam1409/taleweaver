@@ -52,7 +52,9 @@ from backend.engine.chpm.schema import (
     Verdict,
 )
 from backend.engine.chpm.state import KEY, load, save
+from backend.engine.npc_actions import execution_frame as owner_frame
 from backend.engine.npc_actions import feedback as command_feedback
+from backend.engine.npc_actions import source_control
 from backend.engine.npc_actions.control import model_outcomes
 from backend.engine.npc_actions.preview import Draft as ActionDraft
 from backend.engine.turn_replay.transactions import release_for_model
@@ -97,6 +99,7 @@ class Turn:
     control: dict = field(default_factory=dict)
     host_rejections: list[dict] = field(default_factory=list)
     review_operation: dict = field(default_factory=dict)
+    execution_frame: owner_frame.Frame | None = None
 
 
 def current(manager: Any) -> Turn | None:
@@ -120,10 +123,11 @@ def buffered(manager: Any) -> bool:
 
 
 def contract_data(turn: Turn) -> dict:
+    outcomes = model_outcomes(turn)
     data = {
         actor: {
             "name": turn.names.get(actor, actor),
-            **decision.selected.model_dump(),
+            **owner_frame.intention(actor, decision, outcomes),
             "ongoing_agenda_not_world_facts": agenda.narrator_context(
                 turn.agendas.get(actor, []), actor
             ),
@@ -140,7 +144,12 @@ def contract_data(turn: Turn) -> dict:
             data[actor]["authored_identity"] = host_adapter.narrative_identity(mind)
             scene = host_observations.situation(mind)
             if scene:
-                data[actor]["current_scene_observations"] = scene
+                key = (
+                    "observations_before_command_publication"
+                    if actor in outcomes
+                    else "current_scene_observations"
+                )
+                data[actor][key] = scene
             if decision.choice_preference is not None:
                 data[actor]["choice_preference_not_prose"] = decision.choice_preference.model_dump()
                 data[actor]["previous_intention_not_world_completion"] = (
@@ -165,15 +174,16 @@ def contract_data(turn: Turn) -> dict:
             data[actor]["selected_motives_not_world_facts"] = narrative_context.compact_motives(
                 decision, data[actor]
             )
-    for actor, outcomes in model_outcomes(turn).items():
+    for actor, records in outcomes.items():
         if actor in data:
-            data[actor]["authoritative_command_outcomes"] = outcomes
+            data[actor]["authoritative_command_outcomes"] = owner_frame.records(turn, records)
             data[actor]["observation_time"] = (
-                "before_command_publication, including host resolution; current applied fields win"
+                "before_command_publication, including host resolution"
             )
     for actor, records in command_feedback.project(turn).items():
         if actor in data:
             data[actor]["rejected_command_previews"] = records
+    data.update(owner_frame.context(turn))
     return data
 
 
@@ -183,7 +193,7 @@ def contract(turn: Turn) -> str:
     from backend.engine.npc_actions.instructions import for_outcomes
 
     return (
-        prompts.NARRATE
+        prompts.narration(command_owned=bool(turn.action_outcomes))
         + for_outcomes(turn.action_outcomes)
         + command_feedback.instructions(turn)
         + json.dumps(contract_data(turn), ensure_ascii=False, separators=(",", ":"))
@@ -363,6 +373,7 @@ async def _prepare(manager: Any, turn: Turn, message: str, actors: list[Any]) ->
                 "The NPC publication belongs to an inactive attempt."
             )
         turn.control = turn_controls.scope(manager, "narration_review", observation=observed)
+        await owner_frame.capture(manager, turn, observed)
         preflight(turn)
 
 
@@ -381,6 +392,8 @@ def finish(manager: Any, reply: Any, *, completed: bool) -> None:
         return
     if turn.simplified:
         continuation.finish(manager, turn, reply)
+        if completed:
+            source_control.stamp(manager, turn, reply)
         manager._chpm_turn = None
         return
     if not completed:
@@ -432,4 +445,5 @@ def finish(manager: Any, reply: Any, *, completed: bool) -> None:
         result.recovery.gap_cursors = turn.gap_cursors
         continuation.mark_verified(result)
     save(manager.state, result, expected_revision=turn.initial.revision)
+    source_control.stamp(manager, turn, reply)
     manager._chpm_turn = None

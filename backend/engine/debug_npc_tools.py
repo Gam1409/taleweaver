@@ -15,9 +15,11 @@ from backend.engine.clothing.profiles import (
     garment_for_item,
     load_profile,
     owned_items,
+    placement_profile,
     validate_profile,
 )
-from backend.engine.clothing.schema import Garment, VisualProfile, WornItem
+from backend.engine.clothing.projection import item_wear_state, known_worn_item_ids
+from backend.engine.clothing.schema import Garment, WornItem
 from backend.engine.clothing.wardrobe_preferences import read_preferences
 from backend.models.session_state import SessionState
 from backend.models.world_entity import WorldEntity, WorldScene
@@ -62,6 +64,7 @@ def wardrobe_info(entity: WorldEntity, entities: list[WorldEntity], states: dict
                 **item,
                 "clothing": garment.model_dump() if garment else None,
                 "worn": identifier in worn,
+                "wear_status": item_wear_state(raw, list(items.values()), identifier),
                 "uncovered_regions": next(
                     (row.uncovered_regions for row in profile.worn if row.item_id == identifier), []
                 )
@@ -99,7 +102,7 @@ def wardrobe_info(entity: WorldEntity, entities: list[WorldEntity], states: dict
     return {
         "items": clothes,
         "scene_items": scene_items(entity, entities, states),
-        "profile_known": profile is not None,
+        "profile_known": known_worn_item_ids(raw, list(items.values())) is not None,
         "recovery": recovery,
         "preferences": read_preferences(entity, states),
     }
@@ -244,10 +247,7 @@ async def _edit_clothing(db: AsyncSession, state: SessionState, edit: WardrobeEd
     item = {**original, **item}
     items[edit.item_id] = item
     raw = override.get("visual_profile", npc.visual_profile)
-    profile = load_profile(raw)
-    if profile is None and raw:
-        raise ValueError("Existing visual profile is invalid; repair it before editing clothing.")
-    profile = profile or VisualProfile()
+    profile = placement_profile(raw, list(items.values()), edit.item_id)
     uncovered = next(
         (row.uncovered_regions for row in profile.worn if row.item_id == edit.item_id), []
     )

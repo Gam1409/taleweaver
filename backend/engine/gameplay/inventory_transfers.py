@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm.attributes import flag_modified
 
 from backend.core.state_rejection_trace import reject
+from backend.engine.clothing.profiles import without_item
 from backend.engine.gameplay.turn_context import TurnContext
 from backend.engine.visual_novel.continuity import (
     PLAYER,
@@ -48,13 +49,9 @@ def clear_dropped_references(context: TurnContext, identifier: str) -> None:
     profile = context.avatar.visual_profile
     if not isinstance(profile, dict) or not isinstance(profile.get("worn"), list):
         return
-    kept = [
-        entry
-        for entry in profile["worn"]
-        if not isinstance(entry, dict) or entry.get("item_id") != identifier
-    ]
-    if kept != profile["worn"]:
-        context.avatar.visual_profile = {**deepcopy(profile), "worn": deepcopy(kept)}
+    kept = without_item(profile, identifier)
+    if kept != profile:
+        context.avatar.visual_profile = kept
 
 
 async def available_inventory_sources(

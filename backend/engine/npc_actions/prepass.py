@@ -44,6 +44,8 @@ to an NPC, leave player_item_actions empty and let its action owner decide.
 An NPC choice, even an expected agreement, is not the player's performed action.
 Fresh voluntary wardrobe choices for controlled actors likewise await that owner;
 completed player assistance and established-wear recovery keep their normal checks.
+Gifts from a controlled giver defer that NPC's voluntary giving. Only a linked
+performed player acquire_garment may proceed as the player's own external action.
 Keep independent object updates separate from an unconfirmed placement. A missing
 or rejected placement is deferred, not a fictional failed attempt or obstacle.
 """
@@ -80,15 +82,24 @@ def defer_wardrobe(
     state: Any, change: Any, *, item_plan: Any = None, creation_ref: int | None = None
 ) -> bool:
     """The preliminary model cannot approve a fresh controlled actor's own wardrobe choice."""
-    if not enabled(state) or change.actor_id not in context(state)["controlled_actor_ids"]:
+    if not enabled(state):
         return False
     if change.source != "player_action":
         return False
-    from backend.engine.visual_novel.player_items import assisted
+    from backend.engine.visual_novel.player_items import acquired, assisted
+
+    controlled = set(context(state)["controlled_actor_ids"])
+    recipient = change.actor_id in controlled
+    giver = getattr(change, "acquisition", None) == "gift" and change.source_id in controlled
 
     # A generated approval is not the live actor's decision. Player assistance
     # keeps the clothing owner's consent checks and needs its own validated operation.
-    return not assisted(item_plan, change, creation_ref=creation_ref)
+    return (
+        recipient
+        and not assisted(item_plan, change, creation_ref=creation_ref)
+        or giver
+        and not acquired(item_plan, change, creation_ref=creation_ref)
+    )
 
 
 def _portable(rows: list[Any], state: Any) -> list[dict]:

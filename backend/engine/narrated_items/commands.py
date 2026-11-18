@@ -4,9 +4,10 @@ from collections.abc import Iterable
 from copy import deepcopy
 from typing import Literal
 
-from backend.engine.clothing.profiles import garment_for_item
-from backend.engine.clothing.projection import known_worn_item_ids
-from backend.engine.narrated_items.apply import _receive, _remove
+from backend.engine.clothing.profiles import potentially_wearable
+from backend.engine.clothing.projection import item_wear_state
+from backend.engine.narrated_items.actor_items import receive as _receive
+from backend.engine.narrated_items.actor_items import remove as _remove
 from backend.engine.narrated_items.errors import ItemTransferError
 from backend.engine.visual_novel.continuity import PLAYER, SCENE, Possessions
 
@@ -47,13 +48,12 @@ def carried_after(actor_id: str, receipts: Iterable[dict]) -> frozenset[str]:
 def _require_carried(
     owner: dict, item: dict, item_id: str, carried_item_ids: frozenset[str]
 ) -> None:
-    worn = known_worn_item_ids(
-        owner["visual_profile"], owner["resolved_inventory"], equipment=owner["equipment"]
+    status = item_wear_state(
+        owner["visual_profile"], owner["resolved_inventory"], item_id, equipment=owner["equipment"]
     )
-    wearable = garment_for_item(item) is not None or bool(item.get("wearable_slots"))
-    if worn is None and wearable and item_id not in carried_item_ids:
+    if status == "unknown" and potentially_wearable(item) and item_id not in carried_item_ids:
         raise ItemTransferError("unknown_wear_state")
-    if worn and item_id in worn:
+    if status == "worn":
         raise ItemTransferError("item_worn")
 
 

@@ -1,8 +1,15 @@
 """Evidence-backed, scene-local visual deltas; never mechanical permissions."""
 
-from typing import Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import (
+    BaseModel,
+    BeforeValidator,
+    ConfigDict,
+    Field,
+    SerializerFunctionWrapHandler,
+    model_serializer,
+)
 
 from backend.core.text_evidence import WithEvidenceSpan
 from backend.engine.scene_staging.props import PropDelta
@@ -31,6 +38,23 @@ class Placement(BaseModel):
     target: str = Field(max_length=120)
 
 
+class StagingCause(BaseModel):
+    """A proposed external consequence, distinct from the target's voluntary action."""
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    kind: Literal["current_player_action", "actor_operation"]
+    basis: Literal["resolved_external_effect", "attempt", "intention", "uncertain"] = "uncertain"
+    passage_id: str | None = Field(default=None, min_length=1, max_length=40)
+    operation_id: str | None = Field(default=None, min_length=1, max_length=100)
+
+
+def _cause(value: Any) -> StagingCause | None:
+    try:
+        return StagingCause.model_validate(value) if value is not None else None
+    except ValueError:
+        return None  # An unusable source is unknown, never self-action authority.
+
+
 class SceneDelta(WithEvidenceSpan):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     entity_id: str = Field(min_length=1, max_length=100)
@@ -38,6 +62,16 @@ class SceneDelta(WithEvidenceSpan):
     posture: Posture | None = None
     placement: Placement | None = None
     clear: bool = False
+    performer_id: str | None = Field(default=None, min_length=1, max_length=100)
+    cause: Annotated[StagingCause | None, BeforeValidator(_cause)] = None
+
+    @model_serializer(mode="wrap")
+    def preserve_legacy_shape(self, handler: SerializerFunctionWrapHandler) -> dict:
+        result = super().preserve_legacy_shape(handler)
+        for name in ("performer_id", "cause"):
+            if getattr(self, name) is None:
+                result.pop(name, None)
+        return result
 
 
 class ExplicitDelta(WithEvidenceSpan):

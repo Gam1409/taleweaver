@@ -4,6 +4,7 @@ from copy import deepcopy
 from typing import Any
 
 from backend.engine import turn_controls
+from backend.engine.chpm.observable_state import project
 from backend.engine.clothing.context import actor_records
 from backend.engine.clothing.visuals import detailed_for_state, session_objects
 from backend.engine.npc_actions.preview import Draft, Scope
@@ -11,7 +12,7 @@ from backend.engine.physical_conditions.schema import KEY as CONDITIONS_KEY
 from backend.engine.scene_staging.shared import _cast
 from backend.engine.scene_staging.state import KEY as STAGING_KEY
 from backend.engine.visual_novel.config import read_settings
-from backend.engine.visual_novel.continuity import possession_snapshot
+from backend.engine.visual_novel.continuity import PLAYER, possession_snapshot
 
 
 async def capture(manager: Any, views: dict, observed: Any) -> dict[str, Draft]:
@@ -24,6 +25,12 @@ async def capture(manager: Any, views: dict, observed: Any) -> dict[str, Draft]:
         if key in (manager.state.entity_states or {})
     }
     cast = tuple(_cast(manager, actors, rows))
+    # A command may remove a public object from view, but cannot make a private one public.
+    public_item_ids = frozenset(
+        key
+        for key, value in project(manager, rows, PLAYER, observed, own_facts=False).entities.items()
+        if value["kind"] == "item"
+    )
     result = {}
     for actor_id, view in views.items():
         if (
@@ -60,6 +67,7 @@ async def capture(manager: Any, views: dict, observed: Any) -> dict[str, Draft]:
                 staging_enabled=read_settings(manager.state).scene_staging,
                 observation=observed.model_copy(deep=True),
                 control=turn_controls.scope(manager, "npc_command_preview", observation=observed),
+                public_item_ids=public_item_ids,
             )
         )
     return result

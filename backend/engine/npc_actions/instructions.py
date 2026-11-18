@@ -45,33 +45,26 @@ RESOLUTION_CHRONOLOGY = (
 )
 
 EXECUTION = """
+AUTHORITATIVE NPC COMMANDS:
 authoritative_command_outcomes supplies complete publication results per
 tool-controlled actor. An empty list means no command was executed by that
 actor. A selected intention/message_plan is not execution. Narration cannot supply
 omitted inventory, wardrobe, item-state, posture, local-approach or room-travel
-changes. Review and correct claims of such voluntary completion against these
-results. An empty plan is neither a physical failed attempt nor a requirement to
-act or obey. Speech, waiting, refusal and no action remain valid. Compatible
-gestures, emotional delivery and independent player, other-actor or world effects
-remain eligible.
+changes. Render and review voluntary completion against these results and
+current_execution_frame, never the subjective selected plan. request_control_ref
+points into current_execution_frame. Current owner fields override earlier
+observations and intentions; qualitative item-state notes do not
+change wardrobe coverage. Do not repeat effects or reverse their final state.
+effect_omitted marks unavailable details, not failure or permission to infer them.
+Blocked/stale/skipped operations did not complete; preserve earlier applied effects.
+An attempted interaction establishes only the NPC's attempt, never recipient
+cooperation or mechanical success. An empty plan is neither a failed attempt nor a
+requirement to act or obey. Speech, waiting, refusal and no action remain valid.
+Compatible gestures, emotion and independent player, other-actor or world effects
+remain eligible. Preserve player agency.
 """
 
-NARRATION = (
-    """
-AUTHORITATIVE NPC COMMANDS: authoritative_command_outcomes lists host-checked
-effects already attempted before this narration. Current state and applied effects
-override pre-command observations and intentions.
-Describe their compatible actions and emotional delivery without executing the
-same effect twice or reversing its final state. Blocked/stale/skipped operations
-did not complete; preserve successful earlier effects and leave missing outcomes
-unknown. An attempted interaction establishes only the NPC's own attempt, never
-recipient cooperation, a completed bodily change or mechanical success. Do not
-invent another acquisition, wardrobe change or departure for a
-tool-controlled actor outside its approved plan. Ordinary compatible gestures,
-dialogue and independent physical consequences remain free. Preserve player agency.
-"""
-    + RESOLUTION_CHRONOLOGY
-)
+NARRATION = EXECUTION + RESOLUTION_CHRONOLOGY
 
 
 def resolution_timing(outcomes: Mapping[str, list[dict]]) -> dict[str, str]:
@@ -81,13 +74,9 @@ def resolution_timing(outcomes: Mapping[str, list[dict]]) -> dict[str, str]:
 
 def for_outcomes(outcomes: Mapping[str, list[dict]]) -> str:
     """Use identical owner semantics for narration, review and bounded correction."""
-    return _empty_instructions(outcomes) + NARRATION if outcomes else ""
+    return NARRATION if outcomes else ""
 
 
 def resolution_instructions(outcomes: Mapping[str, list[dict]]) -> str:
     """Give review and repair the same execution and temporal precedence rules."""
-    return _empty_instructions(outcomes) + RESOLUTION_CHRONOLOGY if outcomes else ""
-
-
-def _empty_instructions(outcomes: Mapping[str, list[dict]]) -> str:
-    return EXECUTION if any(not rows for rows in outcomes.values()) else ""
+    return for_outcomes(outcomes)

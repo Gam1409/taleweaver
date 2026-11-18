@@ -8,6 +8,7 @@ from backend.engine import turn_controls
 from backend.engine.narrated_items import independent_state
 from backend.engine.narrated_items.participants import resolve_participants
 from backend.engine.narrated_items.schema import ItemExtraction
+from backend.engine.narrated_movement.runtime import exclude_commands
 from backend.engine.narrated_movement.schema import MovementProposal
 from backend.engine.npc_actions.control import validated_outcomes
 from backend.engine.physical_conditions.ledger import read
@@ -80,12 +81,7 @@ def protect(
     errors.extend(
         "A narrated movement outside the approved NPC plan was preserved for review."
         for _, row in movement_pairs
-        if row.get("actor_id") in controlled
-        and not any(
-            effect.get("destination_scene_id") == row.get("destination_scene_id")
-            and effect["actor_id"] == row.get("actor_id")
-            for effect in effects
-        )
+        if row.get("actor_id") in controlled and not _movement_echo(row, effects)
     )
     conditions, condition_errors = _conditions(manager, extraction.condition_updates, effects)
     return (
@@ -112,6 +108,20 @@ def unpack(
             update={"actions": [_participants(action, actors) for action in extraction.actions]}
         )
     guarded, indices, errors = protect(manager, extraction, indices)
+    if control := context(manager):
+        effects = _effects(control)
+        excluded = [
+            row
+            for raw in extraction.movements
+            if (row := _movement(raw)).get("actor_id") in control["controlled_actor_ids"]
+            and not _movement_echo(row, effects)
+        ]
+        exclude_commands(
+            manager,
+            excluded,
+            original_count=len(extraction.movements),
+            control=manager._chpm_turn.control,
+        )
     return guarded, failures, denied, indices, errors
 
 
@@ -127,6 +137,21 @@ def _movement(raw: Any) -> dict:
         return MovementProposal.model_validate(raw).model_dump()
     except ValidationError:
         return {}
+
+
+def _movement_echo(row: dict, effects: list[dict]) -> bool:
+    return any(
+        effect["actor_id"] == row.get("actor_id")
+        and (
+            isinstance(effect.get("destination_scene_id"), str)
+            and effect["destination_scene_id"] == row.get("destination_scene_id")
+            and row.get("presence") == "present"
+            or "presence" in effect
+            and row.get("destination_scene_id") is None
+            and effect["presence"] == row.get("presence")
+        )
+        for effect in effects
+    )
 
 
 def _condition(raw: Any, ledger: Ledger) -> Any:

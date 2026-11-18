@@ -32,6 +32,8 @@ def resolve(
     result = extraction.model_copy(deep=True)
     for change in result.changes:
         change.entity_id = actor_id(change.entity_id, player_id)
+        if change.performer_id is not None:
+            change.performer_id = actor_id(change.performer_id, player_id)
         if change.placement and change.placement.target_kind == "character":
             change.placement.target = actor_id(change.placement.target, player_id)
     for explicit in result.explicit:

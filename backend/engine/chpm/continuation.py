@@ -119,20 +119,37 @@ def activate(
 
 
 def contract(turn: "Turn") -> str:
+    from backend.engine.npc_actions import execution_frame
     from backend.engine.npc_actions.control import model_outcomes
     from backend.engine.npc_actions.instructions import for_outcomes, resolution_timing
 
     outcomes = model_outcomes(turn)
+    frame = execution_frame.view(turn)
+    identities = {
+        actor: {
+            (
+                "host_state_before_command_publication"
+                if frame and key == "current_host_state"
+                else key
+            ): value
+            for key, value in identity.items()
+        }
+        for actor, identity in turn.fallback_identities.items()
+    }
     return (
         INSTRUCTION
         + for_outcomes(outcomes)
         + json.dumps(
             {
-                "npc_identities": turn.fallback_identities,
+                "npc_identities": identities,
                 "continuity_gap": gap_context(turn.initial),
+                **({"current_execution_frame": frame} if frame else {}),
                 **(
                     {
-                        "authoritative_command_outcomes": outcomes,
+                        "authoritative_command_outcomes": {
+                            actor: execution_frame.records(turn, records)
+                            for actor, records in outcomes.items()
+                        },
                         **resolution_timing(outcomes),
                         "identity_host_observation_time": "before_command_publication; current owner state and command outcomes take precedence",
                     }

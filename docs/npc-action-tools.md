@@ -91,14 +91,51 @@ arbitrary recipient-state setter or separate permission tool.
 7. Shared extraction cannot repeat or reverse command-owned inventory, wardrobe
    and travel effects. Only handled item-property dimensions are protected;
    independent body conditions, other dimensions and unrelated scene effects
-   remain eligible for normal evidence-backed extraction. Pose protection covers
-   only the command's explicit final posture/placement, including explicit clears.
-   Unrelated staging facts remain eligible for normal extraction.
+   remain eligible for normal evidence-backed extraction. New voluntary posture
+   and placement changes for controlled actors also require their command API;
+   an approved empty plan cannot acquire them through narration. Unrelated
+   staging facts and separately resolved external effects retain their owners.
+
+Narration, review, repair and continuation share a transient
+`current_execution_frame` derived from the existing public state owners after
+publication. It carries actual custody, wear, coverage and posture; selected
+intentions remain subjective context. Consumers recheck the saved input, active
+attempt, scene, clock and refreshed owner facts before using it. Repeated receipt
+bindings use `request_control_ref`; the complete canonical receipts stay intact.
+Current command condition fields remain exact. Optional background condition
+details have a shared 2,048-character projection budget with explicit omission
+counts; this does not remove conditions or history from storage.
+
+Story-facing receipts retain operation identity and status while omitting private,
+covered or unavailable effect fields. A concealed target does not become public
+because a command named it. Without a valid public frame, effect details are
+explicitly unavailable. An omission is neither a failed operation nor evidence
+from which to invent a missing effect. Mechanical reconciliation continues to use
+the complete validated owner receipts.
 
 A missing or failed staging extraction preserves still-valid earlier command
 facts when the current cast is known. It keeps their original sources and does
 not lock them against supported later changes. Scene, presence, position and
 target checks still discard stale relations; no additional model request is used.
+
+In the existing staging extraction, `SceneDelta.entity_id` is the affected person,
+while optional `performer_id` and `cause` identify a separate external performer
+and a supplied current source. A resolved player effect cites a saved
+`current_player_action` passage; another NPC's effect cites its current targeted
+`interact` operation. That receipt proves the performer's attempt, not target
+success: the separate current-narration proposal must classify the consequence
+as `resolved_external_effect`. Self, missing, stale, unrelated and unresolved
+sources cannot add controlled pose fields. Source handles are captured before
+and rechecked after the same extraction call. No-op echoes preserve their
+original owner proof. Accepted causes retain separate provenance for copy,
+retraction and rewind; a missing cause source becomes unconfirmed.
+
+This is source and ownership control, not a general physics adjudicator. The
+model can still misclassify what the prose means. Unsupported world causes remain
+unconfirmed rather than borrowing a room or actor ID as proof; already committed
+canonical external effects remain valid. A genuine external update or another
+actor's movement can invalidate an older spatial relation without restoring that
+relation merely because it once came from a command.
 
 Command property provenance is explicitly `command`, anchored to the saved input
 with a host-issued operation identity and request hash. It is never labeled as
@@ -133,6 +170,26 @@ The existing recovery snapshot restores command effects after cancellation, and
 Undo restores their canonical owner state. Session copies remap condition input
 anchors; a missing source becomes explicitly unavailable while the saved fact
 remains. Old source serialization omits the new absent command proof.
+
+Completed replies also retain their source-time controlled actor IDs on the
+existing hash-, revision- and scene-bound recovery envelope. An approved empty
+plan retains that ownership. Later narration recovery cannot execute a new
+command-owned movement or clothing change merely by quoting that reply. An exact
+current clothing echo is a no-op and preserves the original owner's proof.
+Older replies without this additive marker retain their legacy recovery rules;
+present-day settings do not invent historical command ownership. Normal marked
+replies do not create background catch-up work. Source-control metadata is frozen
+before inference and revalidated with the saved source. Historical echoes must
+match actual location, presence and local placement, including explicit clears.
+
+Wardrobe assessment is item-specific. Establishing one garment's placement leaves
+other unassessed garments unknown; a confirmed carried item retains that fact
+across save/reload and the next input. Partial profiles use bounded
+`unassessed_wear_item_ids`, omitted when empty. A missing outfit baseline also
+keeps `wear_assessment_complete=false`, independently of the known item placements.
+Unknown layers conservatively limit visible clothing and body surfaces. Existing
+complete version-1 profiles retain the omitted `true` default and the 32-item worn
+limit is unchanged.
 
 This interface does not provide an arbitrary physical or emotional state setter.
 Internal appraisal, attempted emotional regulation and visible expression remain

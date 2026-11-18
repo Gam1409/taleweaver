@@ -7,21 +7,15 @@ from uuid import NAMESPACE_URL, uuid5
 
 from backend.core.text_evidence import require_span
 from backend.engine.clothing.classification import classify_action
-from backend.engine.clothing.equipment_view import display_slots
-from backend.engine.clothing.profiles import (
-    load_profile,
-    owned_items,
-    validate_profile,
-)
-from backend.engine.clothing.schema import VisualProfile, WornItem
-from backend.engine.item_logic import normalize_equipment_keys
 from backend.engine.narrated_items import transitions
+from backend.engine.narrated_items.actor_items import receive as _receive
+from backend.engine.narrated_items.actor_items import remove as _remove
 from backend.engine.narrated_items.errors import ItemFailure, ItemPolicyError
 from backend.engine.narrated_items.observations import CURRENT_BASES, validate_observation
 from backend.engine.narrated_items.participants import resolve_participants
 from backend.engine.narrated_items.schema import ItemAction, ItemExtraction
-from backend.engine.narrated_items.wear import placement, unchanged_observation, validate_wear
-from backend.engine.visual_novel.continuity import PLAYER, SCENE, Possessions
+from backend.engine.narrated_items.wear import placement, unchanged_observation
+from backend.engine.visual_novel.continuity import SCENE, Possessions
 
 
 def _id(item: Any) -> Any:
@@ -63,76 +57,6 @@ def _new_item(
             clothing_origin=origin,
         )
     return item
-
-
-def _remove(actor: dict, item_id: str) -> None:
-    actor["inventory"] = [item for item in actor["inventory"] if _id(item) != item_id]
-    actor["resolved_inventory"] = [
-        item for item in actor["resolved_inventory"] if _id(item) != item_id
-    ]
-    actor["equipment"] = {
-        slot: None if _id(item) == item_id else item for slot, item in actor["equipment"].items()
-    }
-    raw = actor.get("visual_profile")
-    if raw and load_profile(raw) is None:
-        raise ValueError("Invalid appearance profile; item transfer requires review.")
-    if raw:
-        actor["visual_profile"]["worn"] = [
-            w for w in raw.get("worn", []) if w["item_id"] != item_id
-        ]
-
-
-def _equip_worn(actor: dict, item: dict, preferred_slot: str | None) -> None:
-    supplied = item.get("wearable_slots") or []
-    supplied = [supplied] if isinstance(supplied, str) else supplied
-    slots = [slot for raw in supplied for slot in display_slots([raw], [])]
-    preferred = display_slots(preferred_slot, [])
-    if preferred and preferred[0] in slots:
-        slots.insert(0, preferred[0])
-    equipment = normalize_equipment_keys(actor["equipment"])
-    slot = next((slot for slot in slots if not equipment.get(slot)), None)
-    if slot is None:
-        return
-    actor["equipment"][slot] = deepcopy(item)
-    # Player equipment owns its item, matching slash equip/unequip semantics.
-    actor["inventory"] = [row for row in actor["inventory"] if _id(row) != item["id"]]
-
-
-def _receive(
-    actor: dict,
-    item: dict,
-    disposition: str,
-    detailed: bool,
-    worn: WornItem | None = None,
-    preferred_slot: str | None = None,
-) -> None:
-    identifier = item["id"]
-    owned = owned_items(actor["inventory"], equipment=actor["equipment"])
-    if identifier not in owned or not any(_id(row) == identifier for row in actor["inventory"]):
-        actor["inventory"].append(deepcopy(item))
-    actor["resolved_inventory"] = [
-        row for row in actor["resolved_inventory"] if _id(row) != identifier
-    ] + [deepcopy(item)]
-    if disposition != "worn":
-        return
-    raw = actor.get("visual_profile")
-    profile = load_profile(raw)
-    if profile is None and not raw:
-        profile = VisualProfile()
-        profile.appearance.age_years = actor.get("age_years")
-    if profile is None or worn is None:
-        raise ValueError(
-            "Wearing requires valid garment metadata and an existing appearance profile."
-        )
-    validate_wear(actor, item, profile, worn, detailed)
-    if identifier not in {entry.item_id for entry in profile.worn}:
-        profile.worn.append(worn)
-    actor["visual_profile"] = validate_profile(
-        profile.model_dump(), actor["resolved_inventory"], equipment=actor["equipment"]
-    ).model_dump()
-    # Clothing layers coexist in worn; receiving an item never equips it as a weapon.
-    if actor["id"] == PLAYER and worn.attachment_slot is None:
-        _equip_worn(actor, item, preferred_slot)
 
 
 def _resolve(

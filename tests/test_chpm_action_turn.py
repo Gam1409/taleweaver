@@ -38,7 +38,9 @@ def test_fallback_keeps_applied_world_effects_after_abandoning_psychological_pro
     bind_turn(SimpleNamespace(game_id="session", _vn_player_message_id="input"), current)
     continuation.activate(current, "review_unavailable")
     content = continuation.contract(current)
-    assert "authoritative_command_outcomes" in content and "KEY" in content
+    assert "authoritative_command_outcomes" in content and '"status":"applied"' in content
+    assert "public_view_unavailable" in content and "KEY" not in content
+    assert current.action_outcomes["NPC"][0]["effect"]["item_id"] == "KEY"
     assert "before_command_publication" in content
     assert current.decisions == {}
 

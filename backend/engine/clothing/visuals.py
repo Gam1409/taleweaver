@@ -95,9 +95,17 @@ def detailed_for_state(state: Any) -> bool:
     return clothing_settings(snapshot.get("original_manifest"))["detailed"]
 
 
-async def session_objects(db: AsyncSession, session_id: str) -> list[WorldEntity]:
+async def session_objects(
+    db: AsyncSession, session_id: str, *, refresh: bool = False
+) -> list[WorldEntity]:
     return list(
-        (await db.scalars(select(WorldEntity).where(WorldEntity.session_id == session_id))).all()
+        (
+            await db.scalars(
+                select(WorldEntity)
+                .where(WorldEntity.session_id == session_id)
+                .execution_options(populate_existing=refresh)
+            )
+        ).all()
     )
 
 

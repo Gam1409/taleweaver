@@ -13,7 +13,12 @@ class SkippedCheck:
     def details(self) -> dict:
         return asdict(self)
 
-    def message(self) -> str:
+    def message(self, *, independent_items: int = 0) -> str:
+        if independent_items:
+            return (
+                f"Item reconciliation needs review: {self.reason} "
+                f"The rejected changes were not applied; {independent_items} independent item changes were preserved."
+            )
         return (
             f"Item reconciliation needs review: {self.reason} "
             "No additional inventory changes were applied."

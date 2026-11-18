@@ -8,6 +8,7 @@ from backend.core.llm_completion_capture import capture_completions
 from backend.core.llm_router import GameMasterLLM
 from backend.engine.chpm import continuation, inference
 from backend.engine.chpm.errors import ChpmError
+from backend.engine.npc_actions import execution_frame
 from backend.engine.npc_presentation.runtime import clean_candidate, output_reminder
 
 if TYPE_CHECKING:
@@ -22,6 +23,7 @@ async def generate(
     narration_messages: list[dict[str, str]] | None = None,
     ordinary_context: str = "",
 ) -> str:
+    await execution_frame.ensure_current(manager, turn)
     if turn.usage.fallback_requests:
         raise ChpmError("The single ordinary RP continuation was already used.")
     turn.usage.fallback_requests = 1
@@ -67,4 +69,5 @@ async def generate(
         result = clean_candidate(manager, result)
     if not isinstance(result, str) or not result.strip():
         raise ChpmError("The narrator could not produce the ordinary RP continuation.")
+    await execution_frame.ensure_current(manager, turn)
     return result

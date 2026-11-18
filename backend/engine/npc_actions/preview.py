@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Literal
 from backend.engine import turn_controls
 from backend.engine.clothing.changes import preview as wardrobe_preview
 from backend.engine.clothing.profiles import garment_for_item
-from backend.engine.clothing.projection import known_worn_item_ids
+from backend.engine.clothing.projection import item_wear_state
 from backend.engine.narrated_items.commands import carried_after, transfer
 from backend.engine.npc_actions import control
 from backend.engine.npc_actions.contracts import (
@@ -59,6 +59,7 @@ class Scope:
     staging_enabled: bool = False
     observation: "Observation | None" = None
     control: dict = field(default_factory=dict)
+    public_item_ids: frozenset[str] = frozenset()
 
 
 @dataclass
@@ -129,10 +130,17 @@ class Draft:
         if any(garment_for_item(self._possessions.items[key]) is not None for key in reachable):
             names.update({"wear_item", "take_off_item", "adjust_clothing"})
         actor = self._actors[self.scope.actor_id]
-        worn = known_worn_item_ids(
-            actor["visual_profile"], actor["resolved_inventory"], equipment=actor["equipment"]
-        )
-        if worn:
+        if any(
+            owner == self.scope.actor_id
+            and item_wear_state(
+                actor["visual_profile"],
+                actor["resolved_inventory"],
+                key,
+                equipment=actor["equipment"],
+            )
+            == "worn"
+            for key, owner in self._possessions.owners.items()
+        ):
             names.update({"take_off_item", "adjust_clothing"})
         return names
 

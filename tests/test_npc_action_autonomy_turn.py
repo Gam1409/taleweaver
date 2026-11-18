@@ -11,6 +11,7 @@ from backend.engine.chpm.schema import KernelState, Settings
 from backend.engine.chpm.semantic_choice import previous_context
 from backend.engine.chpm.state import KEY, load
 from backend.engine.gameplay.manager import GameTurnManager
+from backend.engine.narrated_items.runtime import KEY as ITEMS_KEY
 from backend.engine.narrated_items.schema import ItemExtraction
 from backend.engine.scene_staging import props
 from backend.models.chat import ChatMessage
@@ -221,6 +222,29 @@ async def test_autonomous_departure_uses_access_rules_and_never_takes_player_alo
         assert destination == (origin if locked else "ANNEX")
         assert state.current_scene_id == origin and avatar.inventory == inventory
         assert len(roles.calls) == (2 if mode == "live" else 3)
+        reply = await db.scalar(
+            select(ChatMessage).where(
+                ChatMessage.session_id == state.session_id,
+                ChatMessage.role == "assistant",
+                ChatMessage.content == text,
+            )
+        )
+        assert reply is not None
+        movement = state.entity_states[ITEMS_KEY]["movement_check"]
+        assert (movement["message_id"], movement["revision_id"]) == (reply.id, reply.revision_id)
+        assert [(row["actor_id"], row["status"]) for row in movement["outcomes"]] == [
+            ("LINA", "blocked" if locked else "applied")
+        ]
+        # Legacy turn success reports processing, not certification of every prose claim.
+        # The existing fail-safe must expose a rejected move and retain its qualification.
+        warnings = [
+            event
+            for event in events
+            if event.startswith("event: system") and "narrated movements need review" in event
+        ]
+        assert bool(warnings) is locked
+        assert bool(movement["rejected"]) is locked
+        assert bool(movement["accepted"]) is not locked
         if mode == "live":
             saved = load(state)
             decision = saved.actors["LINA"]

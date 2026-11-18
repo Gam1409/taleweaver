@@ -38,6 +38,21 @@ OUTCOMES = {
         },
     ]
 }
+WITHHELD_OUTCOMES = {
+    "npc": [
+        {
+            "index": index,
+            "tool": tool,
+            "status": "applied",
+            "effect": {},
+            "effect_omitted": {
+                "fields": ["destination_owner", "item_id", "source_owner"],
+                "reason": "public_view_unavailable",
+            },
+        }
+        for index, tool in enumerate(("take_item", "give_item"))
+    ]
+}
 
 
 def command_turn(outcomes=OUTCOMES):
@@ -55,7 +70,7 @@ def effects(outcomes):
             {
                 key: value
                 for key, value in row.items()
-                if key in {"index", "tool", "status", "effect"}
+                if key in {"index", "tool", "status", "effect", "effect_omitted"}
             }
             for row in rows
         ]
@@ -63,12 +78,12 @@ def effects(outcomes):
     }
 
 
-def test_original_narrator_marks_resolution_before_publication_without_rewriting_receipts():
+def test_original_narrator_marks_resolution_and_withholds_unobserved_receipt_details():
     turn = command_turn()
     data = runtime.contract_data(turn)
     assert "before_command_publication" in data["npc"]["observation_time"]
     assert "host resolution" in data["npc"]["observation_time"]
-    assert effects({"npc": data["npc"]["authoritative_command_outcomes"]}) == OUTCOMES
+    assert effects({"npc": data["npc"]["authoritative_command_outcomes"]}) == WITHHELD_OUTCOMES
     assert instructions.NARRATION in runtime.contract(turn)
     assert instructions.RESOLUTION_CHRONOLOGY in runtime.contract(turn)
     assert effects(turn.action_outcomes) == OUTCOMES
@@ -89,10 +104,11 @@ async def test_actual_review_request_and_preflight_use_the_same_owner_chronology
         assert payload["host_resolution_time"] == "before_command_publication"
         assert (
             effects({"npc": payload["contract"]["npc"]["authoritative_command_outcomes"]})
-            == OUTCOMES
+            == WITHHELD_OUTCOMES
         )
         assert instructions.RESOLUTION_CHRONOLOGY in instruction
-        assert instructions.NARRATION not in instruction
+        assert instructions.NARRATION in instruction
+        assert instruction.count(instructions.EXECUTION) == 1
         return passages.Review(
             matches=True,
             evidence=[{"actor_id": "npc", "passage_id": next(iter(payload["passages"]))}],
@@ -121,8 +137,9 @@ def test_repair_retains_exact_earlier_failure_and_marks_its_time_in_both_paths(e
     if not embedded:
         assert (
             effects({"npc": payload["dialogue_contract"]["npc"]["authoritative_command_outcomes"]})
-            == OUTCOMES
+            == WITHHELD_OUTCOMES
         )
+    assert effects(turn.action_outcomes) == OUTCOMES
 
 
 @pytest.mark.parametrize(

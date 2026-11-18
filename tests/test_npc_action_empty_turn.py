@@ -215,7 +215,7 @@ async def test_empty_actor_context_preserves_other_published_results(status):
         assert EMPTY_GUIDANCE in instructions.resolution_instructions(supplied)
         nonempty = {"SECOND": supplied["SECOND"]}
         assert instructions.for_outcomes(nonempty) == instructions.NARRATION
-        assert instructions.resolution_instructions(nonempty) == instructions.RESOLUTION_CHRONOLOGY
+        assert instructions.resolution_instructions(nonempty) == instructions.NARRATION
 
 
 @pytest.mark.parametrize(

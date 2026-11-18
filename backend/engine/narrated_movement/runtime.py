@@ -11,6 +11,7 @@ from sqlalchemy import select
 
 from backend.core.engine_detailed_trace import step
 from backend.core.state_rejection_trace import reject
+from backend.engine import turn_controls
 from backend.engine.clothing.visuals import session_objects
 from backend.engine.gameplay.turn_state_applier import TurnStateApplier
 from backend.engine.narrated_movement.context import context
@@ -31,6 +32,9 @@ class Pending:
     denied: frozenset[str] = frozenset()
     outcomes: list[MovementOutcome] = field(default_factory=list)
     confirmed: bool = True
+    original_count: int = 0
+    command_control: dict = field(default_factory=dict)
+    command_outcomes: list[MovementOutcome] = field(default_factory=list)
 
 
 async def prepare(manager: Any, rows: list[Any], narration: str) -> dict:
@@ -49,6 +53,66 @@ async def prepare(manager: Any, rows: list[Any], narration: str) -> dict:
     )
     manager._pending_narrated_movement = Pending(before, narration, player_message or "")
     return {**before, "current_player_message": player_message or ""}
+
+
+def exclude_commands(
+    manager: Any, proposals: list[dict], *, original_count: int, control: dict
+) -> None:
+    """Retain final command denials in the existing owner, never during a correction preview."""
+    pending = getattr(manager, "_pending_narrated_movement", None)
+    if not isinstance(pending, Pending) or not turn_controls.bind_current(manager, control):
+        return
+    pending.original_count = original_count
+    pending.command_control = deepcopy(control)
+    pending.command_outcomes = (
+        [
+            outcome
+            for row in proposals
+            if row.get("basis") == "completed"
+            and (outcome := receipt(row, pending.narration, "blocked")) is not None
+        ]
+        if len(proposals) <= original_count <= MAX_MOVEMENTS
+        else []
+    )
+
+
+def _command_current(manager: Any, pending: Pending, message: Any, scene_id: str | None) -> bool:
+    return (
+        message.content == pending.narration
+        and message.session_id == manager.game_id
+        and message.role == "assistant"
+        and (scene_id or pending.before["scene_id"]) == manager.state.current_scene_id
+        and turn_controls.bind_current(manager, pending.command_control)
+    )
+
+
+async def _command_outcomes(
+    manager: Any, pending: Pending, message: Any, scene_id: str | None
+) -> list[MovementOutcome]:
+    if not pending.command_outcomes or not _command_current(manager, pending, message, scene_id):
+        return []
+    binding = turn_controls.binding(pending.command_control)
+    source = await manager.db.scalar(
+        select(ChatMessage)
+        .where(
+            ChatMessage.id == binding.input_id,
+            ChatMessage.session_id == manager.game_id,
+            ChatMessage.role == "user",
+        )
+        .execution_options(populate_existing=True)
+    )
+    if (
+        source is None
+        or source.revision_id != binding.input_revision
+        or sha256(source.content.encode()).hexdigest() != binding.input_hash
+        or not _command_current(manager, pending, message, scene_id)
+    ):
+        return []
+    return pending.command_outcomes
+
+
+def _batch_size(pending: Pending) -> int:
+    return max(pending.original_count, len(pending.proposals or []) + len(pending.command_outcomes))
 
 
 def complete(
@@ -76,12 +140,18 @@ def complete(
 async def finish(manager: Any, message: Any) -> list[str]:
     pending = getattr(manager, "_pending_narrated_movement", None)
     manager._pending_narrated_movement = None
-    if not isinstance(pending, Pending) or pending.proposals is None:
+    if not isinstance(pending, Pending):
         return []
+    if pending.proposals is None:
+        return (
+            await _review(manager, message, [], [], pending=pending)
+            if pending.command_outcomes
+            else []
+        )
     if not pending.confirmed:
-        return await _review(manager, message, [], [], _unconfirmed(pending))
-    if not pending.proposals:
-        return await _review(manager, message, [], [])
+        return await _review(manager, message, [], [], _unconfirmed(pending), pending=pending)
+    if not pending.proposals and _batch_size(pending) <= MAX_MOVEMENTS:
+        return await _review(manager, message, [], [], pending=pending)
     rows = await session_objects(manager.db, manager.state.session_id)
     current_context = await context(manager, rows) if pending.narration == message.content else None
     if pending.narration != message.content or pending.before != current_context:
@@ -104,20 +174,32 @@ async def finish(manager: Any, message: Any) -> list[str]:
             [],
             ["The movement source state changed during extraction."],
             _unconfirmed(pending),
+            pending=pending,
         )
     event, accepted, errors = _event(pending)
     applied = await TurnStateApplier(manager).apply_narrated_movement(event) if accepted else []
     if manager.state.current_scene_id != pending.before["scene_id"]:
         message.scene_id = manager.state.current_scene_id
         await follow_transition(manager)
-    return [*applied, *await _review(manager, message, accepted, errors, pending.outcomes)]
+    return [
+        *applied,
+        *await _review(
+            manager,
+            message,
+            accepted,
+            errors,
+            pending.outcomes,
+            pending=pending,
+            scene_id=event.new_scene_id,
+        ),
+    ]
 
 
 def _event(pending: Pending) -> tuple[GameEvent, list[dict], list[str]]:
     event, accepted, errors = GameEvent(), [], []
     pending.outcomes.clear()
     entries = pending.proposals or []
-    if len(entries) > MAX_MOVEMENTS:
+    if _batch_size(pending) > MAX_MOVEMENTS:
         reject(
             "movement",
             "narrated_movement.batch_limit",
@@ -186,7 +268,7 @@ def _event(pending: Pending) -> tuple[GameEvent, list[dict], list[str]]:
 
 
 def _unconfirmed(pending: Pending) -> list[MovementOutcome]:
-    if len(pending.proposals or []) > MAX_MOVEMENTS:
+    if _batch_size(pending) > MAX_MOVEMENTS:
         return []
     return [
         outcome
@@ -216,9 +298,16 @@ async def _review(
     accepted: list[dict],
     errors: list[str],
     outcomes: list[MovementOutcome] | None = None,
+    *,
+    pending: Pending | None = None,
+    scene_id: str | None = None,
 ) -> list[str]:
     from backend.engine.narrated_items.runtime import KEY
 
+    command_outcomes = (
+        await _command_outcomes(manager, pending, message, scene_id) if pending is not None else []
+    )
+    outcomes = command_outcomes + (outcomes or [])
     states = manager.state.entity_states or {}
     check = states.get(KEY)
     if isinstance(check, dict):

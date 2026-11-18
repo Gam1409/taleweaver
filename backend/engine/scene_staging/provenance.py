@@ -49,11 +49,16 @@ def _prune_actor(actor: dict, invalid: Callable[[dict], bool]) -> bool:
     affected = [
         field
         for field in ("posture", "placement", "command")
-        if isinstance(actor.get(field), dict) and invalid(actor[field])
+        if isinstance(actor.get(field), dict) and _invalid_source(actor[field], invalid)
     ]
     for field in affected:
         actor.pop(field)
     return bool(affected) and not _actor_facts(actor)
+
+
+def _invalid_source(fact: dict, invalid: Callable[[dict], bool]) -> bool:
+    cause = fact.get("cause")
+    return invalid(fact) or isinstance(cause, dict) and invalid(cause)
 
 
 def _prune(data: dict, invalid: Callable[[dict], bool]) -> None:
@@ -103,7 +108,9 @@ def remap(entity_states: dict, message_ids: dict[str, str]) -> dict:
     if not isinstance(data, dict):
         return result
     _prune(data, lambda fact: fact.get("source_message_id") not in message_ids)
-    for source in _facts(data):
+    facts = _facts(data)
+    sources = [*facts, *[fact["cause"] for fact in facts if isinstance(fact.get("cause"), dict)]]
+    for source in {id(value): value for value in sources}.values():
         source["source_message_id"] = message_ids[source["source_message_id"]]
     source_id = message_ids.get(data.get("source_message_id", ""))
     if not source_id:

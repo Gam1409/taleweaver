@@ -16,8 +16,10 @@ INSTRUCTIONS = """
 command_owned_fields identifies pose/placement fields already applied by the host
 in this turn. Leave those fields unchanged; do not reconstruct, clear or repeat
 them from prose. The current saved value, including an explicitly cleared value,
-is authoritative. Other actors and unlisted fields remain eligible for supported
-changes. This does not freeze clothing, body conditions, emotion or environment.
+is authoritative. Separately resolved external_pose_sources may supersede those
+fields through the staging owner. Other actors and unlisted fields remain eligible
+under their source checks. This does not freeze clothing, body conditions, emotion
+or environment.
 """
 
 
@@ -157,6 +159,23 @@ def filter_changes(
     return extraction.model_copy(update={"changes": changes})
 
 
+def excluding(
+    protected: dict[str, ProtectedActor], external: dict[str, set[str]]
+) -> dict[str, ProtectedActor]:
+    """A separately resolved external consequence keeps its staging owner authority."""
+    return {
+        actor: ProtectedActor(fields, record.origin, record.command)
+        for actor, record in protected.items()
+        if (
+            fields := {
+                name: value
+                for name, value in record.fields.items()
+                if name not in external.get(actor, set())
+            }
+        )
+    }
+
+
 def restore(result: dict, protected: dict[str, ProtectedActor]) -> dict:
     if not protected:
         return result
@@ -165,6 +184,8 @@ def restore(result: dict, protected: dict[str, ProtectedActor]) -> dict:
     for actor, record in protected.items():
         row = actors.setdefault(actor, {"origin": record.origin})
         for name, fact in record.fields.items():
+            if name == "placement" and actor in value.get("invalidated_placements", ()):
+                continue
             if fact is None:
                 row.pop(name, None)
             else:

@@ -30,6 +30,12 @@ def _facts(context: dict, detailed: bool) -> dict:
             "worn_item_ids": [
                 row["item_id"] for row in worn if isinstance(row, dict) and "item_id" in row
             ],
+            "unassessed_wear_item_ids": profile.get("unassessed_wear_item_ids", [])
+            if isinstance(profile, dict)
+            else None,
+            "wear_assessment_complete": profile.get("wear_assessment_complete", True)
+            if isinstance(profile, dict)
+            else False,
             "worn_placements": {
                 row["item_id"]: row.get("uncovered_regions", [])
                 for row in worn

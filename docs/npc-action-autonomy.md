@@ -58,8 +58,11 @@ The movement owner now emits bounded receipts for source-valid proposals. Each
 receipt binds the exact assistant message, revision, hash and text occurrence;
 it contains only an actor ID, cited movement and `applied`, `blocked` or
 `unconfirmed`. It does not expose private rule reasons or prescribe a next action.
-Only a concrete access/capability denial is `blocked`. Invalid, ambiguous or
-stale proposals are `unconfirmed`, not fictional failed attempts.
+An access, capability or command-authority denial is `blocked`. Invalid, ambiguous
+or stale proposals are `unconfirmed`, not fictional failed attempts. Command
+reconciliation preserves source-valid excluded occurrences through this same
+owner before filtering them from physical application. A later history reference
+cannot turn that retained denial into a new successful action.
 
 The reviewer preserves the selected passage's offsets, including repeated words.
 The original action quote remains unchanged. Its qualification travels with short
@@ -76,6 +79,12 @@ threads, valid world mutations and speech remain. Separating those effects more
 finely requires better evidence. No extra model request or late prose rewrite is
 introduced, so an inconsistent original narration may still be visible beside the
 existing state-review notice.
+
+Legacy turn success means processing completed; it does not certify every claim
+in already generated prose. The locked-route regression checks the source-bound
+blocked receipt and visible review notice separately from successful turn
+delivery. Command-owned narration additionally uses the shared current execution
+frame and retains source-time command ownership for later recovery.
 
 Receipts cover movement proposals with usable source evidence. An omitted section,
 whole extraction failure, oversized batch, invalid citation or absent receipt does

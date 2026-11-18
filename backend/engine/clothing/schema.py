@@ -18,6 +18,8 @@ from backend.engine.clothing.body_schema import BodyLayout, BodySlot, WearSource
 
 Region = Literal["head", "torso", "arms", "pelvis", "legs", "feet", "hands"]
 REGIONS: tuple[Region, ...] = ("head", "torso", "arms", "pelvis", "legs", "feet", "hands")
+# Four times the 32 worn-item limit, with at most 12,800 canonical ID characters.
+MAX_UNASSESSED_WEAR_ITEMS = 128
 
 
 class _VisualModel(BaseModel):
@@ -29,6 +31,10 @@ class _VisualModel(BaseModel):
         for key in ("body", "attachment_slot", "source"):
             if key in result and result[key] is None:
                 result.pop(key)
+        if not result.get("unassessed_wear_item_ids"):
+            result.pop("unassessed_wear_item_ids", None)
+        if result.get("wear_assessment_complete") is True:
+            result.pop("wear_assessment_complete")
         return result
 
 
@@ -84,6 +90,19 @@ class VisualProfile(_VisualModel):
     appearance: Appearance = Field(default_factory=Appearance)
     worn: list[WornItem] = Field(default_factory=list, max_length=32)
     body: BodyLayout | None = None
+    wear_assessment_complete: StrictBool = True
+    unassessed_wear_item_ids: list[Annotated[str, Field(min_length=1, max_length=100)]] = Field(
+        default_factory=list, max_length=MAX_UNASSESSED_WEAR_ITEMS
+    )
+
+    @model_validator(mode="after")
+    def distinct_assessments(self) -> "VisualProfile":
+        unresolved = self.unassessed_wear_item_ids
+        if len(unresolved) != len(set(unresolved)):
+            raise ValueError("Unassessed garment references must be unique.")
+        if set(unresolved) & {row.item_id for row in self.worn}:
+            raise ValueError("An item cannot be both worn and unassessed.")
+        return self
 
     @field_validator("worn")
     @classmethod

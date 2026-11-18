@@ -81,6 +81,55 @@ def garment_for_item(item: dict) -> Garment | None:
     return Garment.model_validate(sanitized) if sanitized is not None else None
 
 
+def potentially_wearable(item: dict) -> bool:
+    """Invalid or unresolved garment metadata cannot establish that an item is carried."""
+    metadata = item.get("metadata_json")
+    return bool(
+        "clothing" in item
+        or isinstance(metadata, dict)
+        and "clothing" in metadata
+        or item.get("wearable_slots")
+        or str(item.get("item_type", "")).upper() in {"WEARABLE", "CLOTHING"}
+        or set(item) == {"id"}
+    )
+
+
+def equipped_garment_ids(items: dict[str, dict], equipment: Any) -> set[str]:
+    """Only an owned garment can obtain wear knowledge from legacy equipment."""
+    values = equipment.values() if isinstance(equipment, dict) else []
+    identifiers = {
+        key
+        for value in values
+        if isinstance(key := value.get("id") if isinstance(value, dict) else value, str)
+    }
+    return {key for key in items if key in identifiers and garment_for_item(items[key]) is not None}
+
+
+def placement_profile(
+    raw: Any, inventory: Any, item_id: str, *, equipment: Any = None
+) -> VisualProfile:
+    """Establish one item's placement without assessing the rest of a missing wardrobe."""
+    profile = load_profile(raw)
+    if profile is None and raw:
+        raise ValueError("Unsupported visual profile was preserved.")
+    items = owned_items(inventory, equipment=equipment)
+    if profile is None:
+        equipped = equipped_garment_ids(items, equipment)
+        # Validate the complete bounded collection before any caller overwrites state.
+        profile = VisualProfile(
+            wear_assessment_complete=False,
+            unassessed_wear_item_ids=sorted(
+                key
+                for key, item in items.items()
+                if key != item_id and key not in equipped and potentially_wearable(item)
+            ),
+        )
+    profile.unassessed_wear_item_ids = [
+        key for key in profile.unassessed_wear_item_ids if key in items and key != item_id
+    ]
+    return profile
+
+
 def attachment_item_allowed(item: dict) -> bool:
     """Clothing and malformed garment metadata cannot be relabelled as a body object."""
     garment = garment_for_item(item)
@@ -128,8 +177,12 @@ def _sanitize_item_clothing(item: dict) -> None:
 
 
 def validate_profile(raw: Any, inventory: Any, *, equipment: Any = None) -> VisualProfile:
-    profile = VisualProfile.model_validate(raw)
+    profile = VisualProfile.model_validate(
+        raw.model_dump() if isinstance(raw, VisualProfile) else raw
+    )
     items = owned_items(inventory, equipment=equipment)
+    if set(profile.unassessed_wear_item_ids) - items.keys():
+        raise ValueError("Unassessed garments must belong to this character.")
     for worn in profile.worn:
         if worn.item_id not in items:
             raise ValueError("Worn garments must belong to this character.")
@@ -159,6 +212,26 @@ def reasoning_profile(raw: Any) -> dict | None:
     return result
 
 
+def without_item(raw: Any, item_id: str) -> Any:
+    """Custody loss prunes only schema-defined placement references for the lost item."""
+    result = deepcopy(raw)
+    if not isinstance(result, dict):
+        return result
+    if isinstance(result.get("worn"), list):
+        result["worn"] = [
+            row
+            for row in result["worn"]
+            if not isinstance(row, dict) or row.get("item_id") != item_id
+        ]
+    if isinstance(result.get("unassessed_wear_item_ids"), list):
+        unresolved = [key for key in result["unassessed_wear_item_ids"] if key != item_id]
+        if unresolved:
+            result["unassessed_wear_item_ids"] = unresolved
+        else:
+            result.pop("unassessed_wear_item_ids")
+    return result
+
+
 def reconcile_profile(raw: Any, inventory: Any, *, equipment: Any = None) -> dict | None:
     """Clear lost possessions; keep unknown owned coverage conservative until repaired."""
     profile = load_profile(raw)
@@ -174,4 +247,7 @@ def reconcile_profile(raw: Any, inventory: Any, *, equipment: Any = None) -> dic
             worn.uncovered_regions = [r for r in worn.uncovered_regions if r in garment.coverage]
         kept.append(worn)
     profile.worn = kept
+    profile.unassessed_wear_item_ids = [
+        key for key in profile.unassessed_wear_item_ids if key in items
+    ]
     return profile.model_dump()

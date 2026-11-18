@@ -26,6 +26,7 @@ from backend.engine.chpm.errors import (
 from backend.engine.chpm.kernel import ChpmError, fingerprint
 from backend.engine.chpm.runtime import Turn, contract_data, current
 from backend.engine.chpm.schema import Verdict
+from backend.engine.npc_actions import execution_frame
 from backend.engine.npc_actions import feedback as command_feedback
 from backend.engine.npc_actions import instructions as command_instructions
 from backend.engine.npc_presentation.runtime import clean_candidate, output_reminder
@@ -198,9 +199,9 @@ async def _review(manager: Any, turn: Turn, text: str, resolution: str) -> Verdi
     from backend.engine.chpm import reports
 
     available = passages.index(text)
-    control, observed = _review_control(manager, turn)
+    control, observed = await _review_control(manager, turn)
     instruction = (
-        prompts.VERIFY
+        prompts.verification(command_owned=bool(turn.action_outcomes))
         + command_instructions.resolution_instructions(turn.action_outcomes)
         + command_feedback.instructions(turn)
     )
@@ -223,7 +224,7 @@ async def _review(manager: Any, turn: Turn, text: str, resolution: str) -> Verdi
         identifiers=identifiers,
     )
     _validate_review_scope(raw, turn, available, text, resolution, payload)
-    _ensure_review_current(manager, control, observed)
+    await _ensure_review_current(manager, control, observed, turn)
     if not raw.matches:
         _reject_review(turn, text, resolution, raw.issues, raw, payload)
         return Verdict(
@@ -284,21 +285,22 @@ def _resolve_review(
     return raw
 
 
-def _review_control(manager: Any, turn: Turn) -> tuple[dict, Any]:
+async def _review_control(manager: Any, turn: Turn) -> tuple[dict, Any]:
     observed = next(iter(turn.decisions.values())).observation
     control = turn_controls.scope(manager, "narration_review", observation=observed)
     if not getattr(turn, "control", None):
         turn.control = control
-    _ensure_review_current(manager, turn.control, observed)
+    await _ensure_review_current(manager, turn.control, observed, turn)
     turn.review_operation = turn_controls.operation(control, "narration_review").model_dump(
         exclude_none=True
     )
     return control, observed
 
 
-def _ensure_review_current(manager: Any, control: dict, observed: Any) -> None:
+async def _ensure_review_current(manager: Any, control: dict, observed: Any, turn: Turn) -> None:
     if not turn_controls.bind_current(manager, control, "narration_review", observation=observed):
         raise StaleControlError("CHPM narration review belongs to an inactive turn attempt.")
+    await execution_frame.ensure_current(manager, turn)
 
 
 def _validate_review_scope(
@@ -430,7 +432,7 @@ def preflight(turn: Turn) -> None:
 def _review_room(turn: Turn) -> int:
     payload = _review_payload(turn, {}, "")
     prompt, content = inference.compose(
-        prompts.VERIFY
+        prompts.verification(command_owned=bool(turn.action_outcomes))
         + command_instructions.resolution_instructions(turn.action_outcomes)
         + command_feedback.instructions(turn),
         payload,
@@ -475,6 +477,7 @@ def _validate_hearing(turn: Turn, verdict: Verdict, text: str) -> None:
 async def _repair(
     manager: Any, turn: Turn, text: str, resolution: str, issues: list[str], system_prompt: str
 ) -> str:
+    await execution_frame.ensure_current(manager, turn)
     system, payload = narration_repair_input.build(
         turn,
         system_prompt + command_feedback.instructions(turn),

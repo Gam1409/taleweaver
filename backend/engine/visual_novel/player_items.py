@@ -225,6 +225,20 @@ def assisted(plan: Any, change: Any, *, creation_ref: int | None = None) -> bool
     )
 
 
+def acquired(plan: Any, change: Any, *, creation_ref: int | None) -> bool:
+    """Read a linked performed player acquisition; this grants no NPC agency or mutation."""
+    if not isinstance(plan, Plan) or plan.error or creation_ref is None:
+        return False
+    return any(
+        action.performer_id == PLAYER
+        and action.basis == "performed"
+        and action.operation == "acquire_garment"
+        and action.target_id == change.actor_id
+        and action.creation_ref == creation_ref
+        for action in plan.actions
+    )
+
+
 def _check_items(plan: Plan, snapshot: Possessions) -> None:
     # Custody/access are preconditions. Descriptive metadata is hydrated from the
     # current owner, so an image update cannot invalidate an otherwise legal action.

@@ -7,7 +7,7 @@ from typing import Any
 from backend.engine.chpm.kernel import ChpmError
 from backend.engine.chpm.schema import Observation
 from backend.engine.clothing.context import actor_records
-from backend.engine.clothing.projection import known_worn_item_ids, visible_character
+from backend.engine.clothing.projection import item_wear_state, visible_character
 from backend.engine.clothing.visuals import detailed_for_state, session_objects
 from backend.engine.physical_conditions.ledger import read
 from backend.engine.physical_conditions.schema import Ledger
@@ -80,10 +80,11 @@ def _profile_view(actor: dict, detailed: bool) -> dict | None:
     )
 
 
-def _worn(actor: dict) -> set[str] | None:
-    return known_worn_item_ids(
+def _wear_state(actor: dict, item_id: str) -> str:
+    return item_wear_state(
         actor.get("visual_profile"),
         actor.get("resolved_inventory"),
+        item_id,
         equipment=actor.get("equipment"),
     )
 
@@ -99,20 +100,14 @@ def _actor_view(identifier: str, actor: dict, visual: dict | None, conditions: l
     }
 
 
-def _item_view(
-    identifier: str, item: dict, owner: str, worn: set[str] | None, conditions: list[dict]
-) -> dict:
+def _item_view(identifier: str, item: dict, owner: str, wear: str, conditions: list[dict]) -> dict:
     return {
         "id": identifier,
         "name": str(item.get("name") or "")[:160],
         "kind": "item",
         "owner_id": _actor_id(owner),
-        "worn_by": _actor_id(owner) if worn is not None and identifier in worn else None,
-        "wear_status": "unknown"
-        if worn is None and owner != SCENE
-        else "worn"
-        if worn and identifier in worn
-        else "not_worn",
+        "worn_by": _actor_id(owner) if wear == "worn" else None,
+        "wear_status": "not_worn" if wear == "carried" else wear,
         "recorded_conditions": conditions,
         **(
             {"spatial_position": item["spatial_position"]}
@@ -122,7 +117,14 @@ def _item_view(
     }
 
 
-def project(manager: Any, rows: list[Any], observer_id: str, observation: Observation) -> View:
+def project(
+    manager: Any,
+    rows: list[Any],
+    observer_id: str,
+    observation: Observation,
+    *,
+    own_facts: bool = True,
+) -> View:
     """Own facts plus public surfaces; no arbitrary metadata, bags or private other minds."""
     state = manager.state
     if (
@@ -152,13 +154,13 @@ def project(manager: Any, rows: list[Any], observer_id: str, observation: Observ
             visual["clothing"] = [
                 item for item in visual["clothing"] if snapshot.owners.get(item["item_id"]) == owner
             ]
-    own = {key for key, owner in snapshot.owners.items() if owner == observer_id}
+    own = {key for key, owner in snapshot.owners.items() if owner == observer_id and own_facts}
     entities = {
         _actor_id(key): _actor_view(
             key,
             actor,
             visuals[key],
-            _conditions(ledger, key, own=key == observer_id, visible=visible),
+            _conditions(ledger, key, own=own_facts and key == observer_id, visible=visible),
         )
         for key, actor in actors.items()
     }
@@ -264,12 +266,12 @@ def _add_items(
             if ledger
             else visible
         )
-        worn = _worn(actors[owner]) if owner in actors else set()
+        wear = _wear_state(actors[owner], identifier) if owner in actors else "carried"
         entities[identifier] = _item_view(
             identifier,
             item,
             owner,
-            worn,
+            wear,
             _conditions(ledger, identifier, own=owned, visible=surfaces),
         )
         entities[identifier]["condition_knowledge"] = "recorded_only" if ledger else "unavailable"

@@ -7,6 +7,7 @@ from sqlalchemy import select
 
 from backend.engine.clothing.actions import GarmentCreation, WardrobeAction
 from backend.engine.clothing.context import actor_records, source_records
+from backend.engine.clothing.plan_sources import PlanSources, capture
 from backend.engine.clothing.profiles import load_profile
 from backend.engine.npc_actions.prepass import defer_wardrobe
 from backend.engine.visual_novel.continuity import PLAYER, possession_snapshot
@@ -20,6 +21,10 @@ class WardrobePlan:
     actions: list[WardrobeAction] = field(default_factory=list)
     creations: list[GarmentCreation] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
+    sources: PlanSources | None = None
+    rejected: list[WardrobeAction | GarmentCreation] = field(default_factory=list)
+    requires_narration: bool = False
+    narrated_gift_indices: set[int] = field(default_factory=set)
 
 
 def _grounded(change: Any, actor: dict, user_msg: str, narration: str) -> bool:
@@ -101,6 +106,7 @@ def validate_plan(
         if valid and change.source != "actor_description":
             plan.actions.append(change)
         else:
+            plan.rejected.append(change)
             plan.errors.append(
                 "A wardrobe change lacked completed action evidence or character agency."
             )
@@ -116,7 +122,17 @@ def validate_plan(
         )
         if valid and not known:
             plan.creations.append(creation)
+            narrated_gift = (
+                creation.acquisition == "gift"
+                and creation.source_evidence
+                not in sources.get(creation.source_id, {}).get("description", "")
+            )
+            plan.requires_narration |= narrated_gift
+            # Use the accepted plan namespace; earlier rejected/deferred proposals
+            # must not shift a gift onto another creation's authored-source proof.
+            plan.narrated_gift_indices.update((len(plan.creations) - 1,) if narrated_gift else ())
         else:
+            plan.rejected.append(creation)
             plan.errors.append(
                 "A new garment lacked an available established source; no clothing was created."
             )
@@ -145,7 +161,7 @@ async def prepare_wardrobe_plan(
         if previous and previous.scene_id == manager.state.current_scene_id
         else ""
     )
-    event._vn_clothing_plan = validate_plan(
+    plan = validate_plan(
         manager,
         proposal,
         user_msg,
@@ -154,3 +170,5 @@ async def prepare_wardrobe_plan(
         scenes,
         item_plan=getattr(event, "_vn_player_item_plan", None),
     )
+    plan.sources = await capture(manager, user_msg, previous)
+    event._vn_clothing_plan = plan

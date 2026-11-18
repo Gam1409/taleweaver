@@ -119,6 +119,7 @@ def reconcile(
     *,
     unconfirmed_actors: set[str] | None = None,
     invalid_changes: int = 0,
+    resolved_sources: dict[str, dict] | None = None,
 ) -> dict:
     """Quotes ground proposals; semantic accuracy still depends on the extractor."""
     known = {person["id"]: person for person in cast}
@@ -160,22 +161,20 @@ def reconcile(
             if change.entity_id in known:
                 uncertain.add(change.entity_id)
             continue
+        previous = _project_actor(actors.get(change.entity_id, {}))
         row = {} if change.clear else actors.get(change.entity_id, {})
-        if (
-            change.clear
-            or placement is not None
-            or (
-                change.posture is not None and change.posture != row.get("posture", {}).get("value")
-            )
-        ):
-            moved.add(change.entity_id)
         if placement is not None:
             explicit_placements.add(change.entity_id)
-        actors[change.entity_id] = _apply_change(row, change, known, source)
+        actors[change.entity_id] = _apply_change(
+            row, change, known, source, (resolved_sources or {}).get(change.entity_id)
+        )
+        # Repeated evidence changes provenance, not the target's actual final position.
+        if _project_actor(actors[change.entity_id]) != previous:
+            moved.add(change.entity_id)
     for actor_id in uncertain:
         actors.pop(actor_id, None)
     moved.update(uncertain)
-    invalidate_relations(actors, moved, explicit_placements)
+    invalidated = invalidate_relations(actors, moved, explicit_placements)
     explicit, explicit_rejected = _validate_explicit(extraction, known, narration, source)
     return {
         "scene_id": state.current_scene_id,
@@ -186,11 +185,16 @@ def reconcile(
         "unconfirmed_actors": sorted(uncertain),
         "explicit": explicit,
         "explicit_rejected": explicit_rejected,
+        **({"invalidated_placements": sorted(invalidated)} if invalidated else {}),
     }
 
 
-def _apply_change(row: dict, change: SceneDelta, known: dict, source: str) -> dict:
+def _apply_change(
+    row: dict, change: SceneDelta, known: dict, source: str, cause: dict | None = None
+) -> dict:
     proof: dict[str, Any] = {"evidence": change.evidence, "source_hash": source}
+    if cause is not None:
+        proof.update(source_kind="external_effect", cause=deepcopy(cause))
     if change.evidence_span is not None:
         proof["evidence_span"] = change.evidence_span.model_dump()
     if change.posture is not None or change.placement is not None:
@@ -233,8 +237,9 @@ def apply_fields(
     return row
 
 
-def invalidate_relations(actors: dict, moved: set[str], explicit_placements: set[str]) -> None:
+def invalidate_relations(actors: dict, moved: set[str], explicit_placements: set[str]) -> set[str]:
     """A new actor position/pose cannot silently preserve another actor's old relation."""
+    invalidated = set()
     for actor_id, row in actors.items():
         placement = row.get("placement", {})
         if (
@@ -243,6 +248,8 @@ def invalidate_relations(actors: dict, moved: set[str], explicit_placements: set
             and placement.get("target") in moved
         ):
             row.pop("placement", None)
+            invalidated.add(actor_id)
+    return invalidated
 
 
 def project(state: Any, cast: list[dict]) -> dict[str, dict]:

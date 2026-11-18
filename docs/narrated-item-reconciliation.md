@@ -25,6 +25,17 @@ unresolved or malformed typed scope retains the global block; it never defaults
 to the player. This scope only excludes affected subjects from independent state
 updates. It grants no custody, completion or evidence authority.
 
+That localized scope can also admit existing items already owned by unrelated,
+present NPCs, including changes to their own clothing. Every step in an item
+chain must avoid the rejected items, participants, player and room custody.
+Missing or empty rejection scope remains fail-closed. New creations and room
+acquisitions remain blocked. Original action indices,
+source checks and the normal ownership validators are retained, including in the
+existing correction preview. Applied independent changes are recorded beside the
+original warning and are not replayed on a retry of the same input.
+The legacy route represents an owned garment on a bench as carried custody plus
+staging placement; this does not add a new transfer-to-scene operation.
+
 The local response parser now preserves independent sections with staging both
 enabled and disabled. With staging disabled, the wire schema and instructions
 still omit staging; the tolerant parser does not enable that feature. Each item
@@ -116,7 +127,18 @@ garment, treatment versus healing, partial cleaning and repeated occurrences.
 They score missed and false updates independently of a model's “all checked” claim.
 Mocked output verifies host behavior; live-model recall remains unmeasured here.
 
-Existing items retain IDs and gameplay metadata. Transfers remove the previous owner's inventory, worn reference and equipment reference, then update the recipient. Receiving or holding does not equip the item. Wearing needs existing appearance and valid garment metadata. Each action is validated against copies before any changes are stored. Reprocessing the same input message is a no-op.
+Existing items retain IDs and gameplay metadata. Transfers remove the previous owner's inventory, worn reference and equipment reference, then update the recipient. Receiving or holding does not equip the item. Wearing needs valid garment metadata and a supported appearance profile; a missing neutral profile can be initialized without assessing the remaining outfit. Each action is validated against copies before any changes are stored. Reprocessing the same input message is a no-op.
+
+When placement is only partly assessed, version-1 profiles retain unresolved owned
+garment IDs in optional `unassessed_wear_item_ids` (at most 128 distinct IDs).
+Establishing one worn or carried item resolves only that item. Confirmed carried
+placement survives reload and later inputs; it does not depend on a previous
+turn's transient receipt. Other garments remain unknown and cannot be transferred
+as if known not to be worn. Unknown layers also conservatively block clothing and
+body visibility. A missing outfit baseline stays unassessed after one placement,
+even when no other canonical garment ID is available. Empty unresolved lists are
+omitted, preserving existing complete profile serialization. Oversized fresh assessments fail before overwriting the
+previous profile rather than truncating unresolved facts.
 
 Completed narration can update the existing worn garment's `uncovered_regions`.
 Partly lowered or partly donned clothing remains `worn`; it is not a completed

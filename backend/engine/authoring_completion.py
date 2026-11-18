@@ -308,6 +308,9 @@ def _apply_outfit(
             inventory.append(_item_record(item))
             owned.add(item.id)
         if item.id not in {worn.item_id for worn in profile.worn}:
+            profile.unassessed_wear_item_ids = [
+                key for key in profile.unassessed_wear_item_ids if key != item.id
+            ]
             profile.worn.append(WornItem(item_id=item.id))
         if isinstance(actor, Avatar):
             _fill_empty_slots(item, equipment)

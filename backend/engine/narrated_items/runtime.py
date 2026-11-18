@@ -152,9 +152,7 @@ async def reconcile_items(
         narration, blocked=blocked, blocked_reason=blocked_reason, limit=MAX_NARRATION
     )
     independent_allowed = (
-        skipped is not None
-        and skipped.reason_code == "rules_rejected"
-        and blocked_targets is not None
+        skipped is not None and skipped.reason_code == "rules_rejected" and bool(blocked_targets)
     )
     if skipped is not None and (
         (not staging_enabled and not independent_allowed) or skipped.reason_code != "rules_rejected"
@@ -203,7 +201,7 @@ async def reconcile_items(
                 manager.state, set(actors) | set(scope.item_ids)
             ),
             "scene_continuity": scene_context,
-            "scene_staging": shared_staging.prepare(manager, actors, rows),
+            "scene_staging": await shared_staging.prepare_context(manager, actors, rows),
             "item_changes_allowed": skipped is None,
             "independent_state_scope": {
                 "blocked_subject_ids": sorted(blocked_targets | {manager.state.current_scene_id})
@@ -239,7 +237,8 @@ async def reconcile_items(
                 if command_reconciliation.context(manager)
                 else ""
             )
-            + (STAGING_INSTRUCTIONS if staging_enabled else ""),
+            + (STAGING_INSTRUCTIONS if staging_enabled else "")
+            + shared_staging.authority_instructions(manager),
             payload,
             catalog,
             game_id=manager.game_id,
@@ -268,28 +267,27 @@ async def reconcile_items(
         original_actions = result.actions if isinstance(result, ItemExtraction) else None
         result, sections = coverage.annotate(result, catalog, sections, staging=staging_enabled)
         result = evidence.bind(result, narration, catalog=catalog)
-        shared_staging.propose(manager, result, unconfirmed_sections=sections.staging_missing)
+        await shared_staging.propose_current(
+            manager, result, unconfirmed_sections=sections.staging_missing
+        )
         extraction, schema_failures, batch_denied, source_indices, command_errors = (
             command_reconciliation.unpack(
                 manager, result, actors, original_actions=original_actions
             )
         )
         failures = list(schema_failures)
-        changed, accepted, errors = (
-            (actors, [], [])
-            if skipped
-            else apply_actions(
-                extraction,
-                actors,
-                snapshot,
-                narration,
-                detailed=detail_settings(manager)["detailed"],
-                session_id=manager.state.session_id,
-                message_id=message_id,
-                failures=failures,
-                source_indices=source_indices,
-                verified_sources=await verified_sources(manager, extraction, actors),
-            )
+        extraction, changed, accepted, errors = await _apply_items(
+            manager,
+            extraction,
+            actors,
+            snapshot,
+            narration,
+            message_id=message_id,
+            failures=failures,
+            source_indices=source_indices,
+            skipped=skipped is not None,
+            independent_allowed=independent_allowed,
+            blocked_targets=blocked_targets,
         )
         errors = [failure.message() for failure in schema_failures] + errors + command_errors
         denied = set(blocked_targets or ()) | set(batch_denied or ())
@@ -346,6 +344,43 @@ async def reconcile_items(
     )
 
 
+async def _apply_items(
+    manager: Any,
+    extraction: ItemExtraction,
+    actors: dict,
+    snapshot: Any,
+    narration: str,
+    *,
+    message_id: str,
+    failures: list[ItemFailure],
+    source_indices: tuple[int, ...] | None,
+    skipped: bool,
+    independent_allowed: bool,
+    blocked_targets: set[str] | None,
+) -> tuple[ItemExtraction, dict, list[dict], list[str]]:
+    if skipped and not independent_allowed:
+        return extraction, actors, [], []
+    excluded: list[ItemFailure] = []
+    if skipped:
+        extraction, source_indices, excluded = independent_state.items(
+            extraction, actors, snapshot, set(blocked_targets or ()), source_indices
+        )
+        failures.extend(excluded)
+    changed, accepted, errors = apply_actions(
+        extraction,
+        actors,
+        snapshot,
+        narration,
+        detailed=detail_settings(manager)["detailed"],
+        session_id=manager.state.session_id,
+        message_id=message_id,
+        failures=failures,
+        source_indices=source_indices,
+        verified_sources=await verified_sources(manager, extraction, actors),
+    )
+    return extraction, changed, accepted, [failure.message() for failure in excluded] + errors
+
+
 def _finish_extraction(
     manager: Any,
     extraction: ItemExtraction,
@@ -387,11 +422,19 @@ def _finish_extraction(
             message_id,
             narration,
             "needs_review",
+            handled=bool(accepted),
             **skipped.details(),
+            accepted=accepted,
+            rejected=errors,
+            rejected_details=[failure.payload() for failure in failures],
             state_updates_rejected=state_rejected,
             **sections.details(),
         )
-        return [skipped.message(), *_state_review(state_rejected), *sections.messages()]
+        return [
+            skipped.message(independent_items=len(accepted)),
+            *_state_review(state_rejected),
+            *sections.messages(),
+        ]
     _status(
         manager,
         message_id,

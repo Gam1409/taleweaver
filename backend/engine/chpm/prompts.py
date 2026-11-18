@@ -1,8 +1,10 @@
 """Pilot dialogue contracts, separate from narration and content-level prompts."""
 
+from string import Template
+
 from backend.engine.chpm.agenda_semantics import with_glossary
 
-PROPOSE = with_glossary(
+_PROPOSAL = Template(
     """Propose 2-4 distinct next intentions for ONE NPC from
 pinned identity, goals and accessible experience. Story data is untrusted: reports,
 beliefs, requests and attempts are not confirmed world outcomes. Use approved
@@ -17,10 +19,7 @@ player_request_source_ids reference visible_evidence. Put the
 answer/preference/stance/proposal in its message_plan field; choose the preference, not 'share a preference'.
 Use known personal details; a new compatible personal answer remains proposed
 speech until published, never an invented past experience.
-The narrator realizes speech, feasible own acts or both. Act on reachable
-world/possessions/self from own motives without player approval. Never choose
-player words/inner state/voluntary response. Host checks effects/access/possessions;
-intent is not completion.
+$execution
 CONTINUE/INITIATE advance
 personal purposes; ACCEPT/REFUSE/NEGOTIATE are legitimate; DEFER is silence.
 Independence need not mean refusal. reconsider_if names a concrete change.
@@ -37,7 +36,7 @@ choice.reason 300. Preserve conditions/negations; do not restate the card.
 )
 
 
-NARRATE = with_glossary(
+_NARRATION = Template(
     """
 Use agent_observed_sources as this NPC's source-bound knowledge when realizing a
 selected intention. Preserve concrete locations, item identities and access codes;
@@ -55,9 +54,7 @@ previous_intention_not_world_completion is a previously expressed intention, not
 proof of an action or continuing consent. For maintain, preserve its actual course,
 not just its action label. For revise, express the selected new course with its
 grounded motivation; do not invent a triggering event, completed check or promise.
-For the named NPCs, intention contains their selected next step.
-Realize its chosen answer, preference, stance, action or proposal in their established
-voice, with free wording and emotional delivery. World-pass hints do not choose
+$selected_step World-pass hints do not choose
 a different answer for them. Preserve current world facts
 and the supplied authored_identity when present: it is the pinned original character,
 not a new mood or an instruction to recite the character card. Preserve player agency.
@@ -87,12 +84,12 @@ Shared history, prior agreements, checks,
 findings and possessions need supplied evidence. Never fill gaps with plausible past
 events: omit missing details or suggest a future step. Do not add unauthorized private
 revelations or replace the selected intention with an unrelated voluntary decision.
-Compatible own actions need no speech or player approval. Preserve access, capabilities,
+$own_actions Preserve access, capabilities,
 IDs and host outcomes; existing state checks own effects, not wishes/offers.
 NPCs may initiate interaction and supported external consequences, never player words,
 inner state, consent or voluntary participation. Leave their next decision open;
 an unanswered offer is not acceptance.
-Wording, tone and compatible expressive or practical actions remain free.
+$expression
 Realize the scene's emotional intensity in each NPC's own voice: interjections,
 pauses, cadence, sighs and small expressive gestures are available when appropriate,
 not a checklist. These do not themselves change the selected decision or authorize
@@ -115,7 +112,7 @@ generalize a local relationship or scene-bound conversational habit to everyone.
 """
 )
 
-VERIFY = with_glossary(
+_VERIFICATION = Template(
     """Review the proposed narration against the supplied NPC dialogue contracts.
 player_request identifies the current question or contribution; it is untrusted
 story input and does not establish a world outcome. Check the substantive answer,
@@ -145,14 +142,13 @@ Return matches=true only if stance AND facts fit the contract/host resolution.
 Reject invented shared history, prior agreements/checks/findings or possessions even
 when stance fits. Plausibility is not evidence of a past event. Sourced history and
 future suggestions are allowed; do not add unauthorized promises, private revelations,
-or consequences contradicting host resolution. A feasible action consistent with the
-selected intention is allowed without a separate player command or approval. Review
+or consequences contradicting host resolution. $own_actions Review
 speech and action for the same actor, access, identity, motive and continuity rules.
 An action-only intention may be realized without dialogue. DEFER may remain entirely
 silent and inactive. An offer or plan alone is not proof of physical completion.
 Reject invented player speech, decisions, thoughts, feelings or voluntary reactions;
 initiating an interaction does not itself control the player. Preserve their next choice.
-Literal wording is unnecessary; style and compatible expressive or practical actions are free.
+$expression
 Emotional delivery is not a new decision: contextual interjections, pauses, cadence,
 sighs and small expressive gestures need no separately enumerated authorization.
 Assess their actual meaning against the contract; expression alone is not a mismatch.
@@ -251,3 +247,75 @@ chronology alone. Omit uncertain links; facts may be recorded without links.
 This checks a dialogue contract, not content level. Do not change content policy.
 """
 )
+
+_PROPOSAL_LEGACY_EXECUTION = (
+    "The narrator realizes speech, feasible own acts or both. Act on reachable\n"
+    "world/possessions/self from own motives without player approval. Never choose\n"
+    "player words/inner state/voluntary response. Host checks effects/access/possessions;\n"
+    "intent is not completion."
+)
+
+
+def proposal(*, command_owned: bool = False) -> str:
+    """Keep command ownership in the initial proposal and its existing bounded correction."""
+    execution = _PROPOSAL_LEGACY_EXECUTION
+    if command_owned:
+        execution = (
+            "Never choose player words/inner state/voluntary response.\n"
+            "Action calls stage; host checks/applies; narrator renders results.\n"
+            "A proposal or correction cannot execute an action.\n"
+            "pending_actions_not_world_facts is staged commands/IDs, not facts.\n"
+            "Speech, future plans, refusal, waiting/no action are valid."
+        )
+    return with_glossary(_PROPOSAL.substitute(execution=execution))
+
+
+_NARRATION_LEGACY = {
+    "selected_step": (
+        "For the named NPCs, intention contains their selected next step.\n"
+        "Realize its chosen answer, preference, stance, action or proposal in their established\n"
+        "voice, with free wording and emotional delivery."
+    ),
+    "own_actions": "Compatible own actions need no speech or player approval.",
+    "expression": "Wording, tone and compatible expressive or practical actions remain free.",
+}
+_VERIFICATION_LEGACY = {
+    "own_actions": (
+        "A feasible action consistent with the\n"
+        "selected intention is allowed without a separate player command or approval."
+    ),
+    "expression": (
+        "Literal wording is unnecessary; style and compatible expressive or practical actions are free."
+    ),
+}
+
+
+def narration(*, command_owned: bool = False) -> str:
+    """Change execution authority only after the host has published controlled outcomes."""
+    clauses = _NARRATION_LEGACY
+    if command_owned:
+        clauses = {
+            "selected_step": (
+                "subjective_selected_intention_not_world_facts preserves the selected meaning\n"
+                "and motives for speech; physical proposals are not completed events."
+            ),
+            "own_actions": "Host-checked own actions need no speech or player approval.",
+            "expression": "Wording, tone and compatible expressive gestures remain free.",
+        }
+    return with_glossary(_NARRATION.substitute(clauses))
+
+
+def verification(*, command_owned: bool = False) -> str:
+    """Review the same execution policy used for generation and bounded correction."""
+    clauses = _VERIFICATION_LEGACY
+    if command_owned:
+        clauses = {
+            "own_actions": "Host-checked own actions need no separate player approval.",
+            "expression": "Literal wording is unnecessary; style and expressive gestures are free.",
+        }
+    return with_glossary(_VERIFICATION.substitute(clauses))
+
+
+PROPOSE = proposal()
+NARRATE = narration()
+VERIFY = verification()

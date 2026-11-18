@@ -10,7 +10,7 @@ from backend.core.llm_router import GameMasterLLM
 from backend.core.state_rejection_trace import reject
 from backend.engine.clothing.visuals import session_objects
 from backend.engine.narrated_items import evidence, reference_schema, response_sections
-from backend.engine.scene_staging import command_guard, props
+from backend.engine.scene_staging import attribution, command_guard, props
 from backend.engine.scene_staging.proposals import StagingProposal
 from backend.engine.scene_staging.schema import INSTRUCTIONS
 from backend.engine.scene_staging.shared import apply_extraction, consume
@@ -74,6 +74,7 @@ async def reconcile_narration(manager: Any, narration: str, *, completed: bool) 
         narration,
         scope=f"{state.session_id}:{getattr(manager, '_vn_player_message_id', '')}:{state.current_scene_id}",
     )
+    authority = await attribution.capture(manager)
     payload = json.dumps(
         {
             "scene_id": state.current_scene_id,
@@ -82,6 +83,7 @@ async def reconcile_narration(manager: Any, narration: str, *, completed: bool) 
             "previous_staging": project(state, cast),
             "current_narration": catalog.narration_passages,
             **command_guard.metadata(manager, cast),
+            **attribution.context(manager, authority, player_text_ref=None),
         },
         ensure_ascii=False,
     )
@@ -110,7 +112,8 @@ async def reconcile_narration(manager: Any, narration: str, *, completed: bool) 
         response = await asyncio.wait_for(
             llm.aexecute_complex_task(
                 INSTRUCTIONS
-                + (command_guard.INSTRUCTIONS if command_guard.metadata(manager, cast) else ""),
+                + (command_guard.INSTRUCTIONS if command_guard.metadata(manager, cast) else "")
+                + (attribution.INSTRUCTIONS if authority else ""),
                 payload,
                 StagingProposal,
                 llm.model,
@@ -121,6 +124,7 @@ async def reconcile_narration(manager: Any, narration: str, *, completed: bool) 
             ),
             timeout=role_timeout(manager.user, "small"),
         )
+        authority = await attribution.refresh(manager, authority)
         apply_extraction(
             manager,
             narration,
@@ -128,6 +132,7 @@ async def reconcile_narration(manager: Any, narration: str, *, completed: bool) 
             rows,
             evidence.bind_staging(response, catalog),
             unconfirmed_sections=response_sections.missing_staging(response),
+            authority=authority,
         )
         applied = True
     except asyncio.CancelledError:

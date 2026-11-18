@@ -19,6 +19,7 @@ from backend.engine.narrated_movement.context import context
 from backend.engine.narrated_movement.schema import MAX_MOVEMENTS, MovementProposal
 from backend.engine.narrated_movement.validation import validate
 from backend.engine.npc_actions.prepass import resolve_placements
+from backend.engine.npc_actions.source_control import read as source_control
 from backend.engine.visual_novel.movement_sources import current_input, resolve
 from backend.models.chat import ChatMessage
 from backend.models.world_entity import WorldScene
@@ -65,10 +66,52 @@ def _proposal(
     )
 
 
-async def _check_history(manager: Any, source: Any, passage: Any, actor: str, before: dict) -> None:
+def _movement_delta(proposal: MovementProposal, before: dict, physical: tuple[list, list]) -> bool:
+    actor = before["actors"].get(proposal.actor_id)
+    presence = actor["presence"] if actor else None
+    original = before["positions"].get(proposal.actor_id)
+    position = original
+    for move in physical[0]:
+        if move.to_scene_id:
+            presence = "present"
+        if move.to_scene_id and not move.to_spatial_position:
+            position = None
+        if move.to_spatial_position:
+            position = move.to_spatial_position
+    for update in physical[1]:
+        if update.presence is not None:
+            presence = update.presence
+        if update.spatial_position is not None:
+            position = update.spatial_position
+    return (
+        actor is None
+        or proposal.destination_scene_id not in (None, before["scene_id"])
+        or presence != actor["presence"]
+        or position != original
+    )
+
+
+async def _check_history(
+    manager: Any,
+    source: Any,
+    passage: Any,
+    proposal: MovementProposal,
+    before: dict,
+    physical: tuple[list, list],
+) -> None:
     if source.scene_id != before["scene_id"]:
         raise ValueError("Historical recovery belongs to a different source location.")
-    message = await manager.db.get(ChatMessage, source.message_id)
+    message = await manager.db.get(ChatMessage, source.message_id, populate_existing=True)
+    if not source.matches(message, manager.game_id):
+        raise ValueError("The historical movement source changed before owner validation.")
+    control = source_control(message)
+    actor = proposal.actor_id
+    if (
+        not control.valid
+        or actor in control.actor_ids
+        and _movement_delta(proposal, before, physical)
+    ):
+        raise ValueError("Source-time command control cannot authorize a new historical movement.")
     authority = historical_action(
         manager.state, actor, message, EvidenceSpan(start=passage.start, end=passage.end)
     )
@@ -111,9 +154,9 @@ async def _check(
     }
     if proof.basis != expected[proof.kind]:
         raise ValueError("Movement source does not describe a completed permitted physical effect.")
-    if proof.kind == "previous_narration":
-        await _check_history(manager, source, passage, actor, before)
     proposal = _proposal(actor, moves, updates, passage)
+    if proof.kind == "previous_narration":
+        await _check_history(manager, source, passage, proposal, before, (moves, updates))
     pending = SimpleNamespace(before=before, narration=source.text, denied=(), player_message="")
     # A local pose does not require map mobility; retain the existing stationary-NPC contract.
     local_pose = proposal.destination_scene_id in (None, before["scene_id"]) and all(
@@ -245,6 +288,12 @@ async def resolve_event(manager: Any, event: Any) -> list[str]:
         [row for row in getattr(proposal, "updated_entities", None) or [] if _physical(row)], index
     )
     before = await context(manager, rows, exit_updates=event.updated_exits or [])
+    states = manager.state.entity_states or {}
+    before["positions"] = {
+        row.id: (states.get(row.id) or {}).get("spatial_position", row.spatial_position)
+        for row in rows
+        if row.entity_type == "NPC"
+    }
     destinations = await _destinations(manager)
     rejected = await resolve_placements(manager, event, rows, before)
     actors = sorted(set(moves) | set(updates) | set(raw_moves) | set(raw_updates))

@@ -8,6 +8,7 @@ import pytest
 from backend.engine.chpm.observable_state import capture as capture_views
 from backend.engine.chpm.observable_state import project
 from backend.engine.clothing.context import actor_records
+from backend.engine.clothing.projection import item_wear_state, known_worn_item_ids
 from backend.engine.clothing.visuals import session_objects
 from backend.engine.npc_actions.contracts import Discard, Give, PutDown, Take, Wear
 from backend.engine.npc_actions.preparation import capture
@@ -48,7 +49,12 @@ def test_newly_acquired_garment_is_proven_carried_without_a_global_wardrobe(hand
     draft = preview()
     assert draft.execute(Take(tool="take_item", item_id="LOOSE_COAT"))["status"] == "staged"
     assert draft.execute(handoff)["status"] == "staged"
-    assert draft.working_copy()[0]["npc"]["visual_profile"] is None
+    actor = draft.working_copy()[0]["npc"]
+    assert known_worn_item_ids(actor["visual_profile"], actor["resolved_inventory"]) is None
+    assert actor["visual_profile"]["unassessed_wear_item_ids"] == ["COAT", "LINING"]
+    assert (
+        item_wear_state(actor["visual_profile"], actor["resolved_inventory"], "COAT") == "unknown"
+    )
     assert draft.scope.actors["npc"]["visual_profile"] is None
 
 
@@ -72,10 +78,21 @@ def test_later_confirmed_wear_overrides_an_earlier_acquisition_receipt():
 
 
 async def stored_fixture(db):
-    host, observed, _ = await publication_fixture(db)
+    host, observed, previous = await publication_fixture(db)
     host.state.entity_states = {
         **host.state.entity_states,
-        "LINA": {**host.state.entity_states.get("LINA", {}), "visual_profile": None},
+        "LINA": {
+            **host.state.entity_states.get("LINA", {}),
+            "visual_profile": None,
+            "inventory": [
+                *previous["LINA"].scope.actors["LINA"]["inventory"],
+                {
+                    "id": "UNASSESSED_COAT",
+                    "name": "Unassessed coat",
+                    "clothing": {"layer": 2, "coverage": ["torso", "arms"]},
+                },
+            ],
+        },
     }
     db.add(
         WorldEntity(
@@ -113,7 +130,13 @@ async def test_actual_publication_reuses_only_successful_carried_command_receipt
         await db.commit()
         snapshot = possession_snapshot(host, await session_objects(db, host.game_id))
         assert snapshot.owners["LOOSE_COAT"] == destination
-        assert host.state.entity_states["LINA"]["visual_profile"] is None
+        actor = actor_records(host, await session_objects(db, host.game_id))["LINA"]
+        assert known_worn_item_ids(actor["visual_profile"], actor["resolved_inventory"]) is None
+        assert actor["visual_profile"]["unassessed_wear_item_ids"] == ["UNASSESSED_COAT"]
+        assert (
+            item_wear_state(actor["visual_profile"], actor["resolved_inventory"], "UNASSESSED_COAT")
+            == "unknown"
+        )
 
 
 async def test_competing_acquisition_cannot_be_overridden_by_a_staged_carried_receipt():
