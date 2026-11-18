@@ -51,8 +51,13 @@ exact quote with `excerpted=true`. Relevant grounds outside a historical source'
 prefix replace that prefix, not current evidence. Missing recall proves no absence.
 Explicit agent pins keep their existing separate limits and priority.
 
-Output allows two interpretations with two citations each. These limits bound
-the protocol, not the accuracy of retrieval or psychological inference.
+Output allows two new or revised belief interpretations with up to seven visible
+citations each. Emotion/experience citations and decision-change evidence retain
+their separate two-citation limits. These limits bound the protocol, not the
+accuracy of retrieval or psychological inference. Canonical historical
+interpretations retain their existing sixteen-citation readable capacity, so
+older valid histories still load. Bounded memory views may show two citations
+and report the omitted count without discarding the stored grounds.
 The existing settings still bound total input characters and output tokens. Calls
 per successful Staged live turn with agent rounds off remain N + 2, or N + 4 with
 narration repair, plus the normal narrator. Tool rounds, shared proposal repair,

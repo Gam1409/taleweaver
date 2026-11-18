@@ -8,6 +8,7 @@ from pydantic import AliasChoices, ConfigDict, Field, model_validator
 from backend.engine.chpm import agenda_references, json_contract
 from backend.engine.chpm.appraisal_contracts import Explanation, GroundedProposal
 from backend.engine.chpm.core.contracts import Contract, ExperienceValue, Identifier
+from backend.engine.chpm.core.limits import MAX_PROPOSED_FACT_CITATIONS
 from backend.engine.chpm.core.relationships import Domain
 from backend.engine.chpm.motivation import Catalogue
 from backend.engine.chpm.proposal_draft import DevelopmentDraft, Draft
@@ -43,7 +44,9 @@ class EpisodeReference(ReferenceContract):
 
 class Grounds(ReferenceContract):
     stance: Literal["support", "challenge"]
-    citations: tuple[QuoteReference, ...] = Field(min_length=1, max_length=2)
+    citations: tuple[QuoteReference, ...] = Field(
+        min_length=1, max_length=MAX_PROPOSED_FACT_CITATIONS
+    )
     alternatives: tuple[Explanation, ...] = Field(max_length=2)
     unknowns: tuple[Explanation, ...] = Field(max_length=3)
 

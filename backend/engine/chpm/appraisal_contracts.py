@@ -5,6 +5,7 @@ from typing import Annotated, Literal
 from pydantic import Field
 
 from backend.engine.chpm.core.contracts import Contract, ExperienceValue, Identifier
+from backend.engine.chpm.core.limits import MAX_PROPOSED_FACT_CITATIONS
 from backend.engine.chpm.core.relationships import Domain
 from backend.engine.chpm.motivation_contracts import Motive
 from backend.engine.chpm.schema import (
@@ -26,7 +27,7 @@ class Reference(Contract):
 
 class Grounds(Contract):
     stance: Literal["support", "challenge"]
-    citations: tuple[Reference, ...] = Field(min_length=1, max_length=2)
+    citations: tuple[Reference, ...] = Field(min_length=1, max_length=MAX_PROPOSED_FACT_CITATIONS)
     alternatives: tuple[Explanation, ...] = Field(max_length=2)
     unknowns: tuple[Explanation, ...] = Field(max_length=3)
 
