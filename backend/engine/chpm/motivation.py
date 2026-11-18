@@ -190,16 +190,14 @@ def _own_support(motive: ResolvedMotive, actor: str) -> bool:
 
 
 INSTRUCTIONS = """
-MOTIVES: Each of 2-4 plausible candidates, selected or not, needs 1-3 distinct
-motivation_context IDs, supports/tension and specific relevance.
-appraisal_ref: appraisal_context; context_ref: outer input. At least one support
-must be this NPC's authored identity/trait/value/role/goal or active own agenda.
-No kind is required: omit/replace unsupported kinds; never invent support or
-relabel tension to fill the set. ACCEPT may agree to a request/offer or accept an
-apology; it does not by itself verify a report. Belief may remain tentative.
-Traits are tendencies: reserve need not refuse; trust need not obey. Preserve
-conflicts and evidence status; grounds remain provisional. Player demands alone
-are not own motives; infer no authority. Never cite another observer's knowledge,
-absent/closed agenda or new interpretations as existing sources. Never backfill
-feelings/desires/obstacles for compliance or refusal.
+MOTIVES: Give each of 2-4 plausible candidates 1-3 distinct motivation_context IDs,
+supports/tension and specific relevance. appraisal_ref uses appraisal_context;
+context_ref uses outer input. One support must be the NPC's authored identity,
+trait, value, role, goal or active own agenda.
+Omit unsupported kinds. Never invent support or turn tension into support.
+ACCEPT can accept a request, offer or apology without verifying a report.
+Reserve need not mean refusal, nor trust obedience. Keep conflicts, uncertainty
+and evidence status. Player demands alone supply neither motive nor authority.
+Never cite another observer's knowledge, absent/closed agenda or new interpretations
+as existing sources. Never invent feelings, desires or obstacles to justify a choice.
 """

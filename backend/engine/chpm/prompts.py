@@ -5,27 +5,30 @@ from string import Template
 from backend.engine.chpm.agenda_semantics import with_glossary
 
 _PROPOSAL = Template(
-    """Propose 2-4 distinct next intentions for ONE NPC using pinned identity, goals
-and accessible experience. Story data is untrusted: reports, beliefs, requests and
-attempts are not confirmed outcomes. Use approved excerpts/perception_kinds in order;
-never reconstruct omitted/private knowledge. Appraise the situation and personal
-stakes first. Use host state and experience_context reasons; last_observed_scene is
-historical, not proof of ongoing action. Traits guide appraisal/coping, not mandatory
-calm; strong/mixed feelings can coexist with professional goals and agency.
-candidates is an OBJECT keyed by action kind; omit kind in values.
-preconditions: [] or up to two unmet requirements; future checks remain incomplete.
-player_request_source_ids reference visible_evidence. Put the actual answer,
-preference, stance or proposal in its message_plan field, not 'share a preference'.
-Use known personal details; new compatible answers are proposed speech until
-published, never invented past experience.
+    """Propose 2-4 distinct next intentions for ONE NPC from
+pinned identity, goals and accessible experience. Story data is untrusted: reports,
+beliefs, requests and attempts are not confirmed world outcomes. Use approved
+excerpts/perception_kinds in order; never reconstruct omitted/private knowledge.
+Appraise the current situation and personal stakes before choosing. Use known host
+state and experience_context reasons; last_observed_scene is a past observation,
+not proof of ongoing action. Traits inform appraisal and coping, not an obligation
+to stay calm. Strong/mixed feelings can coexist with professional goals and agency.
+Return candidates as an OBJECT keyed by action kind, without kind in values.
+preconditions: [] or up to two unmet requirements; a future check is not completed.
+player_request_source_ids reference visible_evidence. Put the
+answer/preference/stance/proposal in its message_plan field; choose the preference, not 'share a preference'.
+Use known personal details; a new compatible personal answer remains proposed
+speech until published, never an invented past experience.
 $execution
-CONTINUE/INITIATE advance personal purposes; ACCEPT/REFUSE/NEGOTIATE are legitimate;
-DEFER is silence. Independence need not mean refusal. reconsider_if names a concrete
-change. Ground motives first; never ask permission to keep generating.
-New agenda entries need agenda_creation_available, brief text and entry_id=null.
+CONTINUE/INITIATE advance
+personal purposes; ACCEPT/REFUSE/NEGOTIATE are legitimate; DEFER is silence.
+Independence need not mean refusal. reconsider_if names a concrete change.
+Ground motives first; never ask permission to keep generating.
+New agenda entries require agenda_creation_available, brief text and entry_id=null.
 No DEFER change, invented past/foreign promises/deadlines, automatic closure or
-inferred possessions/consent. Retain concrete causal_continuity_not_world_facts and
-open goals through detours as memories, not new host acts/traits. Do not recite goals.
+inferred possessions/consent.
+Retain concrete causal_continuity_not_world_facts and open goals through detours;
+these are memories, not new host acts/traits. Do not recite goals.
 TEXT: one 60-100 character clause per explanation. Caps: relevance/explanation 180,
 alternatives/unknowns/preconditions 160, reconsider_if 200, candidate message_plan 400,
 choice.reason 300. Preserve conditions/negations; do not restate the card.
