@@ -96,6 +96,14 @@ arbitrary recipient-state setter or separate permission tool.
    an approved empty plan cannot acquire them through narration. Unrelated
    staging facts and separately resolved external effects retain their owners.
 
+Two NPCs can independently reach for the same cup. Each decides from their own
+observations and motives. The host resolves their commands in stable actor-ID
+order against current custody. Narration and review receive both outcomes, and
+each NPC receives its own result at its next decision. The successful actor can
+keep the cup, offer it or pursue another goal. The other actor can object, wait
+or move on using what they actually observed. Custody changes on a successful
+transfer. The recipient chooses how to respond.
+
 Narration, review, repair and continuation share a transient
 `current_execution_frame` derived from the existing public state owners after
 publication. It carries actual custody, wear, coverage and posture; selected
@@ -166,7 +174,8 @@ or a receipt archive.
 
 The next decision receives this feedback only while both saved input and reply
 sources still match their session, role, revision, content hash and scene. The
-coordinator rechecks consumed sources after cognition and around narration review.
+coordinator rechecks consumed sources after cognition, around narration review and
+inside the final delivery transaction after pending source/notebook writes.
 Silent and blocked actions do not need a quoted literary expression. Feedback is
 historical: a previously applied operation does not establish current possession
 or authorize an automatic retry, and an interaction attempt does not establish
