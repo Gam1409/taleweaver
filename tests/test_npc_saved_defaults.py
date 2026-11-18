@@ -96,6 +96,18 @@ async def test_existing_combat_budget_survives_unrelated_updates_but_new_authori
     unrelated = await auth_client.patch(PATH, json={"living_world_settings": {}})
     assert unrelated.status_code == 200, unrelated.text
     assert unrelated.json()["npc_personality_settings"] == prefs
-    authored = await auth_client.patch(PATH, json={"npc_personality_settings": prefs})
+    unchanged = await auth_client.patch(
+        PATH,
+        json={
+            "title": "An unrelated editor save",
+            "rule_enforcement_mode": "rpg",
+            "npc_personality_settings": prefs,
+        },
+    )
+    assert unchanged.status_code == 200, unchanged.text
+    assert unchanged.json()["npc_personality_settings"] == prefs
+    authored = await auth_client.patch(
+        PATH, json={"npc_personality_settings": {**prefs, "max_output_tokens": 1400}}
+    )
     assert authored.status_code == 422, authored.text
     assert (await auth_client.get(PATH)).json()["npc_personality_settings"] == prefs

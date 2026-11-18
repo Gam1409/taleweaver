@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.game_modes import mode_policy
 from backend.engine.chpm.capacity import required_calls
-from backend.engine.chpm.schema import KernelState, Settings
+from backend.engine.chpm.schema import KernelState, Settings, SettingsFields
 from backend.engine.chpm.state import KEY
 from backend.engine.npc_actions.settings import configure as configure_actions
 from backend.models.world_entity import WorldEntity
@@ -78,7 +78,7 @@ def initial_states(adventure: Any, entity_states: dict) -> dict:
     mode = mode_policy(getattr(adventure, "rule_enforcement_mode", None)).mode
     if _dormant_defaults(raw, mode) is not None:
         return entity_states
-    if mode != "vn" and isinstance(raw, dict) and raw.get("mode", "off") == "off":
+    if mode not in {"vn", "rpg"} and isinstance(raw, dict) and raw.get("mode", "off") == "off":
         Settings.model_validate(raw)
         return entity_states
     settings = settings_for_mode(raw, mode)
@@ -119,18 +119,36 @@ def ensure_session_compatible(state: Any, settings: Settings | None = None) -> N
     ensure_compatible(settings, living_world.model_dump(mode="json"))
 
 
+def _defaults_changed(adventure: Any, raw: Any, mode: str | None) -> bool:
+    """Full editor payloads are round trips until settings or host authority actually change."""
+    if mode_policy(mode).mode != mode_policy(adventure.rule_enforcement_mode).mode:
+        return True
+    previous = adventure.npc_personality_settings
+    if raw is None or previous is None:
+        return raw is not previous
+    # Compare the closed input fields before host rebinding. New policy checks
+    # still run through stored_defaults; stale client scope cannot choose authority.
+    proposed = SettingsFields.model_validate(raw).model_dump(mode="json")
+    try:
+        saved = SettingsFields.model_validate(previous).model_dump(mode="json")
+    except ValueError:
+        # A malformed historical value must not prevent its valid replacement.
+        return True
+    return proposed != saved
+
+
 async def validate_update(db: AsyncSession, adventure: Any, updates: dict) -> None:
     triggers = {"npc_personality_settings", "living_world_settings", "rule_enforcement_mode"}
     if not triggers & updates.keys():
         return
     raw = updates.get("npc_personality_settings", adventure.npc_personality_settings)
-    authoring = {"npc_personality_settings", "rule_enforcement_mode"} & updates.keys()
+    mode = updates.get("rule_enforcement_mode", adventure.rule_enforcement_mode)
     try:
         normalized = stored_defaults(
             raw,
-            mode=updates.get("rule_enforcement_mode", adventure.rule_enforcement_mode),
+            mode=mode,
             living_world=updates.get("living_world_settings", adventure.living_world_settings),
-            preserve_saved=not authoring,
+            preserve_saved=not _defaults_changed(adventure, raw, mode),
         )
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
