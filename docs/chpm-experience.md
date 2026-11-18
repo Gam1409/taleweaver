@@ -20,6 +20,11 @@ not overwritten by an experience event.
 - Levels: absent, low, moderate, high, always labelled subjective appraisal. No
   numeric probabilities, clinical diagnoses, trait patches or consent updates.
 
+`about_id` names an affect target. For both need channels it must be null: the
+observer is implicit. Another person's influence belongs in the supporting
+citations and explanation. Generated native and JSON schemas expose these same
+channel, dimension and target rules; the canonical owner still validates them.
+
 Each proposal needs exact visible citations, at least one current observed trigger,
 this NPC's authored identity/active agenda basis, a short explanation, alternatives
 and unknowns. Old recall alone cannot refresh or intensify an experience. The pure

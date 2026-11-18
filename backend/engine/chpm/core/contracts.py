@@ -10,6 +10,16 @@ from .log_layout import split
 Identifier = Annotated[str, Field(min_length=1, max_length=100)]
 Text = Annotated[str, Field(min_length=1, max_length=2000)]
 Sequence = Annotated[int, Field(ge=0, strict=True)]
+AFFECT_DIMENSIONS = (
+    "fear",
+    "anger",
+    "sadness",
+    "joy",
+    "shame",
+    "interest",
+    "arousal",
+    "sexual_desire",
+)
 
 
 class Contract(BaseModel):
@@ -104,20 +114,13 @@ class ExperienceValue(Contract):
 
     @model_validator(mode="after")
     def valid_dimension(self) -> "ExperienceValue":
-        affect = self.dimension in {
-            "fear",
-            "anger",
-            "sadness",
-            "joy",
-            "shame",
-            "interest",
-            "arousal",
-            "sexual_desire",
-        }
+        affect = self.dimension in AFFECT_DIMENSIONS
         if (self.channel == "affect") != affect:
             raise ValueError("Experience dimension does not match its channel.")
         if self.channel != "affect" and self.about_id is not None:
-            raise ValueError("Needs describe the observer, not another person's state.")
+            raise ValueError(
+                "about_id must be null for need_satisfaction/need_frustration; the observer is implicit. Cite causal people in the supporting evidence."
+            )
         return self
 
 

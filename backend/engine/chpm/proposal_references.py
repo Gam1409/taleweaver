@@ -5,7 +5,7 @@ from typing import ClassVar, Literal
 
 from pydantic import AliasChoices, ConfigDict, Field, model_validator
 
-from backend.engine.chpm import agenda_references, json_contract
+from backend.engine.chpm import agenda_references, experience_schema, json_contract
 from backend.engine.chpm.appraisal_contracts import Explanation, GroundedProposal
 from backend.engine.chpm.core.contracts import Contract, ExperienceValue, Identifier
 from backend.engine.chpm.core.limits import MAX_PROPOSED_FACT_CITATIONS
@@ -62,7 +62,7 @@ class Revision(Grounds):
 
 
 class Experience(ExperienceValue):
-    model_config = ConfigDict(str_strip_whitespace=False)
+    model_config = ConfigDict(str_strip_whitespace=False, json_schema_extra=experience_schema.rules)
     citations: tuple[QuoteReference, ...] = Field(min_length=1, max_length=2)
     personal_motive_ids: tuple[Identifier, ...] = Field(min_length=1, max_length=3)
     explanation: str = Field(min_length=1, max_length=180)
