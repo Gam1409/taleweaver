@@ -86,9 +86,11 @@ def receive(
         if identifier not in {entry.item_id for entry in profile.worn}:
             profile.worn.append(worn)
     if profile is not None:
-        actor["visual_profile"] = validate_profile(
+        validated = validate_profile(
             profile, actor["resolved_inventory"], equipment=actor["equipment"]
-        ).model_dump()
+        )
+        if validated != load_profile(raw):
+            actor["visual_profile"] = validated.model_dump()
     if (
         disposition == "worn"
         and actor["id"] == PLAYER
