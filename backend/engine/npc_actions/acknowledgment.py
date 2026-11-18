@@ -192,13 +192,19 @@ def _from_sources(
 
 async def ensure_current(manager: Any, turn: Any) -> None:
     """A silent actor's prior reply may not be among the mind's transcript sources."""
+    if await validate_current(manager, turn):
+        await release_for_model(manager)
+
+
+async def validate_current(manager: Any, turn: Any) -> bool:
+    """Validate the consumed cohort without releasing or committing its transaction."""
     pending = [
         (actor, turn.initial.actors.get(actor), turn.decisions[actor].observation, supplied)
         for actor, supplied in getattr(turn, "publication_feedback", {}).items()
         if actor in turn.decisions
     ]
     if not pending:
-        return
+        return False
     messages = await _read_sources(
         manager, {key for _, previous, _, _ in pending for key in _source_ids(previous)}
     )
@@ -207,7 +213,7 @@ async def ensure_current(manager: Any, turn: Any) -> None:
             raise StaleControlError(
                 "The prior command acknowledgment source changed during this turn."
             )
-    await release_for_model(manager)
+    return True
 
 
 def _matches(
