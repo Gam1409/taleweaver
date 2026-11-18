@@ -52,6 +52,7 @@ from backend.engine.chpm.schema import (
     Verdict,
 )
 from backend.engine.chpm.state import KEY, load, save
+from backend.engine.npc_actions import acknowledgment as command_acknowledgment
 from backend.engine.npc_actions import execution_frame as owner_frame
 from backend.engine.npc_actions import feedback as command_feedback
 from backend.engine.npc_actions import source_control
@@ -96,6 +97,7 @@ class Turn:
     catchup_unavailable: list = field(default_factory=list)
     action_drafts: dict[str, ActionDraft] = field(default_factory=dict)
     action_outcomes: dict[str, list[dict]] = field(default_factory=dict)
+    publication_feedback: dict[str, dict] = field(default_factory=dict)
     control: dict = field(default_factory=dict)
     host_rejections: list[dict] = field(default_factory=list)
     review_operation: dict = field(default_factory=dict)
@@ -356,6 +358,7 @@ async def _prepare(manager: Any, turn: Turn, message: str, actors: list[Any]) ->
     from backend.engine.chpm import parallel
 
     await parallel.prepare(manager, turn, active, observed, _prepare_actor)
+    await command_acknowledgment.ensure_current(manager, turn)
     from backend.engine.chpm.rendering import preflight
 
     if not turn_controls.bind_current(manager, turn.control, observation=observed):
@@ -426,6 +429,7 @@ def finish(manager: Any, reply: Any, *, completed: bool) -> None:
     outcomes = movement_feedback.read(manager.state, reply)
     for actor, decision in turn.decisions.items():
         _finish_decision(turn, decision, reply)
+        decision.last_publication = command_acknowledgment.capture(turn, decision)
         result.actors[actor] = decision
         result.last_active[actor] = turn.initial.revision + 1
         result.memories[actor] = turn.memories.get(actor, [])

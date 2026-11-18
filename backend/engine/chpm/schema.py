@@ -2,7 +2,15 @@
 
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, StrictBool, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    SerializerFunctionWrapHandler,
+    StrictBool,
+    model_serializer,
+    model_validator,
+)
 
 from backend.core.text_evidence import EvidenceSpan, WithEvidenceSpan
 from backend.engine.chpm.agent_limits import MAX_AGENT_ROUNDS, MAX_PINNED_CHARS, MAX_PINNED_SOURCES
@@ -15,6 +23,7 @@ from backend.engine.chpm.performance import RequestTiming
 from backend.engine.chpm.recovery_contracts import RecoveryState
 from backend.engine.chpm.tool_profiles import ToolProfile
 from backend.engine.narrated_movement.outcomes import WithMovementOutcomes, evidence_size
+from backend.engine.npc_actions.acknowledgment_contracts import PublicationAcknowledgment
 
 
 class Contract(BaseModel):
@@ -266,6 +275,7 @@ class PreviousIntention(Contract, WithMovementOutcomes):
 
 
 class Decision(Contract):
+    last_publication: PublicationAcknowledgment | None = None
     choice_preference: ChoicePreference | None = None
     previous_intention: PreviousIntention | None = None
     agent_evidence: list[AgentEvidence] = Field(default_factory=list, max_length=MAX_PINNED_SOURCES)
@@ -299,6 +309,13 @@ class Decision(Contract):
     selection_reasons: list[str] = Field(default_factory=list, max_length=4)
     question_gate: QuestionGate | None = None
     motive_dominance: dict[ActionKind, list[ActionKind]] = Field(default_factory=dict, max_length=4)
+
+    @model_serializer(mode="wrap")
+    def legacy_decision_shape(self, handler: SerializerFunctionWrapHandler) -> dict:
+        result: dict = handler(self)
+        if self.last_publication is None:
+            result.pop("last_publication", None)
+        return result
 
     motivation_policy: Literal["source-grounded-v1"] | None = None
     candidate_motives: dict[

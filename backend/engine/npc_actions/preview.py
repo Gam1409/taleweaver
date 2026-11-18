@@ -12,6 +12,7 @@ from backend.engine.clothing.projection import item_wear_state
 from backend.engine.narrated_items.commands import carried_after, transfer
 from backend.engine.npc_actions import control
 from backend.engine.npc_actions.contracts import (
+    MAX_ACTIONS,
     Adjust,
     Approach,
     ChangeState,
@@ -34,8 +35,6 @@ from backend.engine.visual_novel.continuity import SCENE, Possessions
 
 if TYPE_CHECKING:
     from backend.engine.chpm.schema import Observation
-
-MAX_ACTIONS = 16
 
 
 @dataclass(frozen=True)

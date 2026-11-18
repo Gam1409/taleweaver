@@ -26,6 +26,7 @@ from backend.engine.chpm.errors import (
 from backend.engine.chpm.kernel import ChpmError, fingerprint
 from backend.engine.chpm.runtime import Turn, contract_data, current
 from backend.engine.chpm.schema import Verdict
+from backend.engine.npc_actions import acknowledgment as command_acknowledgment
 from backend.engine.npc_actions import execution_frame
 from backend.engine.npc_actions import feedback as command_feedback
 from backend.engine.npc_actions import instructions as command_instructions
@@ -300,6 +301,7 @@ async def _review_control(manager: Any, turn: Turn) -> tuple[dict, Any]:
 async def _ensure_review_current(manager: Any, control: dict, observed: Any, turn: Turn) -> None:
     if not turn_controls.bind_current(manager, control, "narration_review", observation=observed):
         raise StaleControlError("CHPM narration review belongs to an inactive turn attempt.")
+    await command_acknowledgment.ensure_current(manager, turn)
     await execution_frame.ensure_current(manager, turn)
 
 
@@ -477,6 +479,7 @@ def _validate_hearing(turn: Turn, verdict: Verdict, text: str) -> None:
 async def _repair(
     manager: Any, turn: Turn, text: str, resolution: str, issues: list[str], system_prompt: str
 ) -> str:
+    await command_acknowledgment.ensure_current(manager, turn)
     await execution_frame.ensure_current(manager, turn)
     system, payload = narration_repair_input.build(
         turn,

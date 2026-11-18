@@ -155,6 +155,31 @@ property ownership does not override physical custody or scene placement.
 
 ## Lifecycle and psychological boundaries
 
+Each delivered command-controlled decision retains one bounded internal action
+feedback summary for that NPC's next existing decision. It contains only the
+previous attempt and operation identifiers, tool names, its own requested operand
+identifiers, final statuses and typed refusal codes. It carries no effects,
+condition descriptions or other NPC's plans. An explicit empty summary means an
+approved empty plan; a missing summary means that no publication acknowledgment is
+available. This is scoped internal feedback, not an external Agent-to-Agent protocol
+or a receipt archive.
+
+The next decision receives this feedback only while both saved input and reply
+sources still match their session, role, revision, content hash and scene. The
+coordinator rechecks consumed sources after cognition and around narration review.
+Silent and blocked actions do not need a quoted literary expression. Feedback is
+historical: a previously applied operation does not establish current possession
+or authorize an automatic retry, and an interaction attempt does not establish
+its target's response. Current owner observations remain authoritative.
+Blocked, dependency-skipped and stale requests were not applied; this is not proof
+of an in-world failed attempt or obstruction. Operation IDs and refusal codes are
+private metadata, not dialogue to repeat.
+
+The summary replaces the preceding decision's summary; it adds no model request,
+background poller, host-fact record or separate journal. Existing decision snapshot,
+Undo, source retraction and copy/fork invalidation apply. Legacy, disabled and shadow
+paths retain their previous saved shape when no acknowledgment exists.
+
 Plans are transient and are not loaded or replayed as executable data. Recent
 duplicate publication on the same approved draft returns its existing results.
 While live integrated dialogue action control is enabled, the earlier VN world

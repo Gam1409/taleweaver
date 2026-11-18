@@ -9,6 +9,7 @@ from backend.engine.physical_conditions.schema import ITEM_PART_PATTERN
 from backend.engine.scene_staging.schema import Posture
 
 Identifier = Annotated[str, Field(min_length=1, max_length=100)]
+MAX_ACTIONS = 16
 
 
 class Request(BaseModel):

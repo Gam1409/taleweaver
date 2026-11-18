@@ -19,6 +19,7 @@ from backend.engine.chpm.host_state import Mind, removed_messages
 from backend.engine.chpm.notebook.workspace import NotebookWorkspace
 from backend.engine.chpm.notebook_tools import NotebookDraft
 from backend.engine.chpm.schema import Decision, Observation
+from backend.engine.npc_actions import acknowledgment
 
 
 @dataclass
@@ -61,6 +62,10 @@ async def prepare(manager: Any, turn: Any, actor: Any, observed: Observation) ->
         previous if not invalid and not retained and turn.initial.settings.memory_limit else None
     )
     supplied = await context.actor_context(manager, authored, legacy, retained)
+    published = await acknowledgment.context(manager, previous, observed, actor.id)
+    if published is not None:
+        supplied["previous_action_results_not_current_state"] = published
+        turn.publication_feedback[actor.id] = published
     if actor.id in turn.minds:
         host_adapter.add_context(supplied, turn.minds[actor.id])
     supplied["declared_agenda_not_world_facts"] = agenda.context(turn.agendas[actor.id])
