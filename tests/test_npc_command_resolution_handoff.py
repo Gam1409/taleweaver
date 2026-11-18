@@ -148,9 +148,8 @@ def test_ordinary_fallback_keeps_the_same_chronology_after_decisions_are_discard
     assert effects(turn.action_outcomes) == OUTCOMES and not turn.decisions
 
 
-@pytest.mark.parametrize("outcomes", [{}, {"npc": []}])
-def test_no_command_result_adds_neither_chronology_claim_nor_command_instructions(outcomes):
-    turn = command_turn(outcomes)
+def test_no_command_result_adds_neither_chronology_claim_nor_command_instructions():
+    turn = command_turn({})
     assert "host_resolution_time" not in rendering._review_payload(turn, {}, RESOLUTION)
     assert instructions.NARRATION not in runtime.contract(turn)
     system, content = narration_repair_input.build(
@@ -158,3 +157,20 @@ def test_no_command_result_adds_neither_chronology_claim_nor_command_instruction
     )
     assert "host_resolution_time" not in json.loads(content)
     assert instructions.NARRATION not in system
+
+
+def test_explicit_empty_publication_reaches_review_and_repair_without_completed_effects():
+    turn = command_turn({"npc": []})
+    payload = rendering._review_payload(turn, {}, RESOLUTION)
+    assert payload["host_resolution"] == RESOLUTION
+    assert payload["host_resolution_time"] == "before_command_publication"
+    assert payload["contract"]["npc"]["authoritative_command_outcomes"] == []
+    assert instructions.EXECUTION in runtime.contract(turn)
+    system, content = narration_repair_input.build(
+        turn, "Original policy", TEXT, RESOLUTION, ["Keep the original facts"], portrait_reminder=""
+    )
+    repair = json.loads(content)
+    assert repair["host_resolution_time"] == "before_command_publication"
+    assert repair["dialogue_contract"]["npc"]["authoritative_command_outcomes"] == []
+    assert instructions.EXECUTION in system
+    assert turn.action_outcomes == {"npc": []}
