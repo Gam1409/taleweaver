@@ -85,6 +85,7 @@ from backend.engine.gameplay.language import (
 from backend.engine.gameplay import progression_request
 from backend.engine import turn_controls
 from backend.engine.npc_actions.control import CommandRejectedError
+from backend.engine.npc_actions import narration_fence
 from backend.core.llm_router import GameMasterLLM
 from backend.engine.command_parser import CommandParser
 from backend.engine.debug_transcript import debug_message_scope, is_debug_message, without_debug
@@ -2219,6 +2220,9 @@ class GameTurnManager:
 
         if policy.vn and read_vn_settings(self.state).scene_staging:
             await reconcile_narration(self, response_text, completed=narration_completed)
+
+        if chpm_buffered and narration_completed:
+            await narration_fence.enforce(self, response_text)
 
         id_to_name: dict[str, str] = {}
         for entity in all_entities:

@@ -32,6 +32,7 @@ from backend.engine.narrated_items.preflight import SkippedCheck, skipped_check
 from backend.engine.narrated_items.schema import INSTRUCTIONS, ItemExtraction
 from backend.engine.narrated_movement import runtime as narrated_movement
 from backend.engine.narrated_movement.schema import INSTRUCTIONS as MOVEMENT_INSTRUCTIONS
+from backend.engine.npc_actions import narration_fence
 from backend.engine.npc_actions import reconciliation as command_reconciliation
 from backend.engine.physical_conditions import runtime as physical_conditions
 from backend.engine.physical_conditions.presentation import context as condition_context
@@ -125,9 +126,7 @@ async def reconcile_items(
     blocked_reason: str = "",
     blocked_targets: set[str] | None = None,
 ) -> list[str]:
-    physical_conditions.discard(manager)
-    manager._pending_scene_continuity = None
-    manager._pending_narrated_movement = None
+    _begin_reconciliation(manager, narration)
     message_id = str(getattr(manager, "_vn_player_message_id", "") or "")
     ledger = (manager.state.entity_states or {}).get(KEY) or {}
     staging_enabled = shared_staging.begin(
@@ -342,6 +341,13 @@ async def reconcile_items(
         state_rejected,
         sections,
     )
+
+
+def _begin_reconciliation(manager: Any, narration: str) -> None:
+    narration_fence.begin(manager, narration)
+    physical_conditions.discard(manager)
+    manager._pending_scene_continuity = None
+    manager._pending_narrated_movement = None
 
 
 async def _apply_items(

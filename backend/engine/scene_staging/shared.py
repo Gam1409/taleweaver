@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from backend.core.reliability_metrics import record_staging
 from backend.core.state_rejection_trace import reject
 from backend.engine.clothing.context import actor_records
+from backend.engine.npc_actions import narration_fence
 from backend.engine.visual_novel.config import read_settings
 from backend.engine.visual_novel.continuity import PLAYER
 
@@ -192,9 +193,11 @@ def apply_extraction(
     proposals = extraction
     validated = validate(extraction)
     extraction, rejected = bindings.resolve(validated.value, manager.avatar.id, accepted or [])
+    original = extraction
     extraction, sources, external, denied = attribution.admit(
         manager, extraction, cast, narration, authority
     )
+    narration_fence.poses(manager, original, external=external)
     protected = command_guard.capture(manager, cast)
     protected = command_guard.excluding(protected, external)
     extraction = command_guard.filter_changes(extraction, protected)

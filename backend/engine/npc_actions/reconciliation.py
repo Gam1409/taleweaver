@@ -10,6 +10,7 @@ from backend.engine.narrated_items.participants import resolve_participants
 from backend.engine.narrated_items.schema import ItemExtraction
 from backend.engine.narrated_movement.runtime import exclude_commands
 from backend.engine.narrated_movement.schema import MovementProposal
+from backend.engine.npc_actions import narration_fence
 from backend.engine.npc_actions.control import validated_outcomes
 from backend.engine.physical_conditions.ledger import read
 from backend.engine.physical_conditions.schema import ConditionProposal, Ledger
@@ -107,6 +108,7 @@ def unpack(
         extraction = extraction.model_copy(
             update={"actions": [_participants(action, actors) for action in extraction.actions]}
         )
+    narration_fence.items(manager, extraction.actions)
     guarded, indices, errors = protect(manager, extraction, indices)
     if control := context(manager):
         effects = _effects(control)
