@@ -1971,20 +1971,6 @@ class GameTurnManager:
             )
         draft_narration, outcome_json = build_outcome_json(game_event)
 
-        # Static system prompt (cacheable across turns); everything per-turn goes into the
-        # latest user message via the TURN RESOLUTION block.
-        tts_provider = tts_settings.get("provider", "google")
-        narration_prompt_parts = [
-            ctx.narration_static_prompt,
-            prompts.GM_NARRATION_TURN_CONTRACT,
-            narration_suffix(self.state)
-            if policy.vn
-            else prompts.GM_NARRATION_MANDATORY_FORMATTING,
-            prompts.get_vocal_direction_prompt(tts_provider) if use_vocal_tags else "",
-            prompts.GM_CHAT_NARRATION_SUFFIX if is_chat_mode and not policy.vn else "",
-        ]
-        narration_prompt = "\n\n".join(part for part in narration_prompt_parts if part)
-        narration_prompt = append_correction(narration_prompt, self.narration_correction)
         reminders: list[str] = [
             location_resolution(scene_id_before_turn, self.state.current_scene_id)
             + clarification_block(self, scene_id_before_turn),
@@ -2026,6 +2012,20 @@ class GameTurnManager:
         )
         chpm_buffered = chpm_runtime.buffered(self)
         npc_turn = chpm_runtime.current(self)
+        # Select the narration owner policy after actual publication, including empty plans.
+        # Per-turn facts still go into the latest user message's TURN RESOLUTION block.
+        tts_provider = tts_settings.get("provider", "google")
+        narration_prompt_parts = [
+            ctx.narration_static_prompt,
+            prompts.GM_NARRATION_TURN_CONTRACT,
+            narration_suffix(self.state, command_owned=bool(npc_turn and npc_turn.action_outcomes))
+            if policy.vn
+            else prompts.GM_NARRATION_MANDATORY_FORMATTING,
+            prompts.get_vocal_direction_prompt(tts_provider) if use_vocal_tags else "",
+            prompts.GM_CHAT_NARRATION_SUFFIX if is_chat_mode and not policy.vn else "",
+        ]
+        narration_prompt = "\n\n".join(part for part in narration_prompt_parts if part)
+        narration_prompt = append_correction(narration_prompt, self.narration_correction)
         if npc_turn and any(
             row.get("status") == "applied"
             for results in npc_turn.action_outcomes.values()

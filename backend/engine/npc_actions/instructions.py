@@ -60,8 +60,8 @@ Blocked/stale/skipped operations did not complete; preserve earlier applied effe
 An attempted interaction establishes only the NPC's attempt, never recipient
 cooperation or mechanical success. An empty plan is neither a failed attempt nor a
 requirement to act or obey. Speech, waiting, refusal and no action remain valid.
-Compatible gestures, emotion and independent player, other-actor or world effects
-remain eligible. Preserve player agency.
+Expressive gestures vary presentation, not command-owned fields. Emotion and
+independent player, other-actor or world effects remain eligible. Preserve player agency.
 """
 
 NARRATION = EXECUTION + RESOLUTION_CHRONOLOGY
