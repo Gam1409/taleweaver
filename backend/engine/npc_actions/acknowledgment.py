@@ -180,9 +180,9 @@ def _from_sources(
     return {
         "meaning": "historical_publication_acknowledgment_not_current_state",
         "semantics": (
-            "Blocked/skipped_dependency/stale requests were not applied; they prove no in-world "
-            "attempt or obstacle. Attempted proves no target response. IDs/codes are private "
-            "metadata, not speech. Current owner observations prevail."
+            "Blocked/skipped_dependency/stale prove no act or obstacle. Attempted proves no "
+            "target response. Keep IDs/codes private. Judge progress from current owner observations. "
+            "Choose your next step; others choose theirs."
         ),
         "source_input_id": source.message_id,
         "source_reply_id": previous.reply_id,
