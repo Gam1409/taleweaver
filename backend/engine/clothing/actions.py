@@ -6,20 +6,32 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from backend.engine.clothing.schema import Garment, Region
 
+ClothingBasis = Literal[
+    "performed", "claim", "past", "future", "hypothetical", "negated", "uncertain"
+]
 
-class ClothingEvidence(BaseModel):
+
+class _ClothingEvidence(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     actor_id: str = Field(min_length=1, max_length=100)
     source: Literal["player_action", "completed_narration", "actor_description"]
     evidence: str = Field(min_length=4, max_length=600)
-    basis: Literal["performed", "claim", "past", "future", "hypothetical", "negated", "uncertain"]
     agency: Literal["self_action", "npc_choice", "consented_assistance"]
     npc_decision: Literal["approved", "refused", "not_established"] = "not_established"
     reason: str = Field(min_length=4, max_length=400)
 
 
-class WardrobeAction(ClothingEvidence):
+class ClothingEvidence(_ClothingEvidence):
+    basis: ClothingBasis
+
+
+class WardrobeAction(_ClothingEvidence):
+    # An attempted adjustment is representable, but never supplies completed evidence.
+    # Keep acquisition evidence and explicit debug commands on their own contracts.
+    basis: Literal[ClothingBasis, "attempt"] = Field(
+        description="Use attempt for an unperformed wardrobe attempt, never a completed change or consent. Only performed actions can change clothing."
+    )
     item_id: str = Field(min_length=1, max_length=100)
     operation: Literal["wear", "remove", "adjust"]
     uncovered_regions: list[Region] = Field(default_factory=list, max_length=7)
@@ -53,6 +65,9 @@ Never replace a whole NPC inventory or uniform just to update their appearance.
 Player clothing changes require their action or established consent; NPCs may make
 their own context-appropriate choices, respecting their character and story rules.
 A request is not consent, a claimed past event is not a completed current action.
+For wardrobe_actions, basis=attempt records an unperformed attempt only: it never
+changes wear, ownership or consent. Use performed only for a completed change;
+leave an NPC request unresolved for that NPC's independent decision.
 For NPC changes based on the current player input, adjudicate their independent
 choice explicitly: npc_decision=approved only when the NPC actually chooses or
 consents now under established characterization and rules. Otherwise use refused
