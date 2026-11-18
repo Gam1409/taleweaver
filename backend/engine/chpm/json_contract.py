@@ -35,7 +35,7 @@ def _bound_review_anchors(
         return
     from backend.engine.chpm.passages import Review, SharedReview
 
-    if schema not in (Review, SharedReview):
+    if not issubclass(schema, (Review, SharedReview)):
         return
     capacity = len(set(identifiers["actor_id"]))
     for field in ("evidence", "actions", "agenda_evidence"):
@@ -43,6 +43,17 @@ def _bound_review_anchors(
             continue
         array = contract["properties"][field]
         array["maxItems"] = min(array["maxItems"], capacity)
+    if getattr(schema, "completed_changes_wire", False):
+        # These handles have their own receipt owner, which returns bounded repair feedback.
+        # Existing speech/hearing and scope identifiers retain their normal strict checks.
+        claim = contract["$defs"]["CompletedChange"]["properties"]
+        for field in ("actor_id", "passage_id"):
+            claim[field].pop("enum", None)
+        field = contract["properties"]["completed_changes"]
+        contract["properties"]["completed_changes"] = next(
+            branch for branch in field["anyOf"] if branch.get("type") == "array"
+        )
+        contract.setdefault("required", []).append("completed_changes")
 
 
 def _explicit_enum_maps(node: Any) -> None:
@@ -121,6 +132,8 @@ def validate_identifiers(
     """Mirror offered finite ID allowlists before canonical readers can trim strings."""
     if not getattr(schema, "reference_wire", False):
         return
+    if getattr(schema, "completed_changes_wire", False):
+        candidate = {key: value for key, value in candidate.items() if key != "completed_changes"}
     _validate_identifier_values(candidate, identifiers or {})
 
 

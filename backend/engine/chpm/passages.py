@@ -86,6 +86,34 @@ class ReviewRejection(Contract):
     passage_id: str | None = Field(default=None, min_length=1, max_length=32)
 
 
+class CompletedChange(Contract):
+    """A reviewer's claimed completion, never a command or a state update."""
+
+    model_config = ConfigDict(str_strip_whitespace=False)
+    actor_id: str = Field(min_length=1, max_length=100)
+    passage_id: str = Field(min_length=1, max_length=32)
+    operation_id: str = Field(min_length=1, max_length=100)
+    tool: str = Field(min_length=1, max_length=100)
+    target_id: str = Field(min_length=1, max_length=100)
+    recipient_id: str | None = Field(default=None, min_length=1, max_length=100)
+    posture: str | None = Field(default=None, min_length=1, max_length=120)
+    uncovered_regions: list[str] | None = Field(default=None, max_length=7)
+
+
+class ReceiptReview(SharedReview):
+    """Controlled publication requires explicit, separately checked completion coverage."""
+
+    completed_changes_wire: ClassVar[bool] = True
+    completed_changes: list[CompletedChange] | None = Field(default=None, max_length=320)
+
+    @model_validator(mode="before")
+    @classmethod
+    def discard_rejected_claims(cls, value: Any) -> Any:
+        if isinstance(value, dict) and value.get("matches") is False and value.get("rejections"):
+            return {**value, "completed_changes": []}
+        return value
+
+
 _REASONS = {
     "intention": "The expression changes the selected intention.",
     "agenda": "The spoken agenda differs from the selected change.",
@@ -155,10 +183,10 @@ def resolve_shared(
     text: str,
 ) -> Verdict:
     """Resolve the new producer shape without changing conflicting legacy anchors."""
-    review = SharedReview.model_validate(review.model_dump())
+    review = type(review).model_validate(review.model_dump())
     legacy = Review.model_validate(
         {
-            **review.model_dump(exclude={"review_scope", "rejections"}),
+            **review.model_dump(exclude={"review_scope", "rejections", "completed_changes"}),
             "issues": review.issues,
             "agenda_evidence": [
                 entry.model_dump() for entry in review.evidence if entry.actor_id in agenda_actors

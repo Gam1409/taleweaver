@@ -101,6 +101,7 @@ class Turn:
     control: dict = field(default_factory=dict)
     host_rejections: list[dict] = field(default_factory=list)
     review_operation: dict = field(default_factory=dict)
+    review_change_feedback: dict = field(default_factory=dict)
     execution_frame: owner_frame.Frame | None = None
 
 

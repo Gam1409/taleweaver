@@ -17,6 +17,7 @@ from backend.engine.chpm import (
     narration_repair_input,
     passages,
     prompts,
+    receipt_review,
     review_speech,
 )
 from backend.engine.chpm.errors import (
@@ -200,30 +201,25 @@ def _candidate_key(text: str) -> str:
 async def _review(manager: Any, turn: Turn, text: str, resolution: str) -> Verdict:
     from backend.engine.chpm import reports
 
+    turn.review_change_feedback = {}
     available = passages.index(text)
     control, observed = await _review_control(manager, turn)
     instruction = (
         prompts.verification(command_owned=bool(turn.action_outcomes))
         + command_instructions.resolution_instructions(turn.action_outcomes)
         + command_feedback.instructions(turn)
+        + receipt_review.instruction(turn)
     )
     payload = _review_payload(turn, available, resolution)
     identifiers = _review_identifiers(turn, available, scope=payload["review_scope"])
     if turn.report_origins and not inference.fits(
-        turn.initial.settings, instruction, payload, passages.SharedReview, identifiers
+        turn.initial.settings, instruction, payload, receipt_review.schema(turn), identifiers
     ):
         reports.disable(turn)
         payload = _review_payload(turn, available, resolution)
         identifiers = _review_identifiers(turn, available, scope=payload["review_scope"])
-    raw: passages.SharedReview | passages.Review | Verdict = await inference.request(
-        manager,
-        turn.initial.settings,
-        turn.usage,
-        instruction,
-        payload,
-        passages.SharedReview,
-        "validation",
-        identifiers=identifiers,
+    raw, wire_failures = await receipt_review.request(
+        manager, turn, instruction, payload, identifiers
     )
     _validate_review_scope(raw, turn, available, text, resolution, payload)
     await _ensure_review_current(manager, control, observed, turn)
@@ -233,6 +229,12 @@ async def _review(manager: Any, turn: Turn, text: str, resolution: str) -> Verdi
             matches=False,
             issues=raw.issues or ["The dialogue validator rejected this candidate."],
         )
+    failures = wire_failures or receipt_review.validate(raw, turn, available)
+    if failures:
+        receipt_review.remember(turn, payload, failures)
+        issues = ["Completed prose changes lack matching current applied receipts."]
+        _reject_review(turn, text, resolution, issues, raw, payload)
+        return Verdict(matches=False, issues=issues)
     try:
         selected = (
             review_speech.representative(
@@ -386,6 +388,7 @@ def _review_payload(turn: Turn, available: dict[str, str], resolution: str) -> d
         "passages": available,
         "request_control": _review_request_control(turn),
         "review_scope": _review_scope(turn, available, resolution),
+        **({"completed_changes_required": True} if receipt_review.enabled(turn) else {}),
         "report_origins_not_world_facts": reports.context(turn),
         **(
             {"host_rejections_before_commands": turn.host_rejections}
@@ -448,9 +451,10 @@ def _review_room(turn: Turn) -> int:
     prompt, content = inference.compose(
         prompts.verification(command_owned=bool(turn.action_outcomes))
         + command_instructions.resolution_instructions(turn.action_outcomes)
-        + command_feedback.instructions(turn),
+        + command_feedback.instructions(turn)
+        + receipt_review.instruction(turn),
         payload,
-        passages.SharedReview,
+        receipt_review.schema(turn),
         _review_identifiers(turn, {}, scope=payload["review_scope"]),
     )
     return turn.initial.settings.max_input_chars - len(prompt) - len(content)

@@ -202,14 +202,19 @@ def _pose_conflicts(manager: Any, poses: list[SceneDelta], actors: dict, rows: l
     from backend.engine.scene_staging.shared import _cast
     from backend.engine.scene_staging.state import project
 
-    current = project(manager.state, _cast(manager, actors, rows))
+    cast = _cast(manager, actors, rows)
+    known = {person["id"] for person in cast}
+    current = project(manager.state, cast)
     issues: list[dict] = []
     for change in poses:
         actual = current.get(change.entity_id, {})
         proposed = {
             "posture": change.posture if change.posture != "unknown" else None,
             "placement": change.placement.model_dump()
-            if change.placement and change.placement.relation != "unknown"
+            if change.placement
+            and change.placement.target_kind == "character"
+            and change.placement.target in known - {change.entity_id}
+            and change.placement.relation != "unknown"
             else None,
         }
         issues.extend(

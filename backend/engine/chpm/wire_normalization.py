@@ -13,7 +13,7 @@ def normalize(
     schema: type[BaseModel], candidate: dict, identifiers: dict[str, list[str]] | None
 ) -> tuple[dict, tuple[str, ...]]:
     """Project unused rejected effects or copy one known singular choice ID."""
-    if schema is SharedReview and candidate.get("matches") is False:
+    if issubclass(schema, SharedReview) and candidate.get("matches") is False:
         projected = rejected_candidate(candidate)
         return projected, ("review.rejected_effects_discarded",) if projected != candidate else ()
     field = schema.model_fields.get("choice")

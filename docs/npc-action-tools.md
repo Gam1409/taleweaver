@@ -112,6 +112,15 @@ arbitrary recipient-state setter or separate permission tool.
    an approved empty plan cannot acquire them through narration. Unrelated
    staging facts and separately resolved external effects retain their owners.
 
+In buffered live turns, the existing narration review cites a passage and a
+current applied operation for each voluntary change it identifies in custody,
+wear, posture or movement. For a transfer, the host checks the recipient. For
+an adjustment or pose, it checks the resulting coverage or posture. A mismatched
+claim can use the normal prose repair. Independently, if the shared extractor
+identifies an explicit current possession, wear or self-pose that conflicts
+with its authoritative state, the buffered reply is withheld and the turn rolls
+back. Recognition of a claim in free prose still depends on the model.
+
 A wardrobe proposal can record an attempted adjustment. Only a performed action
 with valid evidence and authority can update the garment. The turn can continue
 with other independently established facts.
@@ -190,6 +199,10 @@ private facts do not become public merely because an operation occurred. Legal
 property ownership does not override physical custody or scene placement.
 
 ## Lifecycle and psychological boundaries
+
+When several proposal alternatives have invalid motive references or lack personal
+support, the existing proposal repair receives their independent errors together.
+The host checks the repaired alternatives against the same actor's motive catalogue.
 
 Each delivered command-controlled decision retains one bounded internal action
 feedback summary for that NPC's next existing decision. It contains only the

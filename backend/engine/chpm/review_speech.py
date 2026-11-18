@@ -96,7 +96,7 @@ def representative(
     if not duplicates:
         return review
     # A mutated internal DTO must not use reduction to bypass the existing global bounds.
-    checked = SharedReview.model_validate(review.model_dump())
+    checked = type(review).model_validate(review.model_dump())
     occurrences = spans(text)
     eligible = {
         actor

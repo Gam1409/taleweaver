@@ -3,7 +3,7 @@
 import json
 from string import Template
 
-from backend.engine.chpm import roster
+from backend.engine.chpm import receipt_review, roster
 from backend.engine.chpm.agenda_semantics import with_glossary
 from backend.engine.chpm.runtime import Turn, contract, contract_data
 from backend.engine.npc_actions import instructions as command_instructions
@@ -109,6 +109,7 @@ def build(
         **command_instructions.resolution_timing(turn.action_outcomes),
         "narration": text,
         "issues": issues,
+        **receipt_review.feedback(turn, text, resolution),
         **(
             {"host_rejections_before_commands": turn.host_rejections}
             if getattr(turn, "host_rejections", None)

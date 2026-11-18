@@ -122,6 +122,9 @@ def _candidate(raw, payload):
 
 
 def _review(body, payload):
+    if payload.get("completed_changes_required") and body.get("matches") is True:
+        # Existing scripted no-claim reviews must now state that coverage explicitly.
+        body.setdefault("completed_changes", [])
     if "passages" in payload and "agenda_evidence" in body:
         speech = {item["actor_id"]: item.get("passage_id") for item in body.get("evidence", [])}
         if all(

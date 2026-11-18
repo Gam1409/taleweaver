@@ -13,6 +13,7 @@ from backend.engine.chpm import (
     narration_repair_input,
     passages,
     prompts,
+    receipt_review,
     rendering,
     runtime,
 )
@@ -167,6 +168,7 @@ async def test_actual_review_counts_complete_policy_at_exact_unchanged_input_lim
             {
                 "review_scope": body["review_scope"],
                 "matches": True,
+                "completed_changes": [],
                 "evidence": [{"actor_id": "npc", "passage_id": next(iter(body["passages"]))}],
             }
         )
@@ -187,7 +189,7 @@ async def test_actual_review_counts_complete_policy_at_exact_unchanged_input_lim
     baseline = compose(
         composed[-1][0],
         body,
-        passages.SharedReview,
+        receipt_review.schema(current),
         rendering._review_identifiers(current, passages.index(TEXT), scope=body["review_scope"]),
     )
     resolution = "x" * (24000 - sum(map(len, baseline)) + overflow)

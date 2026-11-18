@@ -9,10 +9,14 @@ from backend.core.text_evidence import EvidenceSpan
 from backend.engine import turn_controls
 from backend.engine.chpm.schema import KernelState, Settings
 from backend.engine.chpm.state import KEY
+from backend.engine.clothing.context import actor_records
 from backend.engine.narrated_items.schema import ItemAction
 from backend.engine.npc_actions import narration_fence
 from backend.engine.npc_actions.control import CommandRejectedError
+from backend.engine.scene_staging.schema import SceneDelta
 from tests.test_npc_action_previews import fixture
+from tests.test_scene_staging_command_retention import command as pose_command
+from tests.test_scene_staging_command_retention import fixture as pose_fixture
 
 TEXT = "The actor currently holds the key."
 
@@ -140,3 +144,36 @@ def test_a_forged_nonempty_publication_still_fails_its_existing_owner_guard():
     host._chpm_turn.action_outcomes = {"npc": [fake]}
     with pytest.raises(CommandRejectedError, match="operation record"):
         narration_fence.begin(host, TEXT)
+
+
+def test_free_object_labels_do_not_become_deterministic_pose_conflicts():
+    host, rows = pose_fixture()
+    pose_command(
+        host, "LINA", "standing", source="current-input", target="BENCH", kind="scene_object"
+    )
+    proposed = SceneDelta(
+        entity_id="LINA",
+        performer_id="LINA",
+        evidence="The actor stands near the wooden bench.",
+        placement={"relation": "near", "target_kind": "scene_object", "target": "the wooden bench"},
+    )
+    assert narration_fence._pose_conflicts(host, [proposed], actor_records(host, rows), rows) == []
+
+
+@pytest.mark.parametrize("target, count", [("hero", 1), ("Hero", 0), ("LINA", 0)])
+def test_character_placement_relations_still_compare_canonical_ids(target, count):
+    host, rows = pose_fixture()
+    proposed = SceneDelta(
+        entity_id="LINA",
+        performer_id="LINA",
+        evidence="Lina is behind Hero.",
+        placement={"relation": "behind", "target_kind": "character", "target": target},
+    )
+    issues = narration_fence._pose_conflicts(host, [proposed], actor_records(host, rows), rows)
+    assert len(issues) == count
+    if not issues:
+        return
+    assert issues[0]["field"] == "placement"
+    assert issues[0]["actual"]["relation"] == "near"
+    assert issues[0]["proposed"]["relation"] == "behind"
+    assert issues[0]["proposed"]["target"] == "hero"
