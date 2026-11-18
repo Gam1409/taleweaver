@@ -179,8 +179,9 @@ obligation to approach its target or describe sexual behaviour. Do not require s
 Allow contextual development explicitly grounded in developing_tendencies while
 preserving the historical identity and unrelated traits; contested is not certain.
 Do not infer consent, agreement or completed actions from the player's request.
-For each controlled NPC return evidence of its expression: evidence contains its
-own spoken words, actions contains its own performed physical action. Use one entry
+Copy review_scope. If matches=false, return typed rejections and leave evidence,
+actions, heard and causal_updates empty. If matches=true, return rejections=[].
+For an accepted narration, evidence cites own speech and actions cite performed acts. Use one entry
 per actor per array; a mixed expression may appear in both. The union must cover all
 controlled_actor_ids. An action-only NPC needs actions, not invented dialogue.
 actor_id must copy an ID from controlled_actor_ids, never a display name. Choose ONE
@@ -209,10 +210,9 @@ For a selected agenda_change, choose the owner's ONE evidence passage to express
 that exact change. The host uses this same spoken anchor for the agenda; do not
 return agenda_evidence or another ID. Reject unselected changes, silent/action-only
 changes or attribution to player/foreign speech. Apply AGENDA CODES below.
-Copy review_scope unchanged. On mismatch, return rejections with reason_code and
-optional current actor_id/passage_id: intention, agenda, attribution, agency,
-world, knowledge, identity, continuity, inference or inactive. On success use [].
-Do not output issue prose; the host renders the structured reason.
+Each rejection needs a reason_code and may cite a current actor_id/passage_id.
+Use intention, agenda, attribution, agency, world, knowledge, identity, continuity,
+inference or inactive. The host renders the reason from the code.
 CAUSAL MEMORY (optional causal_updates, never a reason to change the story):
 For at most ONE meaningful update per controlled NPC, return an object:
 {"actor_id":"exact ID","action":"open|update|close","thread_id":null,

@@ -4,6 +4,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from backend.engine.chpm.passages import SharedReview, rejected_candidate
 from backend.engine.chpm.proposal_references import Choice
 from backend.engine.chpm.schema import ChoicePreference
 
@@ -11,7 +12,10 @@ from backend.engine.chpm.schema import ChoicePreference
 def normalize(
     schema: type[BaseModel], candidate: dict, identifiers: dict[str, list[str]] | None
 ) -> tuple[dict, tuple[str, ...]]:
-    """Copy only an unambiguous known singular choice ID into its canonical list."""
+    """Project unused rejected effects or copy one known singular choice ID."""
+    if schema is SharedReview and candidate.get("matches") is False:
+        projected = rejected_candidate(candidate)
+        return projected, ("review.rejected_effects_discarded",) if projected != candidate else ()
     field = schema.model_fields.get("choice")
     choice = candidate.get("choice")
     if (

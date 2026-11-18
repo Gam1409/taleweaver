@@ -2,7 +2,7 @@
 
 from typing import Any, ClassVar, Literal
 
-from pydantic import ConfigDict, Field, StrictBool
+from pydantic import ConfigDict, Field, StrictBool, model_validator
 
 from backend.core import text_passages
 from backend.engine.chpm.kernel import ChpmError
@@ -50,6 +50,19 @@ class SharedReview(Contract):
     heard: list[SharedHeardReference] = Field(default_factory=list, max_length=12)
     causal_updates: list[Any] = Field(default_factory=list, max_length=20)
 
+    @model_validator(mode="before")
+    @classmethod
+    def rejected_expression_fields(cls, value: Any) -> Any:
+        return rejected_candidate(value) if isinstance(value, dict) else value
+
+    @model_validator(mode="after")
+    def no_rejected_effects(self) -> "SharedReview":
+        # A negative verdict can request repair but never grant speech, hearing or memory effects.
+        if not self.matches:
+            for field in _SUCCESS_FIELDS:
+                setattr(self, field, [])
+        return self
+
     @property
     def issues(self) -> list[str]:
         return [_REASONS[item.reason_code] for item in self.rejections]
@@ -85,6 +98,17 @@ _REASONS = {
     "inference": "The narration treats an unsupported inference as a fact.",
     "inactive": "An inactive controlled actor has a new expression.",
 }
+
+_SUCCESS_FIELDS = ("evidence", "actions", "heard", "causal_updates")
+
+
+def rejected_candidate(candidate: dict) -> dict:
+    """Preserve typed refusal data; unused positive fields cannot obstruct a valid rejection."""
+    rejections = candidate.get("rejections")
+    if candidate.get("matches") is not False or not isinstance(rejections, list) or not rejections:
+        return candidate
+    # The complete outer DTO and current-ID validation still check every rejection and the scope.
+    return {**candidate, **{field: [] for field in _SUCCESS_FIELDS if field in candidate}}
 
 
 def validate_shared(review: SharedReview, scope: str, available: dict, actors: set[str]) -> None:
