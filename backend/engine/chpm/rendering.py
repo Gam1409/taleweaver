@@ -17,6 +17,7 @@ from backend.engine.chpm import (
     narration_repair_input,
     passages,
     prompts,
+    review_speech,
 )
 from backend.engine.chpm.errors import (
     InferenceUnavailableError,
@@ -233,7 +234,18 @@ async def _review(manager: Any, turn: Turn, text: str, resolution: str) -> Verdi
             issues=raw.issues or ["The dialogue validator rejected this candidate."],
         )
     try:
-        verdict = _resolve_review(raw, turn, available, text)
+        selected = (
+            review_speech.representative(
+                raw,
+                decisions=turn.decisions,
+                names=turn.present_names,
+                player_name=getattr(getattr(manager, "avatar", None), "name", None),
+                text=text,
+            )
+            if isinstance(raw, passages.SharedReview)
+            else raw
+        )
+        verdict = _resolve_review(selected, turn, available, text)
     except ChpmError as exc:
         _reject_review(turn, text, resolution, [str(exc)], raw, payload)
         raise RecoverableChpmError(str(exc)) from exc
