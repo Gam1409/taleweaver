@@ -88,6 +88,10 @@ arbitrary recipient-state setter or separate permission tool.
    neither a physical failed attempt nor an obligation to act; speech, waiting,
    refusal and no action remain valid. Unapproved previews and stale empty plans
    do not acquire this publication authority.
+   The VN narrator selects its instructions after publication. In a mixed scene,
+   each actor with a published plan follows that plan's results. Other actors
+   follow the ordinary VN rules. Dialogue, facial expression and small gestures
+   are possible with an empty plan.
 7. Shared extraction cannot repeat or reverse command-owned inventory, wardrobe
    and travel effects. Only handled item-property dimensions are protected;
    independent body conditions, other dimensions and unrelated scene effects
@@ -95,6 +99,18 @@ arbitrary recipient-state setter or separate permission tool.
    and placement changes for controlled actors also require their command API;
    an approved empty plan cannot acquire them through narration. Unrelated
    staging facts and separately resolved external effects retain their owners.
+
+A wardrobe proposal can record an attempted adjustment. Only a performed action
+with valid evidence and authority can update the garment. The turn can continue
+with other independently established facts.
+
+For a negative narration review, the current scope and typed rejection references
+identify what needs repair. Evidence, hearing and memory updates apply only to an
+accepted narration. A positive review may cite several explicitly attributed
+lines spoken by the same NPC. When all those references identify the same speaker
+unambiguously and the decision has no agenda change, one existing passage can
+serve as the representative speech citation. A selected promise or other agenda
+change still requires its own unambiguous anchor.
 
 Two NPCs can independently reach for the same cup. Each decides from their own
 observations and motives. The host resolves their commands in stable actor-ID
