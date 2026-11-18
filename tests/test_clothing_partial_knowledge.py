@@ -151,7 +151,9 @@ def test_owned_legacy_equipment_is_positive_but_stale_or_ambiguous_references_ar
     assert profile.unassessed_wear_item_ids == ["COAT"]
 
 
-def test_receive_preserves_established_age_body_and_unrelated_wear_proof():
+@pytest.mark.parametrize("disposition", ["carried", "held"])
+@pytest.mark.parametrize("partial", [False, True])
+def test_receive_preserves_established_age_body_and_unrelated_wear_proof(disposition, partial):
     host, rows = world()
     actor = actor_records(host, rows)["npc"]
     actor["visual_profile"]["body"] = {"form": "humanoid", "attachment_slots": []}
@@ -160,10 +162,32 @@ def test_receive_preserves_established_age_body_and_unrelated_wear_proof():
         "content_hash": sha256(b"The coat is worn.").hexdigest(),
         "evidence": "The coat is worn.",
     }
+    if partial:
+        unknown = _item("UNASSESSED")
+        actor["inventory"].append(deepcopy(unknown))
+        actor["resolved_inventory"].append(deepcopy(unknown))
+        actor["visual_profile"].update(
+            wear_assessment_complete=False, unassessed_wear_item_ids=["UNASSESSED"]
+        )
     before = deepcopy(actor["visual_profile"])
-    receive(actor, _item("NEW"), "carried", False)
-    assert actor["visual_profile"] == load_profile(before).model_dump()
+
+    receive(actor, _item("NEW"), disposition, False)
+
+    assert actor["visual_profile"] == before
+    profile, original = load_profile(actor["visual_profile"]), load_profile(before)
+    assert profile is not None and original is not None
+    assert profile.model_dump() == original.model_dump()
+    assert profile.appearance.age_years == original.appearance.age_years == 30
+    assert profile.body == original.body and actor["visual_profile"]["body"] == before["body"]
+    assert actor["visual_profile"]["worn"] == before["worn"]
+    assert actor["visual_profile"]["worn"][0]["source"] == before["worn"][0]["source"]
+    assert profile.wear_assessment_complete is not partial
     assert item_wear_state(actor["visual_profile"], actor["resolved_inventory"], "NEW") == "carried"
+    if partial:
+        unknown_state = item_wear_state(
+            actor["visual_profile"], actor["resolved_inventory"], "UNASSESSED"
+        )
+        assert unknown_state == "unknown"
 
 
 @pytest.mark.parametrize(
