@@ -116,6 +116,12 @@ A successful extraction with zero proposals is displayed explicitly. It means th
 
 Storage is the additive `entity_states.__physical_conditions__` JSON record (`version: 1`); no database migration is needed. Full-turn regeneration rewinds the ledger with the turn snapshot. Narration-only rewriting keeps world state, as it does for inventory and locations. Session copying and `.ads` export/import preserve facts and remap source message IDs. If the source message was not included, it is marked unavailable rather than silently dropping the fact or claiming a different message established it.
 
+Legacy `SESSION_BUNDLE` imports use the same source-restoration owner and local
+message-ID map. Physical conditions and avatar, base-NPC and runtime-override wear
+proofs retain their facts while rebinding included sources. Unsupported physical
+ledgers are rejected before a partial import is committed, matching the existing
+session import rules.
+
 Source quotes and hashes describe the completed reply at registration. A later narration-only rewrite can change the displayed wording; it does not retroactively remove the physical fact or replace its recorded evidence.
 
 A missing, timed-out or invalid shared model response preserves existing conditions and records a failed check; the completed story reply can still be published. Invalid optional condition candidates are audited independently. Invalid stored ledger data is preserved and reported rather than replaced with an empty ledger.

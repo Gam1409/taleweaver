@@ -7,12 +7,10 @@ from uuid import uuid4
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.engine.chpm.lifecycle import fork as fork_chpm
-from backend.engine.living_world.portability import remap_intentions
-from backend.engine.memory_rag.lifecycle import restore_memory
+from backend.engine.clothing.wear_provenance import remap_profile
 from backend.engine.npc_journal.messages import restore_messages
-from backend.engine.scene_illustrations.snapshots import remap_illustrations
-from backend.engine.visual_novel.lifecycle import remap_social_state
+from backend.engine.session_restore_sources import restore_sources
+from backend.models.avatar import Avatar
 from backend.models.session_state import SessionState
 from backend.models.world_entity import WorldEntity, WorldExit, WorldScene
 from backend.models.world_map import WorldMap
@@ -44,19 +42,20 @@ _SYSTEM_FIELDS = {"pk", "session_id", "template_id", "created_at", "updated_at"}
 
 
 def restore_details(
-    db: AsyncSession, state: SessionState, old_state: dict, history: list[dict]
-) -> None:
+    db: AsyncSession,
+    state: SessionState,
+    old_state: dict,
+    history: list[dict],
+    *,
+    avatar: Avatar,
+) -> dict[str, str]:
+    """Restore saved fields and sources, returning their new local message identities."""
     for field in STATE_FIELDS:
         if field in old_state:
             setattr(state, field, deepcopy(old_state[field]))
     ids = restore_messages(db, state.session_id, history)
-    state.living_world = remap_intentions(state.living_world, ids)
-    restore_memory(state, old_state, ids)
-    state.entity_states = fork_chpm(
-        remap_illustrations(remap_social_state(state.entity_states, ids), ids),
-        ids,
-        state.session_id,
-    )
+    restore_sources(avatar, state, old_state, ids)
+    return ids
 
 
 def _values(model: Any, raw: dict) -> dict:
@@ -82,12 +81,18 @@ async def _records(db: AsyncSession, model: Any, template_id: str, raw: Any) -> 
 
 
 async def restore_world(
-    db: AsyncSession, state: SessionState, template_id: str, payload: dict
+    db: AsyncSession,
+    state: SessionState,
+    template_id: str,
+    payload: dict,
+    *,
+    message_ids: dict[str, str],
 ) -> None:
+    """Materialize session-owned rows using the same restored source identities."""
     exit_ids = {}
     for model, key in ((WorldScene, "scenes"), (WorldExit, "exits"), (WorldEntity, "entities")):
         records = await _records(db, model, template_id, payload.get(key))
-        exit_ids.update(_restore_records(db, model, records, state))
+        exit_ids.update(_restore_records(db, model, records, state, message_ids))
     state.exit_states = {
         exit_ids.get(key, key): value for key, value in (state.exit_states or {}).items()
     }
@@ -106,12 +111,18 @@ async def restore_world(
 
 
 def _restore_records(
-    db: AsyncSession, model: Any, records: list[dict], state: SessionState
+    db: AsyncSession,
+    model: Any,
+    records: list[dict],
+    state: SessionState,
+    message_ids: dict[str, str],
 ) -> dict:
     exit_ids = {}
     for raw in records:
         values = _values(model, raw)
         _normalize(model, values, raw, state.current_scene_id)
+        if model is WorldEntity and "visual_profile" in values:
+            values["visual_profile"] = remap_profile(values["visual_profile"], message_ids)
         if model is WorldExit:
             new_id = str(uuid4())
             exit_ids[raw.get("id") or new_id] = new_id
