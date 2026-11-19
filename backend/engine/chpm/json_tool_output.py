@@ -1,4 +1,4 @@
-"""Optional provider output constraints for the existing portable function envelope."""
+"""Optional output constraints and syntax diagnostics for the portable function envelope."""
 
 import inspect
 import json
@@ -13,10 +13,40 @@ from backend.core.llm_schema_compaction import safe_to_share
 from backend.core.llm_schema_merge import SchemaProjectionError
 from backend.core.llm_structured_output import for_router
 from backend.engine.chpm import required_tools
+from backend.engine.chpm.agent_limits import MAX_TOOL_ARGUMENT_CHARS
+from backend.engine.chpm.notebook.codec import decode
 
 MAX_REQUESTS = 2
 SUBMISSION = "submit_decision"
 logger = logging.getLogger(__name__)
+
+
+def syntax_error_code(error: json.JSONDecodeError) -> str:
+    """Recognize one complete terminal request inside an otherwise unclosed requests array."""
+    if (
+        len(error.doc) > MAX_TOOL_ARGUMENT_CHARS
+        or error.msg != "Expecting ',' delimiter"
+        or error.doc[error.pos :].rstrip(" \t\r\n") != "}"
+    ):
+        return "invalid_json"
+    header, _, element = error.doc[: error.pos].partition("[")
+    opening, key, colon = header.partition('"requests"')
+    if opening.strip() != "{" or not key or colon.strip() != ":":
+        return "invalid_json"
+    try:
+        # Inspect only the original, complete array element. No synthesized wrapper
+        # or decoded arguments can enter the execution path from a syntax error.
+        item = decode(element)
+    except ValueError:
+        return "invalid_json"
+    if (
+        isinstance(item, dict)
+        and set(item) == {"name", "arguments"}
+        and item["name"] == SUBMISSION
+        and isinstance(item["arguments"], dict)
+    ):
+        return "unclosed_requests_array"
+    return "invalid_json"
 
 
 class PortableToolEnvelope(BaseModel):

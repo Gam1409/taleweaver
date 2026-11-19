@@ -20,6 +20,12 @@ HINTS = {
         "Return one complete finite JSON object in the offered function-call format, "
         "without commentary, duplicate keys or trailing text. No operation was parsed."
     ),
+    "unclosed_requests_array": (
+        "The requests array is missing its closing ] before the final }. After the arguments "
+        "object, close the request, array, and outer object in order: }]}. "
+        'Envelope example: {"requests":[{"name":"submit_decision","arguments":{}}]}. '
+        "Replace the empty arguments with your complete proposal and resend the envelope."
+    ),
     "missing_requests": (
         "The portable response is missing its requests array. Add one request named "
         "submit_decision and put the complete proposal inside its arguments object. "

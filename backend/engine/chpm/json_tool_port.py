@@ -391,7 +391,9 @@ def _calls(raw: str) -> tuple[ToolCall, ...]:
     except (ValueError, TypeError, AttributeError, RecursionError, OverflowError) as exc:
         raise InvalidToolTurnError(
             "The portable function response must be complete, finite JSON with a requests array.",
-            code="invalid_json",
+            code=json_tool_output.syntax_error_code(exc)
+            if isinstance(exc, json.JSONDecodeError)
+            else "invalid_json",
         ) from exc
 
 

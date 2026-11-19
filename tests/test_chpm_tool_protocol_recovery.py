@@ -94,6 +94,51 @@ async def test_complete_portable_format_error_can_be_corrected_within_existing_r
     assert decision.agent_audit[0]["error_type"] == "unexpected_fields"
 
 
+async def test_unclosed_portable_final_names_the_array_in_the_existing_one_correction():
+    canary = "PRIVATE: a string containing fake closers }]} and a quoted bracket"
+    item = {"name": "submit_decision", "arguments": {"nested": [{"data": canary}]}}
+    malformed = '{ "requests" : [ ' + json.dumps(item) + " }"
+    reply = json.dumps({"requests": [{"name": "submit_decision", "arguments": wire_proposal()}]})
+    model = Replies([malformed, reply])
+    (decision, _), usage = await deliberate(model, steps=1, protocol="json")
+    assert len(model.requests) == usage.calls == 2 and not usage.proposal_repairs
+    history = model.requests[1][2]["conversation"]
+    feedback = next(
+        json.loads(m["content"])["host_protocol_feedback"]
+        for m in history
+        if "host_protocol_feedback" in m.get("content", "")
+    )
+    assert feedback["code"] == decision.agent_audit[0]["error_type"] == "unclosed_requests_array"
+    assert feedback["operations_applied"] is False
+    assert "requests array" in feedback["message"] and "}]}" in feedback["message"]
+    assert '{"requests":[{"name":"submit_decision","arguments":{}}]}' in feedback["message"]
+    assert canary not in json.dumps(history) and not decision.agent_audit[0]["requests"]
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        '{"requests":[{"name":"submit_decision","arguments":{"v":[1}}}}',
+        '{"requests":[{"name":"submit_decision","arguments":{}},{"name":"submit_decision","arguments":{}}}',
+        '{"requests":[{"name":"submit_decision","arguments":{},"arguments":{}}}',
+        '{"requests":[{"name":"submit_decision","arguments":{},"extra":true}}',
+        '{"requests":[{"name":"submit_decision","arguments":"data"}}',
+        '{"requests":[{"name":"submit_decision","arguments":{"v":1e999}}}',
+        '{"requests":[{"name":"submit_decision","arguments":{"v":"\\ud800"}}}',
+        '{"requests":[{"name":"submit_decision","arguments":{}}} trailing',
+        '{"requests":[{"name":"submit_decision","arguments":{}}',
+        '{"actions":[{"name":"submit_decision","arguments":{}}}',
+    ],
+)
+def test_ambiguous_or_mixed_json_errors_keep_the_generic_guard(raw):
+    from backend.core.llm_tool_turn import InvalidToolTurnError
+    from backend.engine.chpm.json_tool_port import _calls
+
+    with pytest.raises(InvalidToolTurnError) as caught:
+        _calls(raw)
+    assert caught.value.code == "invalid_json"
+
+
 @pytest.mark.parametrize(
     "response,code",
     [
