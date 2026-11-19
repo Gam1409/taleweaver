@@ -4,7 +4,7 @@ import json
 import logging
 import time
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from backend.core.diagnostic_failures import failure_details, failure_reason
 from backend.core.engine_detailed_trace import step
@@ -62,6 +62,9 @@ from backend.engine.turn_replay.transactions import release_for_model
 
 logger = logging.getLogger(__name__)
 
+if TYPE_CHECKING:
+    from backend.engine.npc_actions.custody_citations import Proof as CustodyProof
+
 
 @dataclass
 class Turn:
@@ -102,6 +105,7 @@ class Turn:
     host_rejections: list[dict] = field(default_factory=list)
     review_operation: dict = field(default_factory=dict)
     review_change_feedback: dict = field(default_factory=dict)
+    reviewed_custody: "CustodyProof | None" = None
     execution_frame: owner_frame.Frame | None = None
 
 

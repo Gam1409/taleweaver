@@ -163,6 +163,21 @@ identifies an explicit current possession, wear or self-pose that conflicts
 with its authoritative state, the buffered reply is withheld and the turn rolls
 back. Recognition of a claim in free prose still depends on the model.
 
+For item custody, the host also compares the two model outputs on the exact
+passage both cited. If the reviewer links a passage to a pickup and the item
+extractor reads the same passage and item as a return to the room, the host
+flags the opposing transfer directions before applying extracted state. Only
+public applied receipts for the current attempt provide evidence. Multiple
+possible transfers in one passage, historical references and unrelated items
+remain outside this narrow check.
+
+When the turn has its one prose correction available, the narrator receives
+the disputed passage ID and the published transfer. The replacement goes
+through review and item extraction again. The NPC decision and its item
+command run once. A persisting discrepancy or an unavailable correction
+withholds the buffered reply and rolls back the turn. Matching readings
+incur no extra model call.
+
 A wardrobe proposal can record an attempted adjustment. Only a performed action
 with valid evidence and authority can update the garment. The turn can continue
 with other independently established facts.

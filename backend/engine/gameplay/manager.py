@@ -9,6 +9,7 @@ import re
 import time
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from datetime import datetime
+from functools import partial
 from typing import Any
 
 from backend.engine.gameplay.snapshot import AdventureSnapshot
@@ -93,6 +94,7 @@ from backend.engine.map_engine import MapEngine
 from backend.engine.narration_focus import narration_focus
 from backend.engine.gameplay.entity_state_updates import replace_entity_states
 from backend.engine.narrated_items.runtime import reconcile_items
+from backend.engine.chpm import reviewed_narration
 from backend.engine.narrated_movement.runtime import finish as finish_narrated_movement
 from backend.engine.visual_novel.item_rejections import (
     current_rejection,
@@ -2169,9 +2171,6 @@ class GameTurnManager:
             duration_ms=round((time.perf_counter() - cycle_start) * 1000, 2),
         )
 
-        applied_correction = correction_applied(
-            self.narration_correction, response_text, narration_warning
-        )
         narration_completed = bool(response_text.strip()) and not narration_warning
         if not (response_text or "").strip():
             if run_generator_tool_intent_pass:
@@ -2205,14 +2204,19 @@ class GameTurnManager:
 
         if policy.vn and narration_completed:
             yield f"event: status\ndata: {json.dumps({'content': 'Checking items and scene state...'})}\n\n"
-            item_messages = await reconcile_items(
+            response_text, item_messages = await reviewed_narration.reconcile(
                 self,
                 response_text,
-                completed=narration_completed,
+                resolve=partial(
+                    reconcile_items,
+                    self,
+                    completed=narration_completed,
+                    blocked=bool(rule_violations) or current_rejection(self) is not None,
+                    blocked_reason=rejection_reason(self, rule_violations),
+                    blocked_targets=rejected_targets(self, rule_violations),
+                ),
                 resolution=draft_narration + "\n" + outcome_json,
-                blocked=bool(rule_violations) or current_rejection(self) is not None,
-                blocked_reason=rejection_reason(self, rule_violations),
-                blocked_targets=rejected_targets(self, rule_violations),
+                system_prompt=narration_prompt,
             )
             for item_message in item_messages:
                 await self._save_chat_message("system", item_message)
@@ -2224,6 +2228,9 @@ class GameTurnManager:
         if chpm_buffered and narration_completed:
             await narration_fence.enforce(self, response_text)
 
+        applied_correction = correction_applied(
+            self.narration_correction, response_text, narration_warning
+        )
         id_to_name: dict[str, str] = {}
         for entity in all_entities:
             entity_id = str(getattr(entity, "id", "") or "").strip()

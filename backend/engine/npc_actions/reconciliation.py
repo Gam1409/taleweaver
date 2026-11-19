@@ -10,7 +10,7 @@ from backend.engine.narrated_items.participants import resolve_participants
 from backend.engine.narrated_items.schema import ItemExtraction
 from backend.engine.narrated_movement.runtime import exclude_commands
 from backend.engine.narrated_movement.schema import MovementProposal
-from backend.engine.npc_actions import narration_fence
+from backend.engine.npc_actions import custody_check, narration_fence
 from backend.engine.npc_actions.control import validated_outcomes
 from backend.engine.physical_conditions.ledger import read
 from backend.engine.physical_conditions.schema import ConditionProposal, Ledger
@@ -99,18 +99,30 @@ def protect(
 
 
 def unpack(
-    manager: Any, result: Any, actors: dict, *, original_actions: list[Any] | None = None
+    manager: Any,
+    result: Any,
+    actors: dict,
+    *,
+    original_actions: list[Any] | None = None,
+    narration: str = "",
+    resolution: str = "",
+    retry: custody_check.Recheck | None = None,
+    actions_provided: bool = True,
 ) -> tuple:
     extraction, failures, denied, indices = independent_state.unpack(
         result, actors, original_actions=original_actions
     )
-    if context(manager):
+    control = context(manager)
+    if retry is not None and (not control or failures or not actions_provided):
+        raise custody_check.CustodyDisagreementError(retry)
+    if control:
         extraction = extraction.model_copy(
             update={"actions": [_participants(action, actors) for action in extraction.actions]}
         )
+        custody_check.compare(manager._chpm_turn, narration, resolution, extraction.actions, retry)
     narration_fence.items(manager, extraction.actions)
     guarded, indices, errors = protect(manager, extraction, indices)
-    if control := context(manager):
+    if control:
         effects = _effects(control)
         excluded = [
             row

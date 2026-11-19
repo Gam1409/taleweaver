@@ -29,7 +29,7 @@ from backend.engine.chpm.kernel import ChpmError, fingerprint
 from backend.engine.chpm.runtime import Turn, contract_data, current
 from backend.engine.chpm.schema import Verdict
 from backend.engine.npc_actions import acknowledgment as command_acknowledgment
-from backend.engine.npc_actions import execution_frame
+from backend.engine.npc_actions import custody_citations, execution_frame
 from backend.engine.npc_actions import feedback as command_feedback
 from backend.engine.npc_actions import instructions as command_instructions
 from backend.engine.npc_presentation.runtime import clean_candidate, output_reminder
@@ -202,6 +202,7 @@ async def _review(manager: Any, turn: Turn, text: str, resolution: str) -> Verdi
     from backend.engine.chpm import reports
 
     turn.review_change_feedback = {}
+    turn.reviewed_custody = None
     available = passages.index(text)
     control, observed = await _review_control(manager, turn)
     instruction = (
@@ -275,6 +276,7 @@ async def _review(manager: Any, turn: Turn, text: str, resolution: str) -> Verdi
     except ChpmError as exc:
         _reject_review(turn, text, resolution, [str(exc)], verdict, payload)
         return Verdict(matches=False, issues=[str(exc)])
+    turn.reviewed_custody = custody_citations.capture(turn, raw, text, resolution)
     return verdict
 
 
