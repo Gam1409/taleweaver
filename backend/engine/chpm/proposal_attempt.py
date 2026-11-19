@@ -61,6 +61,7 @@ async def request(
                 )
             )
         except inference.InvalidResponseError as exc:
+            issues = _diagnose(diagnose, exc.candidate)
             reject(
                 "emotion",
                 "chpm.proposal_invalid",
@@ -70,6 +71,8 @@ async def request(
                 phase=phase,
                 identifiers=identifiers,
                 schema=schema.__name__,
+                failure_stage="proposal_formation",
+                grounding_errors=issues,
             )
             feedback = str(exc)
             candidate = exc.candidate
@@ -89,6 +92,7 @@ async def request(
             try:
                 return accept(raw)
             except (ChpmError, TransitionError, ValidationError) as exc:
+                issues = _diagnose(diagnose, candidate)
                 reject(
                     "emotion",
                     "chpm.proposal_invalid",
@@ -100,6 +104,8 @@ async def request(
                     validation_errors=exc.errors(include_url=False)
                     if isinstance(exc, ValidationError)
                     else None,
+                    failure_stage="proposal_formation",
+                    grounding_errors=issues,
                 )
                 feedback = inference.validation_feedback(exc)
         hint = (
@@ -121,7 +127,8 @@ async def request(
         usage.proposal_feedback = [*usage.proposal_feedback, feedback[:600]][-2:]
         if phase == "proposal_repair" or usage.proposal_repairs:
             raise ProposalRejectedError(
-                "CHPM proposal remains invalid; no decision applied. " + feedback
+                "CHPM proposal remains invalid; no decision applied. " + feedback,
+                grounding_issues=issues,
             )
         turn = getattr(manager, "_chpm_turn", None)
         remaining = max(0, len(turn.names) - len(turn.decisions) - 1) if turn else 0
@@ -140,7 +147,8 @@ async def request(
             instruction=instruction,
             identifiers=identifiers,
             limit=settings.max_input_chars,
-            motive_errors=diagnose(candidate) if diagnose and isinstance(candidate, dict) else (),
+            motive_errors=[issue for issue in issues if issue["loc"][0] == "candidates"],
+            grounding_errors=[issue for issue in issues if issue["loc"][0] != "candidates"],
         )
         payload = repair.payload
         request_schema = proposal_edits.Corrections if repair.original is not None else schema
@@ -153,6 +161,10 @@ async def request(
             )
         usage.proposal_repairs += 1
         phase = "proposal_repair"
+
+
+def _diagnose(diagnose: Callable[[dict], list[dict]] | None, candidate: dict | None) -> list[dict]:
+    return diagnose(candidate) if diagnose and isinstance(candidate, dict) else []
 
 
 async def _read(

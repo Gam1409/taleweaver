@@ -72,7 +72,12 @@ def inspect(
             return None
         owner = max(owners, key=len)
         issues.setdefault(owner, []).append(
-            {"path": path, "type": error["type"], "message": error["msg"]}
+            {
+                "path": path,
+                "type": error["type"],
+                "message": error["msg"],
+                **({"category": error["category"]} if "category" in error else {}),
+            }
         )
     targets = _targets(set(issues), allowed)
     if len(targets) > proposal_edits.MAX_EDITS:

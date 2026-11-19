@@ -1,10 +1,11 @@
 """Fallible affect/need appraisals with current sources and an explicit freshness policy."""
 
 from backend.engine.chpm.appraisal_context import Window
-from backend.engine.chpm.appraisal_contracts import FeltExperience
+from backend.engine.chpm.appraisal_contracts import FeltExperience, Reference
 from backend.engine.chpm.core.contracts import Citation, Event, Experience, PersonalBasis
 from backend.engine.chpm.core.history import events
 from backend.engine.chpm.core.reducer import apply
+from backend.engine.chpm.errors import GroundingError
 from backend.engine.chpm.host_state import Mind, fingerprint
 from backend.engine.chpm.kernel import ChpmError
 from backend.engine.chpm.motivation import Catalogue
@@ -88,6 +89,124 @@ def accept(
     return Mind(genesis=mind.genesis, snapshot=snapshot, sources=mind.sources), accepted
 
 
+def personal_errors(
+    mind: Mind,
+    about_id: str | None,
+    personal_motive_ids: tuple[str, ...],
+    window: Window,
+    catalogue: Catalogue,
+) -> list[GroundingError]:
+    """Check personal grounds independently of whether a citation can be resolved."""
+    errors = []
+    if about_id is not None and about_id not in window.subjects:
+        errors.append(
+            GroundingError(
+                "experience_subject",
+                "about_id",
+                "CHPM experience refers to an unavailable subject.",
+                category="forbidden_knowledge",
+            )
+        )
+    personal = [catalogue.sources.get(key) for key in personal_motive_ids]
+    if any(
+        item is None
+        or item.status not in {"authored", "declared"}
+        or item.subject_id != mind.genesis.scope.observer_id
+        for item in personal
+    ):
+        errors.append(
+            GroundingError(
+                "experience_personal_basis",
+                "personal_motive_ids",
+                "CHPM experience needs this NPC's identity or active agenda basis.",
+                category="forbidden_knowledge"
+                if any(item is None for item in personal)
+                else "formation",
+            )
+        )
+    return errors
+
+
+def citation_errors(
+    mind: Mind,
+    citations: tuple[Reference, ...],
+    window: Window,
+    message_id: str,
+    *,
+    index: int,
+) -> list[GroundingError]:
+    """Collect independent grounds without changing estimates or inventing a trigger."""
+    errors = []
+    references = [window.sources.get(c.source_id) for c in citations]
+    visible = not any(
+        source is None or citation.quote not in source[2]
+        for source, citation in zip(references, citations, strict=True)
+    )
+    if not visible:
+        errors.append(
+            GroundingError(
+                "experience_visible_source",
+                "citations",
+                "CHPM experience needs exact visible source evidence.",
+                category="forbidden_knowledge",
+            )
+        )
+    if any(source and source[1].kind == "host_frame" for source in references):
+        errors.append(
+            GroundingError(
+                "experience_specific_observation",
+                "citations",
+                "Use a specific host observation, not a whole frame, for experience.",
+            )
+        )
+    observed = current(mind, message_id)
+    if visible and not any(
+        source
+        and (
+            source[0] in observed
+            if source[1].kind == "host_observation"
+            else source[1].message_id == message_id
+        )
+        for source in references
+    ):
+        errors.append(
+            GroundingError(
+                "experience_current_trigger",
+                "citations",
+                f"experiences[{index}].citations: CHPM experience needs a current observed trigger, "
+                "not recall alone. Remove only this optional experience if none applies, retaining "
+                "other valid entries, or cite a genuine current trigger. Do not add unrelated evidence.",
+            )
+        )
+    resolved_citations = [
+        (source[0], citation.quote)
+        for source, citation in zip(references, citations, strict=True)
+        if source
+    ]
+    if len(set(resolved_citations)) != len(resolved_citations):
+        errors.append(
+            GroundingError(
+                "experience_duplicate_citation", "citations", "CHPM experience repeats a citation."
+            )
+        )
+    return errors
+
+
+def grounding_errors(
+    mind: Mind,
+    proposal: FeltExperience,
+    window: Window,
+    catalogue: Catalogue,
+    message_id: str,
+    *,
+    index: int,
+) -> list[GroundingError]:
+    return [
+        *personal_errors(mind, proposal.about_id, proposal.personal_motive_ids, window, catalogue),
+        *citation_errors(mind, proposal.citations, window, message_id, index=index),
+    ]
+
+
 def _resolve(
     mind: Mind,
     proposal: FeltExperience,
@@ -97,46 +216,16 @@ def _resolve(
     *,
     index: int,
 ) -> Experience:
-    if proposal.about_id is not None and proposal.about_id not in window.subjects:
-        raise ChpmError("CHPM experience refers to an unavailable subject.")
+    errors = grounding_errors(mind, proposal, window, catalogue, message_id, index=index)
+    if errors:
+        raise errors[0]
     personal = [catalogue.sources.get(key) for key in proposal.personal_motive_ids]
-    if any(
-        item is None
-        or item.status not in {"authored", "declared"}
-        or item.subject_id != mind.genesis.scope.observer_id
-        for item in personal
-    ):
-        raise ChpmError("CHPM experience needs this NPC's identity or active agenda basis.")
     references = [window.sources.get(c.source_id) for c in proposal.citations]
-    if any(
-        source is None or citation.quote not in source[2]
-        for source, citation in zip(references, proposal.citations, strict=True)
-    ):
-        raise ChpmError("CHPM experience needs exact visible source evidence.")
-    if any(source and source[1].kind == "host_frame" for source in references):
-        raise ChpmError("Use a specific host observation, not a whole frame, for experience.")
-    observed = current(mind, message_id)
-    if not any(
-        source
-        and (
-            source[0] in observed
-            if source[1].kind == "host_observation"
-            else source[1].message_id == message_id
-        )
-        for source in references
-    ):
-        raise ChpmError(
-            f"experiences[{index}].citations: CHPM experience needs a current observed trigger, "
-            "not recall alone. Remove only this optional experience if none applies, retaining "
-            "other valid entries, or cite a genuine current trigger. Do not add unrelated evidence."
-        )
     citations = tuple(
         Citation(record_id=source[0], quote=citation.quote)
         for source, citation in zip(references, proposal.citations, strict=True)
         if source
     )
-    if len(set(citations)) != len(citations):
-        raise ChpmError("CHPM experience repeats a citation.")
     basis = tuple(
         PersonalBasis(reference=reference, text=text)
         for reference, text in sorted(

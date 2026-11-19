@@ -35,6 +35,7 @@ def prepare(
     identifiers: dict,
     limit: int,
     motive_errors: list[dict] | tuple = (),
+    grounding_errors: list[dict] | tuple = (),
 ) -> Prepared:
     subject_errors = (
         proposal_subjects.issues(candidate, identifiers["about_id"])
@@ -52,6 +53,7 @@ def prepare(
         identifiers=identifiers,
         limit=limit,
         motive_errors=motive_errors,
+        grounding_errors=grounding_errors,
         subject_errors=subject_errors,
     )
     omitted = "rejected_proposal_omitted" in full["proposal_feedback"]
@@ -59,12 +61,16 @@ def prepare(
         return Prepared(full, identifiers)
     allowed = proposal_edits.paths(candidate, schema)
     structural = proposal_repair_groups.inspect(
-        candidate, schema, allowed, additional_errors=[*motive_errors, *subject_errors]
+        candidate,
+        schema,
+        allowed,
+        additional_errors=[*motive_errors, *grounding_errors, *subject_errors],
     )
     if structural is None:
         return Prepared(full, identifiers)
     details = dict(full["proposal_feedback"])
     details.pop("motive_errors", None)
+    details.pop("grounding_errors", None)
     details.pop("subject_errors", None)
     details.pop("rejected_proposal_omitted", None)
     details.update(
@@ -112,6 +118,7 @@ def payload_for(
     limit: int,
     motive_errors: list[dict] | tuple = (),
     subject_errors: list[dict] | tuple = (),
+    grounding_errors: list[dict] | tuple = (),
 ) -> dict:
     details: dict = {
         "error": feedback,
@@ -130,7 +137,13 @@ def payload_for(
     result = {**payload, "proposal_feedback": details}
     if motive_errors:
         details["motive_error_count"] = len(motive_errors)
-    for key, errors in (("motive_errors", motive_errors), ("subject_errors", subject_errors)):
+    if grounding_errors:
+        details["grounding_error_count"] = len(grounding_errors)
+    for key, errors in (
+        ("motive_errors", motive_errors),
+        ("grounding_errors", grounding_errors),
+        ("subject_errors", subject_errors),
+    ):
         if not errors:
             continue
         details[key] = [
@@ -138,6 +151,7 @@ def payload_for(
                 "path": proposal_edits.pointer(error["loc"]),
                 "type": error["type"],
                 "message": error["msg"],
+                **({"category": error["category"]} if "category" in error else {}),
             }
             for error in errors
         ]

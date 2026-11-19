@@ -12,9 +12,9 @@ from backend.engine.chpm import (
     development,
     development_request,
     experience,
+    grounding_diagnostics,
     json_contract,
     motivation,
-    motivation_diagnostics,
     prompts,
     proposal_actions,
     proposal_references,
@@ -89,6 +89,12 @@ def prepare(
                 else {}
             ),
         }
+    if two_phase and action_draft is not None:
+        # Phase A chooses before any world tool is offered. Use the same actor-local
+        # capabilities for the initial choice and its possible proposal repair.
+        supplied["available_physical_commands"] = sorted(
+            action_draft.available_tools() - {"discard_actions"}
+        )
     episode_contexts = semantic_recall.contexts(pinned, hits)
     if episode_contexts:
         supplied = {
@@ -247,5 +253,7 @@ def prepare(
         references,
         control,
         cached_pair,
-        lambda candidate: motivation_diagnostics.inspect(candidate, motives),
+        lambda candidate: grounding_diagnostics.inspect(
+            candidate, motives, mind, window, references, message_id=observation.message_id
+        ),
     )
