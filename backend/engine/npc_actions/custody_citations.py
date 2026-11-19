@@ -8,10 +8,11 @@ from typing import Any
 
 from backend.core.text_passages import index, spans
 from backend.engine import turn_controls
+from backend.engine.actor_aliases import canonical_owner, public_actor_id
 from backend.engine.chpm import passages, receipt_review
 from backend.engine.chpm.errors import StaleControlError
 from backend.engine.narrated_items.schema import ItemAction
-from backend.engine.npc_actions import execution_frame
+from backend.engine.npc_actions import custody_effects, execution_frame
 from backend.engine.npc_actions.control import CommandRejectedError, model_outcomes
 from backend.engine.visual_novel.continuity import PLAYER, SCENE
 
@@ -49,6 +50,7 @@ class Proof:
     review_scope: str
     text_hash: str
     citations: tuple[Citation, ...]
+    occurrences: tuple[tuple[str, int, int, str, bool], ...] = ()
 
 
 @dataclass
@@ -56,6 +58,8 @@ class _Public:
     scope: str
     actors: set[str]
     operations: dict[str, Transfer]
+    effects: list[dict]
+    order: dict[str, int]
 
 
 def _transfer(row: dict, actors: set[str]) -> Transfer | None:
@@ -85,7 +89,9 @@ def _transfer(row: dict, actors: set[str]) -> Transfer | None:
     }
     if (src, dst) != roles[tool] or (tool == "give_item" and dst == SCENE):
         return None
-    return Transfer(actor, row["operation_id"], tool, item, src, dst)
+    return Transfer(
+        actor, row["operation_id"], tool, item, canonical_owner(src), canonical_owner(dst)
+    )
 
 
 def _current_public(turn: Any) -> _Public | None:
@@ -108,6 +114,7 @@ def _current_public(turn: Any) -> _Public | None:
     actors = {key for key, row in frame.entities.items() if row.get("kind") == "actor"} | {
         SCENE,
         PLAYER,
+        "@player",
     }
     try:
         outcomes = model_outcomes(turn)
@@ -131,7 +138,18 @@ def _current_public(turn: Any) -> _Public | None:
         transfer.operation_id: transfer for row in rows if (transfer := _transfer(row, actors))
     }
     scope = turn_controls.fingerprint([turn.control, frame.scene_id, sorted(actors), rows])
-    return _Public(scope, actors, operations)
+    effects = [
+        {**row["effect"], "actor_id": row["actor_id"], "_publication_index": position}
+        for position, row in enumerate(rows)
+        if row["status"] == "applied" and row.get("effect") and not row.get("effect_omitted")
+    ]
+    return _Public(
+        scope,
+        actors,
+        operations,
+        effects,
+        {row["operation_id"]: position for position, row in enumerate(rows)},
+    )
 
 
 def is_current(proof: Proof | None, turn: Any) -> bool:
@@ -146,17 +164,13 @@ def capture(turn: Any, review: Any, text: str, resolution: str) -> Proof | None:
     """Call only after the candidate has passed all existing narration review checks."""
     from backend.engine.chpm.rendering import _review_scope
 
-    if (
-        not isinstance(review, passages.ReceiptReview)
-        or not review.matches
-        or review.rejections
-        or not review.completed_changes
-    ):
+    if not isinstance(review, passages.ReceiptReview) or not review.matches or review.rejections:
         return None
     public = _current_public(turn)
     available = index(text)
     if (
         public is None
+        or not public.operations
         or review.review_scope != _review_scope(turn, available, resolution)
         or receipt_review.validate(review, turn, available)
     ):
@@ -164,7 +178,7 @@ def capture(turn: Any, review: Any, text: str, resolution: str) -> Proof | None:
     occurrences = spans(text)
     counts = Counter(passage.text for passage in occurrences.values())
     citations = []
-    for claim in review.completed_changes:
+    for claim in review.completed_changes or ():
         operation = public.operations.get(claim.operation_id)
         if operation is None:
             continue
@@ -179,17 +193,17 @@ def capture(turn: Any, review: Any, text: str, resolution: str) -> Proof | None:
                 operation,
             )
         )
-    return (
-        Proof(public.scope, review.review_scope, _digest(text), tuple(citations))
-        if citations
-        else None
+    bound = tuple(
+        (key, value.start, value.end, _digest(value.text), counts[value.text] == 1)
+        for key, value in occurrences.items()
     )
+    return Proof(public.scope, review.review_scope, _digest(text), tuple(citations), bound)
 
 
 def _directions(
     actions: Sequence[ItemAction], text: str, actors: set[str]
-) -> dict[tuple[int, int, str], set[tuple[str, str]]]:
-    result: dict[tuple[int, int, str], set[tuple[str, str]]] = defaultdict(set)
+) -> dict[tuple[int, int, str], set[custody_effects.Reading]]:
+    result: dict[tuple[int, int, str], set[custody_effects.Reading]] = defaultdict(set)
     for action in actions:
         src, dst, span = action.source_owner, action.destination_owner, action.evidence_span
         if (
@@ -201,7 +215,7 @@ def _directions(
             and span
             and span.matches(text, action.evidence)
         ):
-            result[span.start, span.end, action.item_id].add((src, dst))
+            result[span.start, span.end, action.item_id].add(custody_effects.read(action))
     return result
 
 
@@ -217,24 +231,97 @@ def _incompatible(actual: Transfer, source: str, destination: str) -> bool:
     ) or (actual.tool in {"give_item", "put_down_item"} and source == actual.actor_id)
 
 
-def _issue(citation: Citation, direction: tuple[str, str]) -> dict:
+def _issue(
+    citation: Citation, reading: custody_effects.Reading, reason: str = "custody_direction_mismatch"
+) -> dict:
     actual = citation.transfer
     return {
-        "reason_code": "custody_direction_mismatch",
+        "reason_code": reason,
         "passage_id": citation.passage_id,
         "operation_id": actual.operation_id,
         "actor_id": actual.actor_id,
         "expected_public_result": {
             "tool": actual.tool,
             "target_id": actual.item,
-            "source_owner": actual.source,
-            "destination_owner": actual.destination,
+            "source_owner": public_actor_id(actual.source),
+            "destination_owner": public_actor_id(actual.destination),
         },
         "reported_public_direction": {
-            "source_owner": direction[0],
-            "destination_owner": direction[1],
+            "source_owner": public_actor_id(reading.source_owner),
+            "destination_owner": public_actor_id(reading.destination_owner),
         },
     }
+
+
+def _uncited(proof: Proof, public: _Public, readings: dict) -> list[Citation]:
+    covered = {(entry.start, entry.end, entry.transfer.item) for entry in proof.citations}
+    used = {entry.transfer.operation_id for entry in proof.citations}
+    occurrences = {
+        (start, end): (key, digest, unique) for key, start, end, digest, unique in proof.occurrences
+    }
+    result = []
+    for (start, end, item), candidates in sorted(readings.items()):
+        bound = occurrences.get((start, end))
+        if bound is None or len(candidates) != 1 or (start, end, item) in covered:
+            continue
+        reading = next(iter(candidates))
+        operations = [op for op in public.operations.values() if op.item == item]
+        exact = [op for op in operations if (op.source, op.destination) == reading.direction]
+        possible = [op for op in exact if op.operation_id not in used] or exact or operations[-1:]
+        if not possible:
+            continue
+        key, digest, unique = bound
+        operation = possible[0]
+        used.add(operation.operation_id)
+        result.append(Citation(key, start, end, digest, unique, operation))
+    return result
+
+
+def _reason(
+    citation: Citation, reading: custody_effects.Reading, public: _Public, unassigned: set
+) -> str:
+    actual = citation.transfer
+    if (actual.item, *reading.direction) not in unassigned and _incompatible(
+        actual, *reading.direction
+    ):
+        return "custody_direction_mismatch"
+    effect = {
+        "item_id": actual.item,
+        "source_owner": actual.source,
+        "destination_owner": actual.destination,
+        "disposition": "carried",
+        "_publication_index": public.order[actual.operation_id],
+    }
+    if reading.direction == (
+        actual.source,
+        actual.destination,
+    ) and not custody_effects.transfer_echo(reading, effect, public.effects):
+        return "custody_placement_mismatch"
+    return ""
+
+
+def _completion_reason(
+    proof: Proof,
+    citation: Citation,
+    reading: custody_effects.Reading,
+    public: _Public,
+    used: set,
+    latest: dict,
+) -> str:
+    actual = citation.transfer
+    if reading.direction != (actual.source, actual.destination):
+        return ""
+    cited_elsewhere = citation not in proof.citations and any(
+        entry.transfer.operation_id == actual.operation_id for entry in proof.citations
+    )
+    if cited_elsewhere or actual.operation_id in used:
+        return "custody_operation_reused"
+    position = public.order[actual.operation_id]
+    if position < latest.get(actual.item, -1):
+        return "custody_operation_order_mismatch"
+    used.add(actual.operation_id)
+    latest[actual.item] = position
+    return ""
 
 
 def conflicts(
@@ -253,26 +340,31 @@ def conflicts(
     ):
         return []
     operations: dict[tuple[int, int, str], list[Citation]] = defaultdict(list)
-    for entry in proof.citations:
+    readings = _directions(actions, text, public.actors)
+    citations = [*proof.citations, *_uncited(proof, public, readings)]
+    for entry in citations:
         operations[entry.start, entry.end, entry.transfer.item].append(entry)
     # A reviewer may cite only the pickup in a compound transfer. A real
     # unassigned drop could belong here; a drop cited elsewhere has its own span.
-    cited = {entry.transfer.operation_id for entry in proof.citations}
+    cited = {entry.transfer.operation_id for entry in citations}
     unassigned = {
         (op.item, op.source, op.destination)
         for op in public.operations.values()
         if op.operation_id not in cited
     }
     result = []
-    for key, directions in _directions(actions, text, public.actors).items():
+    used: set[str] = set()
+    latest: dict[str, int] = {}
+    for key, directions in sorted(readings.items()):
         entries = operations.get(key, [])
         if len(entries) != 1 or len(directions) != 1:
             continue
-        citation, direction = entries[0], next(iter(directions))
-        if (citation.transfer.item, *direction) not in unassigned and _incompatible(
-            citation.transfer, *direction
-        ):
-            result.append(_issue(citation, direction))
+        citation, reading = entries[0], next(iter(directions))
+        reason = _reason(citation, reading, public, unassigned) or _completion_reason(
+            proof, citation, reading, public, used, latest
+        )
+        if reason:
+            result.append(_issue(citation, reading, reason))
     return result[:_MAX_ISSUES]
 
 
@@ -292,6 +384,7 @@ def repeated_conflicts(
     citations = {
         (entry.transfer.operation_id, entry.passage_id): entry for entry in first_proof.citations
     }
+    citations.update(_original_uncited(first_proof, public, first_issues))
     occurrences: dict[str, list[tuple[str, int, int]]] = defaultdict(list)
     for key, passage in spans(text).items():
         occurrences[_digest(passage.text)].append((key, passage.start, passage.end))
@@ -302,25 +395,56 @@ def repeated_conflicts(
         if not isinstance(operation_id, str) or not isinstance(passage_id, str):
             continue
         citation = citations.get((operation_id, passage_id))
-        if (
-            citation is None
-            or not citation.unique_in_original
-            or len(occurrences[citation.passage_hash]) != 1
-        ):
+        if citation is None:
             continue
-        key, start, end = occurrences[citation.passage_hash][0]
-        extracted = directions.get((start, end, citation.transfer.item), set())
-        if len(extracted) != 1:
-            continue
-        direction = next(iter(extracted))
-        if _issue(citation, direction) != issue:
-            continue
-        # The new reviewer may place a real second operation in this passage.
-        # It remains ambiguous when the repaired candidate omits its citations.
-        if any(
-            op.item == citation.transfer.item and (op.source, op.destination) == direction
-            for op in public.operations.values()
-        ):
-            continue
-        result.append(_issue(replace(citation, passage_id=key, start=start, end=end), direction))
+        conflict = _repeated_issue(
+            citation, issue, occurrences[citation.passage_hash], directions, public
+        )
+        if conflict is not None:
+            result.append(conflict)
     return result[:_MAX_ISSUES]
+
+
+def _repeated_reading(
+    citation: Citation, issue: dict, readings: set, public: _Public
+) -> custody_effects.Reading | None:
+    reason = issue.get("reason_code", "custody_direction_mismatch")
+    actual_directions = {(op.item, op.source, op.destination) for op in public.operations.values()}
+    return next(
+        (
+            reading
+            for reading in readings
+            if _issue(citation, reading, reason) == issue
+            and _reason(citation, reading, public, actual_directions) == reason
+        ),
+        None,
+    )
+
+
+def _repeated_issue(
+    citation: Citation, issue: dict, occurrences: list, directions: dict, public: _Public
+) -> dict | None:
+    for key, start, end in occurrences:
+        readings = directions.get((start, end, citation.transfer.item), set())
+        reading = _repeated_reading(citation, issue, readings, public)
+        if reading is not None:
+            return _issue(
+                replace(citation, passage_id=key, start=start, end=end),
+                reading,
+                issue.get("reason_code", "custody_direction_mismatch"),
+            )
+    return None
+
+
+def _original_uncited(proof: Proof, public: _Public, issues: Sequence[dict]) -> dict:
+    occurrences = {row[0]: row for row in proof.occurrences}
+    result = {}
+    for issue in issues:
+        operation_id, passage_id = issue.get("operation_id"), issue.get("passage_id")
+        if not isinstance(operation_id, str) or not isinstance(passage_id, str):
+            continue
+        operation = public.operations.get(operation_id)
+        occurrence = occurrences.get(passage_id)
+        if operation is not None and occurrence is not None:
+            result[operation.operation_id, occurrence[0]] = Citation(*occurrence, operation)
+    return result

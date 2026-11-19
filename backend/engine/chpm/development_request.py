@@ -78,6 +78,9 @@ def prepare(
         except cognitive_context.ContextBudgetError:
             body["status"] = "deferred_input_budget"
             body["basis"] = []
+    # This response schema cannot propose development. Keep its status and
+    # existing tendencies, but omit rules for that unavailable operation.
+    body = {key: body[key] for key in ("policy", "current_tendencies", "basis", "status")}
     packed = cognitive_context.pack(
         mind,
         observation,

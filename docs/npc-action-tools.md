@@ -32,8 +32,11 @@ back to Standard to use the original decision workflow on the next turn.
    or mismatched batch can use one available shared proposal repair. A rejected
    batch stages zero operations and the NPC keeps its social choice.
 3. The usual state owners resolve competing plans in publication order. After
-   each successful pickup, transfer, placement, wardrobe change, pose or
-   approach, the host checks the affected fields before issuing the receipt.
+   each successful physical change, the host checks the affected fields before
+   issuing the receipt. For travel it reads the NPC's room and presence.
+   For item properties and use it checks the active ledger entry, its value,
+   visibility and command source. An interaction can return an attempted result
+   without changing the target.
    A disagreement between an owner write and its expected result aborts the
    enclosing turn. Ordinary competition produces individual receipts, which
    the narrator receives and each NPC can see for its own previous decision.
@@ -170,13 +173,13 @@ rephrases it or moves it to another paragraph. It checks the replacement against
 the current receipts. The original passage IDs identify excerpts from the
 discarded draft and expire after this review.
 
-For item custody, the host also compares the two model outputs on the exact
-passage both cited. If the reviewer links a passage to a pickup and the item
-extractor reads the same passage and item as a return to the room, the host
-flags the opposing transfer directions before applying extracted state. Only
-public applied receipts for the current attempt provide evidence. Multiple
-possible transfers in one passage, historical references and unrelated items
-remain outside this narrow check.
+For item custody, the host checks source-bound transfers from the item extractor
+against public applied operations from this attempt. If an NPC picked up a cup
+and the extractor identifies a return to the room, an empty list of citations
+from the reviewer cannot confirm that return. Giving a coat transfers custody.
+Describing it as worn also requires a compatible wardrobe operation by the
+recipient. Historical mentions, intentions and separate actions by other actors
+retain their own evidence requirements.
 
 When the turn has its one prose correction available, the narrator receives
 the disputed passage ID and the published transfer. The replacement goes
@@ -216,7 +219,9 @@ details have a shared 2,048-character projection budget with explicit omission
 counts; this does not remove conditions or history from storage.
 
 Story-facing receipts retain operation identity and status while omitting private,
-covered or unavailable effect fields. A concealed target does not become public
+covered or unavailable effect fields. Both the public frame and the receipt use
+`@player` for the player's actor ID, including the target of an approach and the
+recipient of a transfer. A concealed target does not become public
 because a command named it. Without a valid public frame, effect details are
 explicitly unavailable. An omission is neither a failed operation nor evidence
 from which to invent a missing effect. Mechanical reconciliation continues to use
@@ -280,11 +285,14 @@ which alternatives were omitted. The NPC retains its own choice and physical ste
 Each delivered command-controlled decision retains one bounded internal action
 feedback summary for that NPC's next existing decision. It contains only the
 previous attempt and operation identifiers, tool names, its own requested operand
-identifiers, final statuses and typed refusal codes. It carries no effects,
-condition descriptions or other NPC's plans. An explicit empty summary means an
-approved empty plan; a missing summary means that no publication acknowledgment is
-available. This is scoped internal feedback, not an external Agent-to-Agent protocol
-or a receipt archive.
+identifiers, final statuses and typed refusal codes. In two-phase mode the
+`execution` field distinguishes a deliberate choice of no physical action
+from a selected plan rejected before publication. Published results remain in
+`operations`, including later conflicts over a contested item. Older records
+without `execution` establish only which operations reached publication. The
+selected plan retains the tool and only references available to that NPC when
+it chose the action. The summary is private to the deciding NPC and carries
+no item effects or other characters' plans.
 
 The next decision receives this feedback only while both saved input and reply
 sources still match their session, role, revision, content hash and scene. The

@@ -30,12 +30,14 @@ from backend.engine.npc_actions.contracts import (
     Use,
     Wear,
 )
+from backend.engine.npc_actions.property_values import requested_property
 from backend.engine.physical_conditions.command_source import CommandProof
 from backend.engine.physical_conditions.item_commands import apply_command
 from backend.engine.visual_novel.continuity import PLAYER, SCENE, Possessions
 
 if TYPE_CHECKING:
     from backend.engine.chpm.schema import Observation
+    from backend.engine.npc_actions.acknowledgment_contracts import SelectedActionExecution
 
 
 class SelectedStepRejectedError(ValueError):
@@ -81,6 +83,9 @@ class Draft:
     operations: list[turn_controls.Operation] = field(default_factory=list, init=False, repr=False)
     approved: bool = False
     published_results: list[dict] | None = field(default=None, init=False)
+    selected_execution: "SelectedActionExecution | None" = field(
+        default=None, init=False, repr=False
+    )
     _actors: dict = field(init=False, repr=False)
     _possessions: Possessions = field(init=False, repr=False)
     _states: dict = field(init=False, repr=False)
@@ -363,13 +368,7 @@ class Draft:
         owned = {
             key for key, owner in self._possessions.owners.items() if owner == self.scope.actor_id
         }
-        detail = (
-            request.detail
-            if isinstance(request, ChangeState)
-            else request.remaining_detail
-            or ("Used completely." if request.extent == "full" else "Used partly.")
-        )
-        dimension = request.dimension if isinstance(request, ChangeState) else "usage"
+        dimension, detail, visibility = requested_property(request)
         proof, digest = command_proof(self.scope, request, self.start_index + len(self.requests))
         changed, condition_id = apply_command(
             self._states,
@@ -382,7 +381,7 @@ class Draft:
             request_hash=digest,
             session_id=self.scope.session_id,
             minute=self.scope.minute,
-            visibility=request.visibility if isinstance(request, ChangeState) else "public",
+            visibility=visibility,
         )
         self._states = changed
         return {

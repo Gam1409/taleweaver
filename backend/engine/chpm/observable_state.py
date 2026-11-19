@@ -4,6 +4,7 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any
 
+from backend.engine.actor_aliases import public_actor_id, public_placement
 from backend.engine.chpm.kernel import ChpmError
 from backend.engine.chpm.schema import Observation
 from backend.engine.clothing.context import actor_records
@@ -27,10 +28,6 @@ class View:
     scene_id: str
     entities: dict[str, dict]
     scene: dict = field(default_factory=dict)
-
-
-def _actor_id(identifier: str) -> str:
-    return "@player" if identifier == PLAYER else identifier
 
 
 def _ledger(state: Any) -> Ledger | None:
@@ -91,7 +88,7 @@ def _wear_state(actor: dict, item_id: str) -> str:
 
 def _actor_view(identifier: str, actor: dict, visual: dict | None, conditions: list[dict]) -> dict:
     return {
-        "id": _actor_id(identifier),
+        "id": public_actor_id(identifier),
         "name": str(actor.get("name") or "")[:160],
         "kind": "actor",
         "visible_clothing": deepcopy(visual["clothing"]) if visual else None,
@@ -105,8 +102,8 @@ def _item_view(identifier: str, item: dict, owner: str, wear: str, conditions: l
         "id": identifier,
         "name": str(item.get("name") or "")[:160],
         "kind": "item",
-        "owner_id": _actor_id(owner),
-        "worn_by": _actor_id(owner) if wear == "worn" else None,
+        "owner_id": public_actor_id(owner),
+        "worn_by": public_actor_id(owner) if wear == "worn" else None,
         "wear_status": "not_worn" if wear == "carried" else wear,
         "recorded_conditions": conditions,
         **(
@@ -156,7 +153,7 @@ def project(
             ]
     own = {key for key, owner in snapshot.owners.items() if owner == observer_id and own_facts}
     entities = {
-        _actor_id(key): _actor_view(
+        public_actor_id(key): _actor_view(
             key,
             actor,
             visuals[key],
@@ -209,17 +206,13 @@ def _add_poses(manager: Any, rows: list, actors: dict, entities: dict) -> None:
     except (KeyError, TypeError, ValueError):
         return
     for identifier, pose in current.items():
-        actor = "@player" if identifier == manager.avatar.id else identifier
+        actor = public_actor_id(identifier, player_id=manager.avatar.id)
         if actor not in entities:
             continue
         public = dict(pose)
         placement = pose.get("placement")
-        if (
-            placement
-            and placement.get("target_kind") == "character"
-            and placement.get("target") == manager.avatar.id
-        ):
-            public["placement"] = {**placement, "target": "@player"}
+        if placement:
+            public["placement"] = public_placement(placement, player_id=manager.avatar.id)
         entities[actor].update(public)
 
 

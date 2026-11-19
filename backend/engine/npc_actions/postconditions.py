@@ -11,15 +11,19 @@ from backend.engine.clothing.visuals import session_objects
 from backend.engine.npc_actions.contracts import (
     Adjust,
     Approach,
+    ChangeState,
     Give,
+    Move,
     Pose,
     PutDown,
     Request,
     Take,
     TakeOff,
+    Use,
     Wear,
 )
 from backend.engine.npc_actions.preview import Scope
+from backend.engine.npc_actions.property_postconditions import verify as verify_property
 from backend.engine.scene_staging.state import retained
 from backend.engine.visual_novel.continuity import SCENE, possession_snapshot
 
@@ -134,6 +138,43 @@ async def _item(
     return _transfer(manager, rows, actor, request, effect)
 
 
+async def _move(manager: Any, scope: Scope, request: Move, effect: dict) -> str | None:
+    rows = await session_objects(manager.db, manager.game_id)
+    _current(manager, scope)
+    actor = next(
+        (row for row in rows if row.id == scope.actor_id and row.entity_type == "NPC"), None
+    )
+    overlay = (manager.state.entity_states or {}).get(scope.actor_id, {})
+    if actor is None or not isinstance(overlay, dict):
+        return "movement_actor"
+    if (
+        effect.get("destination_scene_id") != request.destination_scene_id
+        or overlay.get("current_scene_id", actor.current_scene_id) != request.destination_scene_id
+    ):
+        return "movement_location"
+    if overlay.get("presence", getattr(actor, "presence", "present")) != "present":
+        return "movement_presence"
+    if overlay.get("spatial_position", actor.spatial_position) is not None:
+        return "movement_position"
+    if int(manager.state.in_game_time or 0) != scope.minute:
+        return "movement_clock"
+    return None
+
+
+async def _property(
+    manager: Any,
+    scope: Scope,
+    request: ChangeState | Use,
+    effect: dict,
+    operation: turn_controls.Operation,
+) -> str | None:
+    rows = await session_objects(manager.db, manager.game_id)
+    _current(manager, scope)
+    if possession_snapshot(manager, rows).owners.get(request.item_id) != scope.actor_id:
+        return "property_custody"
+    return verify_property(manager, scope, request, effect, operation)
+
+
 async def verify(
     manager: Any, scope: Scope, request: Request, effect: dict, operation: turn_controls.Operation
 ) -> None:
@@ -143,6 +184,10 @@ async def verify(
         issue = await _item(manager, scope, request, effect)
     elif isinstance(request, (Pose, Approach)):
         issue = _pose(manager, scope, effect, operation)
+    elif isinstance(request, Move):
+        issue = await _move(manager, scope, request, effect)
+    elif isinstance(request, (ChangeState, Use)):
+        issue = await _property(manager, scope, request, effect, operation)
     else:
         return
     if issue is None:

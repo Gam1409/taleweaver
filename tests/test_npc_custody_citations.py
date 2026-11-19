@@ -65,13 +65,15 @@ async def test_reviewed_pickup_vs_completed_return_to_scene_never_writes():
             action(source="LINA", destination="LINA"),
             action(source="LINA", destination="SECOND"),
             action(item_id="COAT"),
-            action(passage="p2"),
             action(basis="hypothetical"),
             action(evidence_span=None),
             action(evidence="The brass cup", evidence_span={"start": 17, "end": 30}),
             action(evidence=TEXT, evidence_span={"start": 0, "end": len(TEXT)}),
         ):
             assert custody.conflicts(proof, turn, TEXT, RESOLUTION, [other]) == []
+        omitted = custody.conflicts(proof, turn, TEXT, RESOLUTION, [action(passage="p2")])
+        assert len(omitted) == 1 and omitted[0]["passage_id"] == "p2"
+        assert omitted[0]["reason_code"] == "custody_direction_mismatch"
 
 
 async def test_only_same_passage_multiple_citations_may_explain_direction():
@@ -162,7 +164,9 @@ async def test_retry_matches_unique_unchanged_passage_on_new_review_without_borr
         turn.review_operation = {}
         second = review(turn, new)
         assert second.review_scope != proof.review_scope
-        assert custody.capture(turn, second, new, RESOLUTION) is None
+        empty = custody.capture(turn, second, new, RESOLUTION)
+        assert empty is not None and not empty.citations
+        assert empty.publication_scope == proof.publication_scope
         fresh = action(new, passage="p2")
         failures = custody.repeated_conflicts(proof, initial, turn, new, [fresh])
         assert failures == [{**initial[0], "passage_id": "p2"}]
@@ -176,14 +180,14 @@ async def test_retry_matches_unique_unchanged_passage_on_new_review_without_borr
             custody.repeated_conflicts(
                 proof, initial, turn, new, [fresh, action(new, passage="p2", destination="SECOND")]
             )
-            == []
+            == failures
         )
         repeated = new + " The object changes hands."
         assert (
             custody.repeated_conflicts(
                 proof, initial, turn, repeated, [action(repeated, passage="p2")]
             )
-            == []
+            == failures
         )
         rewritten = new.replace("object changes hands", "cup changes hands")
         assert (
@@ -196,13 +200,15 @@ async def test_retry_matches_unique_unchanged_passage_on_new_review_without_borr
         assert custody.repeated_conflicts(proof, initial, turn, new, [fresh]) == []
 
 
-async def test_duplicate_original_passages_cannot_rebind_across_repair():
+async def test_a_still_disputed_typed_reading_cannot_hide_behind_duplicate_original_passages():
     async with TestSessionLocal() as db:
         _, turn = await published(db)
         proof = custody.capture(turn, review(turn, TEXT, claim(turn)), TEXT, RESOLUTION)
         initial = custody.conflicts(proof, turn, TEXT, RESOLUTION, [action()])
         changed = "A visitor waits. The brass cup changes hands."
-        assert custody.repeated_conflicts(proof, initial, turn, changed, [action(changed)]) == []
+        assert (
+            custody.repeated_conflicts(proof, initial, turn, changed, [action(changed)]) == initial
+        )
 
 
 async def test_a_second_real_transfer_cannot_be_disproved_on_a_repair_without_citations():

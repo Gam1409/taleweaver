@@ -3,7 +3,7 @@
 import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
 from backend.core.llm_tool_turn import ToolCall
 from backend.engine import turn_controls
@@ -13,9 +13,16 @@ from backend.engine.chpm.errors import StaleControlError
 from backend.engine.chpm.native_tool_contracts import NativeToolArgumentError, parse_call
 from backend.engine.chpm.notebook_tools import result_summary
 from backend.engine.chpm.schema import Settings, Usage
+from backend.engine.npc_actions.acknowledgment_contracts import (
+    MAX_SELECTED_STEPS,
+    ExecutionRejection,
+    SelectedActionExecution,
+    SelectedActionReference,
+    execution_reason,
+)
 from backend.engine.npc_actions.contracts import ACTION_MODELS, Adjust, Request
 from backend.engine.npc_actions.feedback import summarize
-from backend.engine.npc_actions.preview import Draft, SelectedStepRejectedError
+from backend.engine.npc_actions.preview import Draft, Scope, SelectedStepRejectedError
 from backend.engine.npc_actions.tool_schema import definitions
 
 INSTRUCTION = (
@@ -109,9 +116,39 @@ def _repair_available(manager: Any, settings: Settings, usage: Usage) -> bool:
     )
 
 
+def _selected_references(scope: Scope, request: Request) -> SelectedActionReference:
+    values = request.model_dump(
+        include={"tool", "item_id", "recipient_id", "target_id", "destination_scene_id"},
+        exclude_none=True,
+    )
+    allowed = {
+        "item_id": scope.accessible_ids & scope.possessions.items.keys(),
+        "target_id": scope.accessible_ids,
+        "recipient_id": scope.accessible_ids & (scope.actors.keys() | {"@player"}),
+        "destination_scene_id": scope.destinations,
+    }
+    return SelectedActionReference.model_validate(
+        {key: value for key, value in values.items() if key == "tool" or value in allowed[key]}
+    )
+
+
 def _audit(
-    draft: Draft, protocol: str, status: str, failures: list[ExecutionGateError], repaired: bool
+    draft: Draft,
+    protocol: str,
+    status: Literal["not_attempted", "rejected", "staged"],
+    failures: list[ExecutionGateError],
+    repaired: bool,
+    steps: Sequence[Request],
 ) -> list[dict]:
+    summary = SelectedActionExecution(
+        status=status,
+        steps=tuple(_selected_references(draft.scope, step) for step in steps),
+        gate_errors=tuple(
+            ExecutionRejection(code=execution_reason(failure.code), path=failure.path)
+            for failure in failures
+        ),
+    )
+    draft.selected_execution = summary
     handles = [
         summarize(request)
         | operation.model_dump(include={"attempt_id", "tool_call_id", "operation_id"})
@@ -128,11 +165,11 @@ def _audit(
                 result_summary(operation.model_dump(exclude_none=True) | {"status": "staged"})
                 for operation in draft.operations
             ],
-            "status": status,
-            "stop": status,
+            "status": summary.status,
+            "stop": summary.status,
             "repaired": repaired,
-            "gate_errors": [failure.feedback() for failure in failures],
-            **({"error_type": failures[-1].code} if status == "rejected" else {}),
+            "gate_errors": [failure.model_dump() for failure in summary.gate_errors],
+            **({"error_type": summary.gate_errors[-1].code} if status == "rejected" else {}),
         }
     ]
 
@@ -182,8 +219,8 @@ async def execute(
     protocol = "json" if getattr(llm, "protocol", "native") == "json" else "native"
     if not steps:
         draft.approved = True
-        return _audit(draft, protocol, "not_attempted", [], False)
-    if len(steps) > 2 or any(
+        return _audit(draft, protocol, "not_attempted", [], False, steps)
+    if len(steps) > MAX_SELECTED_STEPS or any(
         ACTION_MODELS.get(step.tool) is not type(step) or step.tool == "discard_actions"
         for step in steps
     ):
@@ -244,7 +281,7 @@ async def execute(
             repaired = True
             continue
         draft.approved = True
-        return _audit(draft, protocol, "staged", failures, repaired)
+        return _audit(draft, protocol, "staged", failures, repaired, steps)
     # The accepted social choice survives. Its unexecuted physical intent authorizes no effects.
     draft.approved = True
-    return _audit(draft, protocol, "rejected", failures, repaired)
+    return _audit(draft, protocol, "rejected", failures, repaired, steps)

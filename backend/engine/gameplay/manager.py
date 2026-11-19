@@ -2172,6 +2172,10 @@ class GameTurnManager:
         )
 
         narration_completed = bool(response_text.strip()) and not narration_warning
+        # A fallback may complete the turn, but only generated prose can acknowledge an edit.
+        applied_correction = correction_applied(
+            self.narration_correction, response_text, narration_warning
+        )
         if not (response_text or "").strip():
             if run_generator_tool_intent_pass:
                 fallback = (
@@ -2228,9 +2232,6 @@ class GameTurnManager:
         if chpm_buffered and narration_completed:
             await narration_fence.enforce(self, response_text)
 
-        applied_correction = correction_applied(
-            self.narration_correction, response_text, narration_warning
-        )
         id_to_name: dict[str, str] = {}
         for entity in all_entities:
             entity_id = str(getattr(entity, "id", "") or "").strip()

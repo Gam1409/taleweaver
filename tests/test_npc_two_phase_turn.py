@@ -135,6 +135,10 @@ async def test_competing_refusals_publish_one_cup_then_recall_only_own_result(
         assert first["LINA"][0]["status"] == "applied"
         assert first["MILA"][0]["status"] == "blocked"
         assert first["MILA"][0]["reason_code"] == "unavailable_entity"
+        assert all(
+            load(manager.state).actors[actor].last_publication.execution.status == "staged"
+            for actor in first
+        )
         assert all(load(manager.state).actors[actor].selected.kind == "REFUSE" for actor in first)
         assert len(roles.executions) == len(roles.choices) == 2
         for _, offered in roles.choices:
@@ -156,6 +160,9 @@ async def test_competing_refusals_publish_one_cup_then_recall_only_own_result(
         assert publications[-1].action_outcomes == {"LINA": [], "MILA": []}
         for body, _ in roles.choices[2:]:
             actor = body["actor_id"]
+            assert (
+                body["previous_action_results_not_current_state"]["execution"]["status"] == "staged"
+            )
             prior = body["previous_action_results_not_current_state"]["operations"]
             assert [(item["operation_id"], item["status"]) for item in prior] == [
                 (first[actor][0]["operation_id"], first[actor][0]["status"])

@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from backend.engine import turn_controls
+from backend.engine.actor_aliases import public_actor_id
 from backend.engine.chpm import observable_state
 from backend.engine.chpm.errors import StaleControlError
 from backend.engine.clothing.context import actor_records
@@ -30,10 +31,7 @@ class Frame:
     minute: int
     entities: dict[str, dict]
     observation: Any
-
-
-def _actor(identifier: str) -> str:
-    return "@player" if identifier == PLAYER else identifier
+    player_id: str | None = None
 
 
 def _public_items(turn: Any, observation: Any) -> set[str]:
@@ -101,9 +99,9 @@ def _known_possessions(manager: Any, rows: list[Any], entities: dict, known: set
         entities[identifier] = {
             "id": identifier,
             "kind": "item",
-            "owner_id": _actor(owner),
+            "owner_id": public_actor_id(owner),
             "wear_status": "not_worn" if wear == "carried" else wear,
-            "worn_by": _actor(owner) if wear == "worn" else None,
+            "worn_by": public_actor_id(owner) if wear == "worn" else None,
         }
         position = (
             snapshot.items.get(identifier, {}).get("spatial_position") if owner == SCENE else None
@@ -162,6 +160,7 @@ async def capture(manager: Any, turn: Any, observation: Any) -> None:
         manager.state.in_game_time,
         entities,
         observation,
+        manager.avatar.id,
     )
 
 
@@ -276,5 +275,8 @@ def records(turn: Any, outcomes: list[dict]) -> list[dict]:
             **{key: value for key, value in record.items() if key not in shared},
             "request_control_ref": "/current_execution_frame/request_control",
         }
-        for record in (outcome_projection.project(row, frame.entities) for row in outcomes)
+        for record in (
+            outcome_projection.project(row, frame.entities, player_id=frame.player_id)
+            for row in outcomes
+        )
     ]

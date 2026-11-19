@@ -3,6 +3,8 @@
 from collections.abc import Collection, Mapping
 from copy import deepcopy
 
+from backend.engine.actor_aliases import public_actor_id, public_placement
+
 PROPERTY_TOOLS = frozenset({"change_item_state", "use_item"})
 PROPERTY_FIELDS = frozenset({"dimension", "detail", "condition_id"})
 
@@ -37,7 +39,9 @@ def _public_property(effect: dict, entities: Mapping[str, dict]) -> bool:
     )
 
 
-def project(record: dict, entities: Mapping[str, dict] | None) -> dict:
+def project(
+    record: dict, entities: Mapping[str, dict] | None, *, player_id: str | None = None
+) -> dict:
     """Copy a validated receipt using the full current public owner projection.
 
     Omission never changes operation status or host authority. A missing public
@@ -48,6 +52,11 @@ def project(record: dict, entities: Mapping[str, dict] | None) -> dict:
     effect = result.get("effect")
     if not isinstance(effect, dict) or not effect:
         return result
+    for field in ("source_owner", "destination_owner", "recipient_id", "target_id"):
+        if isinstance(identifier := effect.get(field), str):
+            effect[field] = public_actor_id(identifier, player_id=player_id)
+    if isinstance(placement := effect.get("placement"), dict):
+        effect["placement"] = public_placement(placement, player_id=player_id)
     if entities is None:
         return _omit(result, set(effect), "public_view_unavailable")
     if _hidden_target(effect, entities):

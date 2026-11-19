@@ -225,8 +225,9 @@ async def test_public_owner_receipts_survive_narrator_review_and_repair_chronolo
         receipts = contract["LINA"]["authoritative_command_outcomes"]
         assert [receipt["status"] for receipt in receipts] == ["applied", "applied"]
         assert [receipt["tool"] for receipt in receipts] == ["take_item", "give_item"]
-        assert [receipt["effect"] for receipt in receipts] == [
-            receipt["effect"] for receipt in canonical["LINA"]
-        ]
+        expected_effects = [deepcopy(receipt["effect"]) for receipt in canonical["LINA"]]
+        assert expected_effects[1]["destination_owner"] == "__player__"
+        expected_effects[1]["destination_owner"] = "@player"
+        assert [receipt["effect"] for receipt in receipts] == expected_effects
         assert all("effect_omitted" not in receipt for receipt in receipts)
         assert turn.action_outcomes == canonical

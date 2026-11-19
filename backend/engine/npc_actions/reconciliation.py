@@ -10,7 +10,7 @@ from backend.engine.narrated_items.participants import resolve_participants
 from backend.engine.narrated_items.schema import ItemExtraction
 from backend.engine.narrated_movement.runtime import exclude_commands
 from backend.engine.narrated_movement.schema import MovementProposal
-from backend.engine.npc_actions import custody_check, narration_fence
+from backend.engine.npc_actions import custody_check, custody_effects, narration_fence
 from backend.engine.npc_actions.control import validated_outcomes
 from backend.engine.physical_conditions.ledger import read
 from backend.engine.physical_conditions.schema import ConditionProposal, Ledger
@@ -45,10 +45,10 @@ def context(manager: Any) -> dict | None:
 
 
 def _effects(control: dict) -> list[dict]:
+    rows = [(actor, row) for actor, records in control["outcomes"].items() for row in records]
     return [
-        {"actor_id": actor, **row["effect"]}
-        for actor, rows in control["outcomes"].items()
-        for row in rows
+        {**row["effect"], "actor_id": actor, "_publication_index": position}
+        for position, (actor, row) in enumerate(rows)
         if row.get("status") == "applied" and isinstance(row.get("effect"), dict)
     ]
 
@@ -75,7 +75,7 @@ def protect(
         "A narrated inventory change outside the approved NPC plan was preserved for review."
         for action in extraction.actions
         if (action.source_owner in controlled or action.destination_owner in controlled)
-        and not _echo(action, effects)
+        and not custody_effects.echo(action, effects)
     ]
     movement_pairs = [(raw, _movement(raw)) for raw in extraction.movements]
     movements = [raw for raw, row in movement_pairs if row.get("actor_id") not in controlled]
@@ -174,37 +174,6 @@ def _condition(raw: Any, ledger: Ledger) -> Any:
         return ConditionProposal.model_validate(candidate).model_dump()
     except ValidationError:
         return raw
-
-
-def _echo(action: Any, effects: list[dict]) -> bool:
-    return any(
-        effect.get("item_id") == action.item_id
-        and (
-            effect.get("source_owner") == action.source_owner
-            and effect.get("destination_owner") == action.destination_owner
-            or _wardrobe_echo(action, effect)
-        )
-        for effect in effects
-    )
-
-
-def _wardrobe_echo(action: Any, effect: dict) -> bool:
-    if (
-        action.source_owner != effect["actor_id"]
-        or action.destination_owner != effect["actor_id"]
-        or action.attachment_slot is not None
-    ):
-        return False
-    if effect.get("operation") == "remove":
-        return action.disposition in {"carried", "held"}
-    return (
-        effect.get("operation") in {"wear", "adjust"}
-        and action.disposition == "worn"
-        and (
-            action.uncovered_regions is None
-            or action.uncovered_regions == effect.get("uncovered_regions")
-        )
-    )
 
 
 def _conditions(manager: Any, updates: list, effects: list[dict]) -> tuple[list, list[str]]:

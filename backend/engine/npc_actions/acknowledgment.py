@@ -79,6 +79,7 @@ def capture(turn: Any, decision: "Decision") -> PublicationAcknowledgment | None
         raise control.CommandRejectedError("invalid_operation")
     return PublicationAcknowledgment(
         attempt_id=binding.attempt_id,
+        execution=draft.selected_execution,
         operations=tuple(
             OperationAcknowledgment.model_validate(
                 {
@@ -183,6 +184,12 @@ def _from_sources(
             "Blocked/skipped_dependency/stale prove no act or obstacle. Attempted proves no "
             "target response. Keep IDs/codes private. Judge progress from current owner observations. "
             "Choose your next step; others choose theirs."
+        )
+        + (
+            " Execution describes selected steps, never acts; rejected was not staged, "
+            "not_attempted chose no action. Missing operands are unconfirmed."
+            if previous.last_publication.execution is not None
+            else ""
         ),
         "source_input_id": source.message_id,
         "source_reply_id": previous.reply_id,
