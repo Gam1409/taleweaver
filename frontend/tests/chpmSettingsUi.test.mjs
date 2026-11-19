@@ -225,3 +225,12 @@ test('capacity warning exposes the explicit standard-mode choice and preserved h
   assert.match(html, /Select Standard \(save to apply\)/)
   assert.match(html, /Original identity and psychological history stay saved/)
 })
+
+test('session action decision mode appears only for active VN commands', async () => {
+  const active = { action_tools: true, workflow: 'integrated', agent_steps: 1 }
+  const vn = await render(1, [], { host_mode: 'vn' }, { ...active, npc_decision_mode: 'two_phase' })
+  assert.match(vn, /name="npc-decision-mode" value="two_phase"/)
+  for (const [host_mode, draft] of [['rpg', active], ['vn', { ...active, mode: 'shadow' }], ['vn', { ...active, action_tools: false }]]) {
+    assert.doesNotMatch(await render(1, [], { host_mode }, draft), /name="npc-decision-mode"/)
+  }
+})

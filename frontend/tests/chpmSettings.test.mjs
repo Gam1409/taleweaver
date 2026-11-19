@@ -444,3 +444,28 @@ test('combat budget reserves crossing initiative turns within the 25-call cap', 
   assert.equal(f.minimumCalls.value, 18)
   assert.equal(f.draft.value.max_calls_per_turn, 25)
 })
+
+test('session switching away from two-phase decisions retains the command budget and clears the opt-in', async t => {
+  const saved = state(5)
+  Object.assign(saved.settings, { mode: 'live', actor_ids: ['NPC'], workflow: 'integrated', action_tools: true,
+    agent_steps: 1, npc_decision_mode: 'two_phase', max_calls_per_turn: 8 })
+  let written
+  const f = fixture(t, async (_url, options) => {
+    if (options.method === 'GET') return Response.json(saved)
+    written = JSON.parse(options.body).settings
+    return Response.json({ ...saved, revision: 6, settings: written })
+  })
+  await tick()
+  assert.equal(f.minimumCalls.value, 7)
+  f.setWorkflow('staged')
+  assert.equal(f.draft.value.action_tools, false)
+  assert.equal(f.draft.value.npc_decision_mode, undefined)
+  f.setActionToolsEnabled(true)
+  f.draft.value.npc_decision_mode = 'two_phase'
+  f.setMode('shadow')
+  assert.equal(f.draft.value.npc_decision_mode, undefined)
+  assert.equal(await f.save(), true)
+  assert.equal(written.mode, 'shadow')
+  assert.equal(written.max_calls_per_turn, 8)
+  assert.equal(written.npc_decision_mode, undefined)
+})

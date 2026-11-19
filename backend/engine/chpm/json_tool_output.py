@@ -12,6 +12,7 @@ from backend.core.llm_schema_choices import SchemaChoiceError
 from backend.core.llm_schema_compaction import safe_to_share
 from backend.core.llm_schema_merge import SchemaProjectionError
 from backend.core.llm_structured_output import for_router
+from backend.engine.chpm import required_tools
 
 MAX_REQUESTS = 2
 SUBMISSION = "submit_decision"
@@ -69,17 +70,24 @@ def _arguments(tools: list[dict]) -> tuple[dict[str, dict], dict]:
     return parameters, definitions
 
 
-def schema(tools: list[dict], *, arguments: bool = False) -> dict:
+def schema(tools: list[dict], *, arguments: bool = False, require_tools: bool = False) -> dict:
     """Describe names and isolated batches, optionally binding canonical argument schemas."""
     parameters, definitions = _arguments(tools) if arguments else (None, {})
-    names = sorted({tool["function"]["name"] for tool in tools})
+    names = sorted(
+        required_tools.names(tools)
+        if require_tools
+        else {tool["function"]["name"] for tool in tools}
+    )
     nonfinal = [name for name in names if name != SUBMISSION]
     batches = (
         [_batch([SUBMISSION], minimum=1, maximum=1, parameters=parameters)]
         if SUBMISSION in names
         else [
             _batch(
-                nonfinal, minimum=0, maximum=MAX_REQUESTS if nonfinal else 0, parameters=parameters
+                nonfinal,
+                minimum=int(require_tools),
+                maximum=MAX_REQUESTS if nonfinal else 0,
+                parameters=parameters,
             )
         ]
     )
@@ -105,17 +113,24 @@ def schema(tools: list[dict], *, arguments: bool = False) -> dict:
     return result
 
 
-def selected(inner: Any, tools: list[dict], *, model: str | None = None) -> dict | None:
+def selected(
+    inner: Any, tools: list[dict], *, model: str | None = None, require_tools: bool = False
+) -> dict | None:
     method = inner.aexecute_simple_task
     parameter = inspect.signature(method).parameters.get("response_format")
     if parameter is None or parameter.kind == inspect.Parameter.POSITIONAL_ONLY:
         return None
-    envelope = for_router(inner, PortableToolEnvelope, schema=schema(tools), model=model)
+    envelope = for_router(
+        inner, PortableToolEnvelope, schema=schema(tools, require_tools=require_tools), model=model
+    )
     if envelope.mode != "json_schema":
         return envelope.response_format
     try:
         complete = for_router(
-            inner, PortableToolEnvelope, schema=schema(tools, arguments=True), model=model
+            inner,
+            PortableToolEnvelope,
+            schema=schema(tools, arguments=True, require_tools=require_tools),
+            model=model,
         )
     except (SchemaProjectionError, SchemaChoiceError, RecursionError):
         logger.warning("Portable tool schema: arguments=envelope reason=reference_scope")

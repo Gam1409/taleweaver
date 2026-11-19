@@ -30,7 +30,10 @@ def dispatched(phase: str) -> None:
     actor = actor_id.get()
     if pending is None or actor not in pending.remaining:
         return
-    if phase == "proposal":
+    if phase == "physical_intent_accepted":
+        # Even an early submission can still need its reserved execution request.
+        pending.remaining[actor] = 1
+    elif phase in {"proposal", "npc_execution"}:
         pending.remaining[actor] = 0
     elif phase in {"agent_lookup", "integrated_decision"}:
         pending.remaining[actor] = max(1, pending.remaining[actor] - 1)

@@ -283,6 +283,11 @@ async def prepare(
 
 
 def _preparation_failed(manager: Any, turn: Turn, exc: Exception) -> None:
+    from backend.engine.npc_actions.postconditions import PostconditionViolationError
+
+    if isinstance(exc, PostconditionViolationError):
+        # Publication already traced this operation. Keep other actors' minds out of that trace.
+        raise exc
     reject(
         "emotion",
         "chpm.preparation_failed",

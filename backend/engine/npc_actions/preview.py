@@ -38,6 +38,15 @@ if TYPE_CHECKING:
     from backend.engine.chpm.schema import Observation
 
 
+class SelectedStepRejectedError(ValueError):
+    """Carry the owner's bounded reason without interpreting diagnostic prose."""
+
+    def __init__(self, index: int, reason_code: str, message: str) -> None:
+        super().__init__(message)
+        self.index = index
+        self.reason_code = reason_code
+
+
 @dataclass(frozen=True)
 class Scope:
     session_id: str
@@ -187,19 +196,27 @@ class Draft:
             operation, "staged", index=len(self.requests) - 1, effect=receipt, world_changed=False
         )
 
-    def append_selected(self, steps: Sequence[Request]) -> None:
+    def append_selected(
+        self, steps: Sequence[Request], *, issued: Sequence[turn_controls.Operation] | None = None
+    ) -> None:
+        if issued is not None and len(issued) != len(steps):
+            raise ValueError("Each selected step requires its own host operation.")
         # A failed second step or repair must never leak the first into this plan.
         # The captured scope is read-only; only the working state is copied.
         trial = deepcopy(self, {id(self.scope): self.scope})
         for index, request in enumerate(steps):
             if request.tool not in trial.available_tools():
-                raise ValueError(
-                    f"additional_actions/steps/{index}: {request.tool} is unavailable."
+                raise SelectedStepRejectedError(
+                    index,
+                    "unavailable_actions",
+                    f"additional_actions/steps/{index}: {request.tool} is unavailable.",
                 )
-            result = trial.execute(request)
+            result = trial.execute(request, operation=issued[index] if issued is not None else None)
             if result["status"] != "staged":
                 reason = result.get("reason_code", result["status"])
-                raise ValueError(f"additional_actions/steps/{index}: {request.tool} ({reason}).")
+                raise SelectedStepRejectedError(
+                    index, reason, f"additional_actions/steps/{index}: {request.tool} ({reason})."
+                )
         self.requests, self.receipts, self.operations = (
             trial.requests,
             trial.receipts,

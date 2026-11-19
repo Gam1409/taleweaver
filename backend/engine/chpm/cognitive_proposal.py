@@ -21,6 +21,7 @@ from backend.engine.chpm import (
     quote_references,
     semantic_choice,
     semantic_recall,
+    two_phase_decision,
 )
 from backend.engine.chpm.agent_tools import Tools
 from backend.engine.chpm.appraisal_contracts import INSTRUCTIONS
@@ -66,11 +67,15 @@ def prepare(
     action_draft = (
         tools.current_actions() if tools is not None and tools.actions is not None else None
     )
+    two_phase = settings.npc_decision_mode == "two_phase"
+    if two_phase and action_draft is None:
+        raise StaleControlError("Two-phase decision requires the current actor action scope.")
     if tools is not None:
         mind, pinned, pinned_beliefs = tools.mind, tools.pins, tools.beliefs
         supplied = {
             **supplied,
             "agent_contract": "source-handoff-v1",
+            **({"npc_decision_mode": "two_phase"} if two_phase else {}),
             "agent_plan_status": [step["stop"] for step in audit],
             "agent_lookup_status": [
                 {"tool": request["tool"], "status": result["status"]}
@@ -103,6 +108,7 @@ def prepare(
     instruction = (
         prompts.proposal(command_owned=tools is not None and tools.actions is not None)
         + INSTRUCTIONS
+        + (two_phase_decision.INSTRUCTIONS if two_phase else "")
         + motivation.INSTRUCTIONS
         + experience.INSTRUCTIONS
         + semantic_choice.INSTRUCTIONS
@@ -207,7 +213,7 @@ def prepare(
                 "candidate_motives": resolved_motives,
             }
         )
-        if action_draft is not None:
+        if action_draft is not None and not two_phase:
             extra = (
                 draft.additional_actions
                 if isinstance(
@@ -221,7 +227,9 @@ def prepare(
     return Prepared(
         instruction,
         payload,
-        proposal_actions.wire_schema(schema is DevelopmentProposal, action_draft is not None),
+        two_phase_decision.wire_schema(schema is DevelopmentProposal)
+        if two_phase
+        else proposal_actions.wire_schema(schema is DevelopmentProposal, action_draft is not None),
         identifiers,
         accept,
         references,

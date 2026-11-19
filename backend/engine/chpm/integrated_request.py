@@ -2,7 +2,6 @@
 
 import json
 from collections.abc import Callable
-from copy import deepcopy
 from dataclasses import replace
 from typing import Any
 
@@ -13,19 +12,17 @@ from backend.engine.chpm import (
     cognitive_proposal,
     inference,
     integrated_protocol,
+    integrated_submission,
     json_contract,
     offered_tools,
-    parallel_budget,
     proposal_actions,
-    proposal_attempt,
     tool_operations,
-    wire_normalization,
 )
 from backend.engine.chpm.agent_tools import Tools
 from backend.engine.chpm.errors import RecoverableChpmError
 from backend.engine.chpm.host_state import Mind
-from backend.engine.chpm.proposal_references import ReferenceDraft
 from backend.engine.chpm.schema import Decision, Settings, Usage
+from backend.engine.npc_actions.contracts import ACTION_MODELS
 from backend.engine.npc_actions.instructions import submission
 
 FINAL = integrated_protocol.FINAL
@@ -62,6 +59,9 @@ response did not run; earlier successful operations must not be repeated.
 
 def _definitions(prepared: cognitive_proposal.Prepared, tools: Tools, remaining: int) -> list[dict]:
     offered = offered_tools.definitions(tools) if remaining else []
+    if "physical_intent" in prepared.schema.model_fields:
+        # Phase A may consult observer-local tools but never stages world operations.
+        offered = [row for row in offered if row["function"]["name"] not in ACTION_MODELS]
     additional = "additional_actions" in prepared.schema.model_fields
     return [
         *offered,
@@ -113,7 +113,7 @@ def _messages(
         else INSTRUCTIONS.replace(NOTEBOOK_INSTRUCTIONS, "")
     )
     instruction = prepared.instruction + offered_instruction
-    if tools.actions is not None:
+    if tools.actions is not None and "physical_intent" not in prepared.schema.model_fields:
         from backend.engine.npc_actions.instructions import INSTRUCTIONS as ACTION_INSTRUCTIONS
 
         instruction = (
@@ -172,48 +172,6 @@ def _wire(
     return prepared, messages, offered
 
 
-async def _submit(
-    manager: Any,
-    settings: Settings,
-    usage: Usage,
-    prepared: cognitive_proposal.Prepared,
-    raw: str | None,
-) -> tuple[Decision, Mind]:
-    parallel_budget.dispatched("proposal")
-
-    async def initial() -> ReferenceDraft:
-        candidate = None
-        try:
-            if raw is None:
-                raise ValueError("Use submit_decision with the complete grounded proposal.")
-            candidate = json_contract.decode(raw)
-            candidate, corrections = wire_normalization.normalize(
-                prepared.schema, candidate, prepared.identifiers
-            )
-            usage.format_repairs += len(corrections)
-            parsed = prepared.schema.model_validate(deepcopy(candidate))
-            json_contract.validate_identifiers(prepared.schema, candidate, prepared.identifiers)
-            return parsed
-        except ValueError as exc:
-            raise inference.InvalidResponseError(
-                "CHPM integrated proposal invalid: " + inference.validation_feedback(exc),
-                candidate=candidate,
-            ) from exc
-
-    return await proposal_attempt.request(
-        manager,
-        settings,
-        usage,
-        prepared.instruction,
-        prepared.payload,
-        prepared.schema,
-        prepared.identifiers,
-        prepared.accept,
-        initial=initial,
-        diagnose=prepared.diagnose,
-    )
-
-
 def _feedback(history: list[dict], tools: Tools, batch: tool_operations.Batch) -> None:
     for call, result in tool_operations.feedback(batch):
         feedback = tool_operations.for_model(call.name, result)
@@ -246,11 +204,13 @@ async def request(
     recovery = integrated_protocol.Recovery()
     protocol = "json" if getattr(llm, "protocol", "native") == "json" else "native"
     try:
-        for index in range(settings.agent_steps + 1):
+        # Hold one of the configured rounds for the separately bound world operation.
+        lookup_rounds = settings.agent_steps - int(settings.npc_decision_mode == "two_phase")
+        for index in range(lookup_rounds + 1):
             prepared = prepare(tools)
             if prepared.cached is not None:
                 return prepared.cached
-            remaining = settings.agent_steps - index
+            remaining = lookup_rounds - index
             prepared, messages, offered = _wire(
                 prepared, tools, remaining, history, llm, settings.max_input_chars
             )
@@ -271,17 +231,21 @@ async def request(
                     exc, history, audit, remaining=remaining, protocol=protocol, captured=captured
                 )
                 continue
+            seen_ids.update(call.id for call in turn.calls)
             finals = [call for call in turn.calls if call.name == FINAL]
             if finals or not turn.calls:
                 usage.format_repairs += int(not turn.calls)
-                return await _submit(
+                return await integrated_submission.submit(
                     manager,
                     settings,
                     usage,
                     prepared,
                     finals[0].arguments_raw if finals else turn.assistant_message.get("content"),
+                    tools=tools,
+                    llm=llm,
+                    captured=captured,
+                    seen_ids=seen_ids,
                 )
-            seen_ids.update(call.id for call in turn.calls)
             requests, errors = agent_native._parse_batch(turn.calls)
             batch = tool_operations.execute(
                 manager, tools, turn.calls, requests, errors, captured=captured

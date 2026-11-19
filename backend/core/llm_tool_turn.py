@@ -18,9 +18,12 @@ class NativeToolsUnsupportedError(RuntimeError):
 class InvalidToolTurnError(ValueError):
     """A completed response does not contain an unambiguous native assistant message."""
 
-    def __init__(self, message: str, *, code: str = "invalid_structure") -> None:
+    def __init__(
+        self, message: str, *, code: str = "invalid_structure", call_ids: tuple[str, ...] = ()
+    ) -> None:
         super().__init__(message)
         self.code = code
+        self.call_ids = call_ids
 
 
 @dataclass(frozen=True)
@@ -38,7 +41,9 @@ class ToolTurn:
     usage: dict[str, Any] | None = None
 
 
-def ensure_tools_supported(router: Any, model: str | None = None) -> None:
+def ensure_tools_supported(
+    router: Any, model: str | None = None, *, require_tools: bool = False
+) -> None:
     """Reject a known local parameter drop before reserving or sending inference."""
     selected = model or router.model
     options: dict[str, Any] = {}
@@ -54,6 +59,15 @@ def ensure_tools_supported(router: Any, model: str | None = None) -> None:
         raise NativeToolsUnsupportedError(
             "The configured provider adapter does not support native tools and tool_choice."
         )
+    if require_tools and provider == "anthropic":
+        from litellm.llms.anthropic.common_utils import AnthropicModelInfo
+
+        # This adapter can downgrade required to auto under LiteLLM's global drop policy,
+        # even when the individual request sets drop_params=False.
+        if AnthropicModelInfo.forced_tool_use_unsupported(resolved):
+            raise NativeToolsUnsupportedError(
+                "The configured Anthropic model does not support required native tool choice."
+            )
 
 
 def _request_kwargs(
@@ -167,7 +181,7 @@ async def execute(
     metadata: dict[str, Any] | None = None,
 ) -> ToolTurn:
     """Keep assistant calls and arguments intact; callers validate and execute capabilities."""
-    ensure_tools_supported(router, model)
+    ensure_tools_supported(router, model, require_tools=tool_choice == "required")
     kwargs = _request_kwargs(router, messages, tools, model, tool_choice)
     context: dict[str, Any] = {
         "adventure_id": adventure_id,

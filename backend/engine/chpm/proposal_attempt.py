@@ -38,6 +38,7 @@ async def request(
     accept: Callable[[T], R],
     *,
     initial: Callable[[], Awaitable[T]] | None = None,
+    reserved_execution: int = 0,
     diagnose: Callable[[dict], list[dict]] | None = None,
 ) -> R:
     phase = "proposal"
@@ -124,9 +125,9 @@ async def request(
             )
         turn = getattr(manager, "_chpm_turn", None)
         remaining = max(0, len(turn.names) - len(turn.decisions) - 1) if turn else 0
-        reserve = parallel_budget.remaining(remaining * (1 + settings.agent_steps)) + (
-            3 if settings.mode == "live" else 0
-        )
+        reserve = parallel_budget.remaining(
+            remaining * (1 + settings.agent_steps) + reserved_execution
+        ) + (3 if settings.mode == "live" else 0)
         if usage.calls + 1 + reserve > settings.max_calls_per_turn:
             raise ProposalRejectedError(
                 "CHPM proposal retry has no reserved request budget. " + feedback

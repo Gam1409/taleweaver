@@ -31,9 +31,12 @@ async def publish_turn(manager: Any, turn: Any) -> None:
         valid = enabled and await _current_input(manager, turn.decisions[actor].observation)
         if not draft.requests and not (valid and _current_empty_plan(manager, turn, actor)):
             continue
-        turn.action_outcomes[actor] = (
-            await publish(manager, draft) if valid else rejected_results(draft, "stale")
-        )
+        if not valid:
+            turn.action_outcomes[actor] = rejected_results(draft, "stale")
+        elif settings.npc_decision_mode == "two_phase" and settings.control_scope == "dialogue":
+            turn.action_outcomes[actor] = await publish(manager, draft, verify_postconditions=True)
+        else:
+            turn.action_outcomes[actor] = await publish(manager, draft)
 
 
 def _current_empty_plan(manager: Any, turn: Any, actor: str) -> bool:

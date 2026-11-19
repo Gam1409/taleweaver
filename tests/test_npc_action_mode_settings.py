@@ -265,3 +265,79 @@ async def test_mismatched_saved_controller_remains_inactive_until_owner_settings
     assert host.state.entity_states == original
     model.assert_not_called()
     selector.assert_not_called()
+
+
+def test_two_phase_missing_or_explicit_legacy_settings_keep_the_same_saved_shape():
+    legacy = preferences()
+    assert Settings.model_validate(legacy).npc_decision_mode == "legacy"
+    assert Settings.model_validate({**legacy, "npc_decision_mode": "legacy"}).model_dump() == legacy
+    envelope = KernelState.model_validate({"settings": legacy}).model_dump(mode="json")
+    assert "npc_decision_mode" not in envelope["settings"]
+    for mode in ("validation", "serialization"):
+        properties = Settings.model_json_schema(mode=mode)["properties"]
+        assert properties["npc_decision_mode"]["default"] == "legacy"
+        assert "action_tools" in properties
+
+
+async def test_two_phase_session_opt_in_and_return_to_legacy_update_the_replay(
+    auth_client, chpm_world
+):
+    async with TestSessionLocal() as db:
+        before = await capture(db, "portrait-session")
+        db.add(TurnReplay(session_id="portrait-session", before=before, input_text="Hello"))
+        await db.commit()
+    revision = 0
+    for mode in ("two_phase", "legacy"):
+        response = await auth_client.patch(
+            PATH,
+            json={"expected_revision": revision, "settings": preferences(npc_decision_mode=mode)},
+        )
+        assert response.status_code == 200, response.text
+        saved = (await auth_client.get(PATH)).json()
+        assert saved["settings"].get("npc_decision_mode", "legacy") == mode
+        assert saved["required_call_budget"] == 7
+        revision = saved["revision"]
+        async with TestSessionLocal() as db:
+            replay = await db.get(TurnReplay, "portrait-session")
+            snapshot = replay.before["state"]["entity_states"][KEY]["settings"]
+            assert snapshot.get("npc_decision_mode", "legacy") == mode
+
+
+@pytest.mark.parametrize(
+    "host,updates",
+    [
+        ("vn", {"mode": "shadow"}),
+        ("vn", {"mode": "off"}),
+        ("vn", {"action_tools": False}),
+        ("vn", {"workflow": "staged"}),
+        ("vn", {"agent_steps": 0}),
+        ("rpg", {"control_scope": "dialogue"}),
+    ],
+)
+async def test_two_phase_rejects_inactive_or_unsupported_session_settings(
+    auth_client, chpm_world, host, updates
+):
+    await set_mode(host)
+    response = await auth_client.patch(
+        PATH,
+        json={
+            "expected_revision": 0,
+            "settings": preferences(npc_decision_mode="two_phase", **updates),
+        },
+    )
+    assert response.status_code == 422, response.text
+    saved = (await auth_client.get(PATH)).json()
+    assert saved["revision"] == 0
+    assert saved["settings"].get("npc_decision_mode", "legacy") == "legacy"
+
+
+async def test_two_phase_template_default_applies_only_to_new_vn_sessions(auth_client, chpm_world):
+    response = await auth_client.patch(
+        TEMPLATE_PATH, json={"npc_personality_settings": preferences(npc_decision_mode="two_phase")}
+    )
+    assert response.status_code == 200, response.text
+    async with TestSessionLocal() as db:
+        template = await db.get(AdventureTemplate, "portrait-template")
+        assert initial_states(template, {})[KEY]["settings"]["npc_decision_mode"] == "two_phase"
+    saved = (await auth_client.get(PATH)).json()
+    assert "npc_decision_mode" not in saved["settings"]

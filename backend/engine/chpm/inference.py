@@ -16,6 +16,7 @@ from backend.engine.chpm import (
     json_contract,
     parallel_budget,
     performance,
+    required_tools,
     tool_profiles,
     wire_normalization,
 )
@@ -41,9 +42,12 @@ class OutputBudgetError(RecoverableChpmError):
 class ToolEnvelopeError(InvalidResponseError):
     """A completed structural error that the owning workflow may explain once."""
 
-    def __init__(self, message: str, *, code: str = "invalid_structure") -> None:
+    def __init__(
+        self, message: str, *, code: str = "invalid_structure", call_ids: tuple[str, ...] = ()
+    ) -> None:
         super().__init__(message)
         self.code = code
+        self.call_ids = call_ids
 
 
 def check_output_budget(
@@ -186,13 +190,23 @@ async def request(
         ) from exc
 
 
-def tool_input_size(llm: Any, messages: list[dict], tools: list[dict]) -> int:
+def tool_input_size(
+    llm: Any, messages: list[dict], tools: list[dict], *, require_tools: bool = False
+) -> int:
     sizing = getattr(llm, "input_size", None)
-    return (
-        sizing(messages, tools)
-        if callable(sizing)
-        else len(json.dumps({"messages": messages, "tools": tools}, ensure_ascii=False))
-    )
+    if callable(sizing):
+        size: int = (
+            sizing(messages, tools, require_tools=True)
+            if require_tools
+            else sizing(messages, tools)
+        )
+        return size
+    payload = {
+        "messages": messages,
+        "tools": tools,
+        **({"tool_choice": "required"} if require_tools else {}),
+    }
+    return len(json.dumps(payload, ensure_ascii=False))
 
 
 async def tool_request(
@@ -205,13 +219,18 @@ async def tool_request(
     llm: Any,
     phase: str = "agent_lookup",
     output_limit: int = 768,
+    require_tools: bool = False,
 ) -> Any:
     """Reserve one native round through the same deadlines, admission and timings."""
     from backend.core.llm_tool_turn import InvalidToolTurnError
 
     if getattr(llm, "protocol", "native") != "json":
         tool_profiles.validate_native(settings.tool_profile, tools)
-    reserve(settings, usage, tool_input_size(llm, messages, tools))
+    try:
+        names = required_tools.names(tools) if require_tools else None
+    except InvalidToolTurnError as exc:
+        raise ToolEnvelopeError(str(exc), code=exc.code) from exc
+    reserve(settings, usage, tool_input_size(llm, messages, tools, require_tools=require_tools))
     parallel_budget.dispatched(phase)
     llm.max_tokens = min(llm.max_tokens, settings.max_output_tokens, output_limit)
     llm.enable_thinking = False
@@ -222,12 +241,15 @@ async def tool_request(
                     messages,
                     tools,
                     llm.model,
+                    **({"tool_choice": "required"} if require_tools else {}),
                     game_id=manager.game_id,
                     operation="chpm",
                     phase=phase,
                 ),
                 timeout=float(llm.request_timeout),
             )
+            if names is not None:
+                required_tools.check(result, names)
     except InvalidToolTurnError as exc:
         check_output_budget(completions, llm.max_tokens, phase, invalid_json=True)
         rejected_finish = exc.code == "unsupported_finish" or any(
@@ -235,7 +257,9 @@ async def tool_request(
         )
         if rejected_finish:
             raise InvalidResponseError("CHPM received an unsupported tool completion.") from exc
-        raise ToolEnvelopeError("CHPM received an invalid tool envelope.", code=exc.code) from exc
+        raise ToolEnvelopeError(
+            "CHPM received an invalid tool envelope.", code=exc.code, call_ids=exc.call_ids
+        ) from exc
     except Exception as exc:
         raise InferenceUnavailableError(
             f"CHPM {phase} failed ({type(exc).__name__}). No tool request was applied."

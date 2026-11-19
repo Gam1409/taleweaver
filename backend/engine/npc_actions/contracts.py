@@ -94,7 +94,7 @@ class Discard(Request):
     tool: Literal["discard_actions"]
 
 
-ActionRequest = Annotated[
+WorldAction = (
     Move
     | Pose
     | Approach
@@ -107,9 +107,9 @@ ActionRequest = Annotated[
     | Adjust
     | ChangeState
     | Use
-    | Discard,
-    Field(discriminator="tool"),
-]
+)
+
+ActionRequest = Annotated[WorldAction | Discard, Field(discriminator="tool")]
 
 ACTION_MODELS: dict[str, type[Request]] = {
     "move_to": Move,

@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { useChpmSettings } from '@/composables/useChpmSettings'
+import { useChpmSettings, type ChpmSettings } from '@/composables/useChpmSettings'
 import { NPC_TOOL_PROFILES, NPC_TOOL_PROFILE_REQUIREMENTS, NPC_TOOL_PROTOCOL_HELP, findNpcToolProfile } from '@/utils/npcToolProfiles'
 import type { NpcToolProfile } from '@/utils/npcToolProfiles'
 
 const props = defineProps<{ sessionId: string }>()
-const { status, draft, busy, error, minimumCalls, budgetWarning, historyWarnings, selectStandard, setNotebookEnabled, setToolProfile, setActionToolsEnabled, setWorkflow, load, save } = useChpmSettings(() => props.sessionId)
+const { status, draft, busy, error, minimumCalls, budgetWarning, historyWarnings, selectStandard, setMode, setNotebookEnabled, setToolProfile, setActionToolsEnabled, setWorkflow, load, save } = useChpmSettings(() => props.sessionId)
 const selectedToolProfile = computed(() => findNpcToolProfile(draft.value?.tool_profile))
 const isCombatControl = computed(() => status.value?.host_mode === 'rpg')
 const lastFailure = computed(() => status.value?.last_analysis_failure ?? status.value?.last_proposal_failure)
@@ -23,7 +23,7 @@ defineExpose({ save })
     <button v-if="!status" type="button" :disabled="busy" class="mt-3 text-cyan-300" @click="load">{{ busy ? 'Loading…' : 'Retry loading' }}</button>
     <fieldset v-if="draft && status" :disabled="busy || !status.available" class="mt-4 space-y-4 disabled:opacity-60">
       <label class="block text-xs text-slate-300">Mode
-        <select name="npc-mode" v-model="draft.mode" class="mt-1 w-full rounded-lg border border-slate-600 bg-slate-800 p-2">
+        <select name="npc-mode" :value="draft.mode" @change="setMode(($event.target as HTMLSelectElement).value as ChpmSettings['mode'])" class="mt-1 w-full rounded-lg border border-slate-600 bg-slate-800 p-2">
           <option value="off">Standard — no extra requests</option>
           <option v-if="!isCombatControl || draft.mode === 'shadow'" value="shadow" :disabled="isCombatControl">Observe — calculate decisions without changing replies</option>
           <option value="live">{{ isCombatControl ? 'Enabled — choose combat abilities' : 'Enabled — validate dialogue before showing it' }}</option>
@@ -111,6 +111,14 @@ defineExpose({ save })
           {{ isCombatControl ? 'Combat action control (experimental)' : 'NPC world actions (experimental)' }}
           <span v-if="isCombatControl" class="mt-2 block text-slate-400">NPCs choose existing authored abilities; the combat engine applies valid results. Enabling selects Integrated and at least one tool round.</span>
           <span v-else class="mt-2 block text-slate-400">For VN sessions, NPCs choose their own actions; the engine validates changes to the world. The player's choices stay theirs. Enabling selects Integrated and at least one tool round.</span>
+        </label>
+        <label v-if="status.host_mode === 'vn' && draft.mode === 'live' && draft.action_tools && draft.workflow === 'integrated' && draft.agent_steps" class="block text-xs text-slate-300">
+          Action decision mode
+          <select name="npc-decision-mode" :value="draft.npc_decision_mode ?? 'legacy'" class="mt-1 w-full rounded-lg border border-slate-600 bg-slate-800 p-2" @change="draft.npc_decision_mode = ($event.target as HTMLSelectElement).value as ChpmSettings['npc_decision_mode']">
+            <option value="legacy">Standard</option>
+            <option value="two_phase">Two-phase (experimental)</option>
+          </select>
+          <span class="mt-2 block text-slate-400">Two-phase reserves a tool round to carry out the NPC's chosen action.</span>
         </label>
         <p v-if="isCombatControl && (!draft.action_tools || draft.workflow !== 'integrated' || !draft.agent_steps)" role="alert" class="text-xs text-amber-200">Enable combat action control before saving, or select Standard.</p>
         <div v-if="draft.mode === 'live' && ((draft.agent_steps ?? 0) > 0 || draft.notebook_enabled || draft.workflow === 'integrated')" class="grid gap-4 sm:grid-cols-2">

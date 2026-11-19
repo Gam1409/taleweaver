@@ -12,7 +12,7 @@ from backend.engine.gameplay.turn_state_applier import TurnStateApplier
 from backend.engine.narrated_items.commands import carried_after, transfer
 from backend.engine.narrated_items.persistence import publish_command
 from backend.engine.narrated_movement.context import context as movement_context
-from backend.engine.npc_actions import control
+from backend.engine.npc_actions import control, postconditions
 from backend.engine.npc_actions.contracts import (
     Adjust,
     Approach,
@@ -144,7 +144,7 @@ async def _apply(manager: Any, scope: Scope, request: Request, preview: Draft) -
     raise ValueError("The command has no authoritative owner operation.")
 
 
-async def publish(manager: Any, draft: Draft) -> list[dict]:
+async def publish(manager: Any, draft: Draft, *, verify_postconditions: bool = False) -> list[dict]:
     """A failed prerequisite stops dependent commands; successful earlier commands remain explicit."""
     if not draft.approved:
         return []
@@ -194,6 +194,8 @@ async def publish(manager: Any, draft: Draft) -> list[dict]:
         # Unexpected owner failures must reach turn recovery, never masquerade as
         # a safely blocked command after a partially changed transaction.
         await _apply(manager, scope, request, preview)
+        if verify_postconditions:
+            await postconditions.verify(manager, scope, request, result["effect"], operation)
         results.append(
             control.result(
                 operation,

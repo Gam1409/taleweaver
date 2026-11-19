@@ -13,6 +13,48 @@ in **Session settings → NPC Personality → Action tools**. Enabling actions s
 Integrated and at least one tool round without enabling private notebooks.
 Adventure defaults apply only when creating a session.
 
+### Experimental two-phase decisions in Visual Novel
+
+With action tools enabled, **Action decision mode** offers **Two-phase
+(experimental)**. The session setting is `npc_decision_mode: two_phase`.
+Standard (`legacy`) is the default, including for existing sessions. Switch
+back to Standard to use the original decision workflow on the next turn.
+
+1. The NPC reads its observer-local view and submits its usual cognitive
+   decision. It separately selects either zero physical steps or one to two
+   ordered, typed commands with their target IDs and arguments. It can refuse
+   another character's request while choosing a physical action of its own.
+   Any remaining lookup rounds are read-only with respect to the game world.
+2. A choice with physical steps uses one of the existing agent rounds. The
+   host offers only the selected functions. Native requests require tool use,
+   and the JSON envelope requires a nonempty call list. The host compares
+   command types, order, IDs and arguments to the accepted choice. A malformed
+   or mismatched batch can use one available shared proposal repair. A rejected
+   batch stages zero operations and the NPC keeps its social choice.
+3. The usual state owners resolve competing plans in publication order. After
+   each successful pickup, transfer, placement, wardrobe change, pose or
+   approach, the host checks the affected fields before issuing the receipt.
+   A disagreement between an owner write and its expected result aborts the
+   enclosing turn. Ordinary competition produces individual receipts, which
+   the narrator receives and each NPC can see for its own previous decision.
+
+For example, if two actors select the same loose cup, both can try. A successful
+pickup changes the owner once. The later actor can react to its failed attempt
+on the next turn. The host does not infer a pickup from either actor's prose.
+An actor can still submit zero steps while describing a physical intention.
+This semantic omission needs independent evaluation against the saved state.
+
+The offline regression entry points are `tests/test_npc_two_phase_turn.py`
+(native and JSON turns, subsequent feedback and rollback),
+`tests/test_chpm_two_phase_execution.py` (binding, validation and repairs) and
+`tests/test_npc_two_phase_postconditions.py` (real owner state). For a live
+comparison, clone the initial save for each mode. Keep model, transport,
+generation settings, cast and player input fixed. Record per actor the selected
+intent, staged operations, publication receipts and custody after reload. For
+each turn, compare the narration to those receipts and count requests, tokens
+and repairs. Report native and JSON results separately. The additional execution
+request is per acting NPC, so measure the scene total when several actors act.
+
 The same [tool-calling profile](npc-tool-profiles.md) applies to VN action rounds
 and RPG ability selection. Profile and native/JSON compatibility are independent
 controls; neither grants new actions or changes their canonical publication rules.

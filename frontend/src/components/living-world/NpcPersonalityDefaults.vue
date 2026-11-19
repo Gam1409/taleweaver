@@ -49,7 +49,9 @@ const limits = [
 ] as const
 const visibleLimits = computed(() => isCombatControl.value ? limits.filter(field => field.key !== 'memory_limit') : limits)
 function update<K extends keyof ChpmSettings>(key: K, value: ChpmSettings[K], extra: Partial<ChpmSettings> = {}) {
-  emit('update:modelValue', { ...draft.value, actor_ids: [...draft.value.actor_ids], [key]: value, ...extra })
+  const next = { ...draft.value, actor_ids: [...draft.value.actor_ids], [key]: value, ...extra }
+  if (next.mode !== 'live' || !next.action_tools || isCombatControl.value) delete next.npc_decision_mode
+  emit('update:modelValue', next)
 }
 function setNotebookEnabled(enabled: boolean) {
   update('notebook_enabled', enabled, enabled ? { agent_steps: Math.max(1, draft.value.agent_steps ?? 0) } : {})
@@ -208,6 +210,14 @@ function selectActor(id: string, selected: boolean) {
           {{ isCombatControl ? 'Combat action control (experimental)' : 'NPC world actions (experimental)' }}
           <span v-if="isCombatControl" class="mt-2 block text-slate-400">NPCs choose existing authored abilities; the combat engine applies valid results. Enabling selects Integrated and at least one tool round.</span>
           <span v-else class="mt-2 block text-slate-400">NPCs choose their own actions; the engine validates changes to the world. The player's choices stay theirs. Enabling selects Integrated and at least one tool round.</span>
+        </label>
+        <label v-if="hostMode === 'vn' && draft.mode === 'live' && draft.action_tools && draft.workflow === 'integrated' && draft.agent_steps" class="mt-4 block text-xs text-slate-300">
+          Action decision mode
+          <select name="npc-decision-mode" :value="draft.npc_decision_mode ?? 'legacy'" class="mt-2 w-full rounded-lg bg-slate-800 p-2" @change="update('npc_decision_mode', ($event.target as HTMLSelectElement).value as ChpmSettings['npc_decision_mode'])">
+            <option value="legacy">Standard</option>
+            <option value="two_phase">Two-phase (experimental)</option>
+          </select>
+          <span class="mt-2 block text-slate-400">Two-phase reserves a tool round to carry out the NPC's chosen action.</span>
         </label>
         <p v-if="isCombatControl && (!draft.action_tools || draft.workflow !== 'integrated' || !draft.agent_steps)" role="alert" class="mt-3 text-xs text-amber-200">Enable combat action control before saving, or select Standard.</p>
         <div v-if="draft.mode === 'live' && ((draft.agent_steps ?? 0) > 0 || draft.notebook_enabled || draft.workflow === 'integrated')" class="mt-4 grid gap-4 sm:grid-cols-2">

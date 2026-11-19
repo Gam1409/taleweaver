@@ -221,3 +221,20 @@ test('RPG defaults reserve up to three initiative turns without increasing the s
   assert.match(text(f.root), /Minimum request budget: 48,/)
   assert.equal(f.value.value.max_calls_per_turn, 25)
 })
+
+test('two-phase decisions are opt-in for VN actions and clear when those actions are disabled', async t => {
+  const original = { ...settings(), action_tools: true, workflow: 'integrated', agent_steps: 1 }
+  const f = fixture(t, original, { hostMode: 'vn' })
+  const field = name => descendants(f.root).find(node => node.props?.name === name)
+  assert.equal(field('npc-decision-mode')?.props.value, 'legacy')
+  field('npc-decision-mode').props.onChange({ target: { value: 'two_phase' } })
+  await nextTick()
+  assert.equal(f.value.value.npc_decision_mode, 'two_phase')
+  assert.equal(f.value.value.max_calls_per_turn, original.max_calls_per_turn)
+  field('npc-world-actions').props.onChange({ target: { checked: false } })
+  await nextTick()
+  assert.equal(field('npc-decision-mode'), undefined)
+  assert.equal(f.value.value.npc_decision_mode ?? 'legacy', 'legacy')
+  const combat = fixture(t, original, { hostMode: 'rpg' })
+  assert.equal(descendants(combat.root).some(node => node.props?.name === 'npc-decision-mode'), false)
+})

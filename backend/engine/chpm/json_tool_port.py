@@ -9,7 +9,7 @@ from uuid import uuid4
 
 from backend.core.llm_completion_capture import Completion, capture_completions
 from backend.core.llm_tool_turn import InvalidToolTurnError, ToolCall, ToolTurn
-from backend.engine.chpm import json_contract, json_tool_output
+from backend.engine.chpm import json_contract, json_tool_output, required_tools
 from backend.engine.chpm.native_tool_contracts import canonical_tool_name
 from backend.engine.chpm.notebook.codec import decode, preflight
 
@@ -283,7 +283,9 @@ def _catalog(tools: list[dict]) -> dict:
     return result
 
 
-def compose(messages: list[dict], tools: list[dict]) -> tuple[str, str]:
+def compose(
+    messages: list[dict], tools: list[dict], *, require_tools: bool = False
+) -> tuple[str, str]:
     """Factor context, instructions, results and schemas without trimming their contents."""
     context = _host_context(messages)
     conversation = _conversation(messages, context)
@@ -295,7 +297,12 @@ def compose(messages: list[dict], tools: list[dict]) -> tuple[str, str]:
     }
     instructions = [message["content"] for message in messages if message.get("role") == "system"]
     transport = INSTRUCTIONS
-    if any(item["function"]["name"] == "submit_decision" for item in tools):
+    if require_tools:
+        transport = transport.replace(
+            "At most two requests; [] when ready.",
+            "Return at least one and at most two requests using the offered action functions.",
+        )
+    elif any(item["function"]["name"] == "submit_decision" for item in tools):
         transport = transport.replace(
             "At most two requests; [] when ready.",
             "At most two requests. When ready, call submit_decision alone.",
@@ -310,8 +317,8 @@ def compose(messages: list[dict], tools: list[dict]) -> tuple[str, str]:
     )
 
 
-def input_size(messages: list[dict], tools: list[dict]) -> int:
-    system, payload = compose(messages, tools)
+def input_size(messages: list[dict], tools: list[dict], *, require_tools: bool = False) -> int:
+    system, payload = compose(messages, tools, require_tools=require_tools)
     return len(system) + len(payload)
 
 
@@ -450,9 +457,13 @@ class JsonToolPort:
     def request_timeout(self, value: float) -> None:
         self.inner.request_timeout = value
 
-    def input_size(self, messages: list[dict], tools: list[dict]) -> int:
-        response_format = json_tool_output.selected(self.inner, tools)
-        return input_size(messages, tools) + json_tool_output.size(response_format)
+    def input_size(
+        self, messages: list[dict], tools: list[dict], *, require_tools: bool = False
+    ) -> int:
+        response_format = json_tool_output.selected(self.inner, tools, require_tools=require_tools)
+        return input_size(messages, tools, require_tools=require_tools) + json_tool_output.size(
+            response_format
+        )
 
     async def aexecute_tool_turn(
         self,
@@ -467,11 +478,12 @@ class JsonToolPort:
         phase: str | None = None,
         metadata: dict | None = None,
     ) -> ToolTurn:
-        if tool_choice != "auto":
+        if tool_choice not in ("auto", "required"):
             raise InvalidToolTurnError(
-                "The portable function protocol requires automatic selection."
+                "The portable function protocol supports auto or required selection."
             )
-        system, payload = compose(messages, tools)
+        required_names = required_tools.names(tools) if tool_choice == "required" else None
+        system, payload = compose(messages, tools, require_tools=required_names is not None)
         options: dict[str, Any] = {
             key: value
             for key, value in {
@@ -484,11 +496,16 @@ class JsonToolPort:
             if value is not None
         }
         method = self.inner.aexecute_simple_task
-        response_format = json_tool_output.selected(self.inner, tools, model=model)
+        response_format = json_tool_output.selected(
+            self.inner, tools, model=model, require_tools=required_names is not None
+        )
         if response_format is not None:
             options["response_format"] = response_format
         if "single_attempt" in inspect.signature(method).parameters:
             options["single_attempt"] = True
         with capture_completions() as completions:
             raw = await method(system, payload, model, **options)
-        return _turn(raw, completions)
+        turn = _turn(raw, completions)
+        if required_names is not None:
+            required_tools.check(turn, required_names)
+        return turn

@@ -47,10 +47,21 @@ class SettingsFields(Contract):
     agent_steps: int = Field(default=0, ge=0, le=MAX_AGENT_ROUNDS, strict=True)
     notebook_enabled: StrictBool = False
     action_tools: StrictBool = False
+    npc_decision_mode: Literal["legacy", "two_phase"] = "legacy"
     tool_protocol: Literal["auto", "native", "json"] = "auto"
     tool_profile: ToolProfile = "auto"
     semantic_memory: StrictBool = False
     failure_policy: Literal["continue", "strict"] = "continue"
+
+    @model_serializer(mode="wrap")
+    def existing_settings_shape(self, handler):
+        # type: (SerializerFunctionWrapHandler) -> dict
+        # A runtime dict return annotation would hide the settings fields in the API schema.
+        # Existing save files and settings fingerprints omit the inactive experiment.
+        result: dict = handler(self)
+        if self.npc_decision_mode == "legacy":
+            result.pop("npc_decision_mode", None)
+        return result
 
 
 class Settings(SettingsFields):
@@ -72,6 +83,10 @@ class Settings(SettingsFields):
             raise ValueError(
                 "NPC action tools require the integrated workflow and at least one tool round."
             )
+        if self.npc_decision_mode == "two_phase" and (
+            self.control_scope != "dialogue" or self.mode != "live" or not self.action_tools
+        ):
+            raise ValueError("Two-phase NPC decisions require live Visual Novel action tools.")
         if len(set(self.actor_ids)) != len(self.actor_ids):
             raise ValueError("Choose each NPC only once.")
         if any(not value.strip() or len(value) > 100 for value in self.actor_ids):

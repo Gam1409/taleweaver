@@ -98,7 +98,7 @@ async def test_actual_review_request_and_preflight_use_the_same_owner_chronology
         calculated.append(instruction)
         return compose(instruction, *args, **kwargs)
 
-    async def request(_manager, _settings, _usage, instruction, payload, *_args, **_kwargs):
+    async def request(_manager, _settings, _usage, instruction, payload, schema, *_args, **_kwargs):
         seen.append((instruction, payload))
         assert payload["host_resolution"] == RESOLUTION
         assert payload["host_resolution_time"] == "before_command_publication"
@@ -109,9 +109,13 @@ async def test_actual_review_request_and_preflight_use_the_same_owner_chronology
         assert instructions.RESOLUTION_CHRONOLOGY in instruction
         assert instructions.NARRATION in instruction
         assert instruction.count(instructions.EXECUTION) == 1
-        return passages.Review(
+        # This line contains speech only. Applied owner receipts do not turn the line into a transfer.
+        assert schema is passages.ReceiptReview
+        return schema(
+            review_scope=payload["review_scope"],
             matches=True,
             evidence=[{"actor_id": "npc", "passage_id": next(iter(payload["passages"]))}],
+            completed_changes=[],
         )
 
     monkeypatch.setattr(inference, "compose", composed)

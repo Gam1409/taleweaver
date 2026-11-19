@@ -9,6 +9,7 @@ from backend.engine.chpm import (
     development_context,
     motivation,
     proposal_references,
+    two_phase_decision,
 )
 from backend.engine.chpm.appraisal_contracts import GroundedProposal
 from backend.engine.chpm.core.contracts import Belief
@@ -57,7 +58,9 @@ def prepare(
                 settings,
                 proposal_references.instructions(instruction + development.INSTRUCTIONS),
                 schema=DevelopmentProposal,
-                wire_schema=proposal_references.ReferenceDevelopmentDraft,
+                wire_schema=two_phase_decision.PhysicalDevelopmentDraft
+                if settings.npc_decision_mode == "two_phase"
+                else proposal_references.ReferenceDevelopmentDraft,
                 pinned=pinned,
                 pinned_beliefs=pinned_beliefs,
                 focus_subjects=focus_subjects,
@@ -83,7 +86,9 @@ def prepare(
         settings,
         proposal_references.instructions(instruction),
         extra={"development_context": body},
-        wire_schema=proposal_references.ReferenceDraft,
+        wire_schema=two_phase_decision.PhysicalDraft
+        if settings.npc_decision_mode == "two_phase"
+        else proposal_references.ReferenceDraft,
         pinned=pinned,
         pinned_beliefs=pinned_beliefs,
         focus_subjects=focus_subjects,

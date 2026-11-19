@@ -18,6 +18,7 @@ export interface ChpmSettings {
   agent_steps?: number
   notebook_enabled?: boolean
   action_tools?: boolean
+  npc_decision_mode?: 'legacy' | 'two_phase'
   tool_protocol?: 'auto' | 'native' | 'json'
   tool_profile?: NpcToolProfile
   semantic_memory?: boolean
@@ -91,8 +92,14 @@ export function useChpmSettings(sessionId: () => string) {
   }))
   let controller: AbortController | null = null
 
+  function setMode(mode: ChpmSettings['mode']) {
+    if (!draft.value) return
+    draft.value.mode = mode
+    if (mode !== 'live') delete draft.value.npc_decision_mode
+  }
+
   function selectStandard() {
-    if (draft.value) draft.value.mode = 'off'
+    setMode('off')
   }
 
   function setNotebookEnabled(enabled: boolean) {
@@ -109,13 +116,16 @@ export function useChpmSettings(sessionId: () => string) {
     if (!draft.value) return
     draft.value.workflow = workflow
     if (workflow === 'integrated') draft.value.max_input_chars = Math.max(48000, draft.value.max_input_chars)
-    else if (draft.value.action_tools) draft.value.action_tools = false
+    else if (draft.value.action_tools) setActionToolsEnabled(false)
   }
 
   function setActionToolsEnabled(enabled: boolean) {
     if (!draft.value) return
     draft.value.action_tools = enabled
-    if (!enabled) return
+    if (!enabled) {
+      delete draft.value.npc_decision_mode
+      return
+    }
     setWorkflow('integrated')
     draft.value.agent_steps = Math.max(1, draft.value.agent_steps ?? 0)
   }
@@ -170,5 +180,5 @@ export function useChpmSettings(sessionId: () => string) {
 
   watch(sessionId, () => { void load() }, { immediate: true })
   onScopeDispose(() => { controller?.abort(); controller = null })
-  return { status, draft, busy, error, dirty, minimumCalls, budgetWarning, historyWarnings, selectStandard, setNotebookEnabled, setToolProfile, setActionToolsEnabled, setWorkflow, load, save }
+  return { status, draft, busy, error, dirty, minimumCalls, budgetWarning, historyWarnings, selectStandard, setMode, setNotebookEnabled, setToolProfile, setActionToolsEnabled, setWorkflow, load, save }
 }
