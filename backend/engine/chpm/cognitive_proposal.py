@@ -168,7 +168,7 @@ def prepare(
             )
         json_contract.validate_identifiers(type(draft), draft.model_dump(mode="json"), identifiers)
         raw = draft.materialize(motives, references, entries)
-        resolved_motives = motivation.resolve(raw, motives)
+        resolved_motives = motivation.resolve(raw, motives, omit_unsupported_alternatives=two_phase)
         changed, accepted_ids = appraisal.accept(
             mind, raw.interpretations, window, message_id=observation.message_id
         )
@@ -183,6 +183,12 @@ def prepare(
         )
         proposal = raw.canonical()
         agenda.validate_proposal(proposal, entries)
+        # Validate every submitted reference and agenda before pruning optional plans.
+        omitted = raw.candidates.keys() - resolved_motives.keys()
+        if omitted:
+            proposal.candidates = [
+                candidate for candidate in proposal.candidates if candidate.kind not in omitted
+            ]
         decision = semantic_choice.select(
             actor_id,
             observation,
@@ -194,6 +200,12 @@ def prepare(
             prior,
             context_hash=key,
         )
+        if omitted:
+            decision.selection_reasons.append(
+                "Omitted unselected alternatives without personal support: "
+                + ", ".join(sorted(omitted))
+                + "."
+            )
         # Assignment/model_copy do not re-run validators on mutable contracts.
         # Check the complete handoff while the proposal is still turn-local.
         complete = Decision.model_validate(

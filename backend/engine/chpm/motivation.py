@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from typing import Final
 
-from backend.engine.chpm import motivation_diagnostics
+from backend.engine.chpm import motivation_diagnostics, semantic_choice
 from backend.engine.chpm.appraisal_context import Window
 from backend.engine.chpm.appraisal_contracts import GroundedProposal
 from backend.engine.chpm.errors import RecoverableChpmError
@@ -155,12 +155,41 @@ def _agenda_sources(entries: list[AgendaEntry], actor: str) -> list[MotiveSource
     ]
 
 
-def resolve(raw: GroundedProposal, catalogue: Catalogue) -> dict[ActionKind, list[ResolvedMotive]]:
+def _omittable(raw: GroundedProposal, errors: list[dict]) -> set[ActionKind]:
+    if raw.choice is None or any(error["type"] != "motive_own_support" for error in errors):
+        return set()
+    # motive_own_support is emitted exactly once per unsupported candidate.
+    unsupported = {error["loc"] for error in errors}
+    omitted = {kind for kind in raw.candidates if ("candidates", kind, "motives") in unsupported}
+    protected = {raw.choice.preferred}
+    if raw.question_gate is not None:
+        protected.add("CLARIFY")
+        protected.update(branch.action for branch in raw.question_gate.branches)
+    if (
+        len(omitted) != len(unsupported)
+        or omitted & protected
+        or len(raw.candidates) - len(omitted) < 2
+    ):
+        return set()
+    # Check the original offer before removing anything. A candidate cannot gain
+    # eligibility by losing an alternative or a decision-changing question.
+    eligible, _ = semantic_choice.eligible(raw.canonical(), raw.question_gate)
+    return (
+        omitted if any(candidate.kind == raw.choice.preferred for candidate in eligible) else set()
+    )
+
+
+def resolve(
+    raw: GroundedProposal, catalogue: Catalogue, *, omit_unsupported_alternatives: bool = False
+) -> dict[ActionKind, list[ResolvedMotive]]:
     errors = motivation_diagnostics.inspect(raw.model_dump(mode="json"), catalogue, canonical=True)
-    if errors:
+    omitted = _omittable(raw, errors) if errors and omit_unsupported_alternatives else set()
+    if errors and not omitted:
         raise ChpmError("; ".join(error["msg"] for error in errors))
     result: dict[ActionKind, list[ResolvedMotive]] = {}
     for kind, candidate in raw.candidates.items():
+        if kind in omitted:
+            continue
         resolved = [
             ResolvedMotive(
                 source=catalogue.sources[m.motive_id], effect=m.effect, relevance=m.relevance
