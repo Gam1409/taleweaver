@@ -69,6 +69,12 @@ class ItemAction(WithEvidenceSpan):
         description="For worn clothing only: the final regions this garment no longer covers. Null preserves its known placement; [] explicitly restores normal coverage. Partial removal remains worn.",
     )
     basis: Literal[LegacyItemBasis, "observed_placement", "observed_possession"]
+    performed_by: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=100,
+        description="Public ID of the character explicitly performing the completed act in this passage, if known.",
+    )
     attachment_slot: BodySlot | None = Field(
         default=None,
         description="Explicit confirmed current body placement of this owned item, from a completed action or observed_placement. Worn only, with uncovered_regions=null. Null preserves an existing body placement for the same wearer.",
@@ -115,6 +121,8 @@ class ItemAction(WithEvidenceSpan):
         result = super().preserve_legacy_shape(handler)
         if self.attachment_slot is None:
             result.pop("attachment_slot", None)
+        if self.performed_by is None:
+            result.pop("performed_by", None)
         return result
 
 

@@ -12,7 +12,7 @@ from backend.engine.actor_aliases import canonical_owner, public_actor_id
 from backend.engine.chpm import passages, receipt_review
 from backend.engine.chpm.errors import StaleControlError
 from backend.engine.narrated_items.schema import ItemAction
-from backend.engine.npc_actions import custody_effects, execution_frame
+from backend.engine.npc_actions import custody_effects, execution_frame, unconfirmed_item_actions
 from backend.engine.npc_actions.control import CommandRejectedError, model_outcomes
 from backend.engine.visual_novel.continuity import PLAYER, SCENE
 
@@ -60,6 +60,7 @@ class _Public:
     operations: dict[str, Transfer]
     effects: list[dict]
     order: dict[str, int]
+    controlled: set[str]
 
 
 def _transfer(row: dict, actors: set[str]) -> Transfer | None:
@@ -137,7 +138,10 @@ def _current_public(turn: Any) -> _Public | None:
     operations = {
         transfer.operation_id: transfer for row in rows if (transfer := _transfer(row, actors))
     }
-    scope = turn_controls.fingerprint([turn.control, frame.scene_id, sorted(actors), rows])
+    controlled = set(outcomes) & turn.decisions.keys()
+    scope = turn_controls.fingerprint(
+        [turn.control, frame.scene_id, sorted(controlled), frame.entities, rows]
+    )
     effects = [
         {**row["effect"], "actor_id": row["actor_id"], "_publication_index": position}
         for position, row in enumerate(rows)
@@ -149,6 +153,7 @@ def _current_public(turn: Any) -> _Public | None:
         operations,
         effects,
         {row["operation_id"]: position for position, row in enumerate(rows)},
+        controlled,
     )
 
 
@@ -170,7 +175,7 @@ def capture(turn: Any, review: Any, text: str, resolution: str) -> Proof | None:
     available = index(text)
     if (
         public is None
-        or not public.operations
+        or (not public.operations and turn.initial.settings.npc_decision_mode != "two_phase")
         or review.review_scope != _review_scope(turn, available, resolution)
         or receipt_review.validate(review, turn, available)
     ):
@@ -222,9 +227,8 @@ def _directions(
 def _incompatible(actual: Transfer, source: str, destination: str) -> bool:
     if (source, destination) == (actual.source, actual.destination):
         return False
-    # There is no performer field on ItemAction. An outgoing transfer by a different
-    # donor can be an independent act. Compare the same custody endpoint, or a
-    # direct inversion of the actor's pickup/drop between that actor and the room.
+    # This comparison needs only the custody endpoints. A different donor can act
+    # independently. The later performer check can use an explicitly named actor.
     return (
         SCENE in (actual.source, actual.destination)
         and (source, destination) == (actual.destination, actual.source)
@@ -365,6 +369,23 @@ def conflicts(
         )
         if reason:
             result.append(_issue(citation, reading, reason))
+    if turn.initial.settings.npc_decision_mode == "two_phase":
+        covered = {
+            (issue["passage_id"], issue["expected_public_result"]["target_id"]) for issue in result
+        }
+        missing = unconfirmed_item_actions.conflicts(
+            actions,
+            text,
+            proof.occurrences,
+            public.controlled,
+            turn.execution_frame.entities,
+            public.effects,
+        )
+        result.extend(
+            issue
+            for issue in missing
+            if (issue["passage_id"], issue["claimed_target_id"]) not in covered
+        )
     return result[:_MAX_ISSUES]
 
 
@@ -376,7 +397,7 @@ def repeated_conflicts(
     actions: Sequence[ItemAction],
 ) -> list[dict]:
     """Carry a disputed reading across just one repair of the same public operations."""
-    if first_proof is None or not first_issues or not actions:
+    if first_proof is None or not first_issues:
         return []
     public = _current_public(turn)
     if public is None or first_proof.publication_scope != public.scope:
@@ -389,7 +410,9 @@ def repeated_conflicts(
     for key, passage in spans(text).items():
         occurrences[_digest(passage.text)].append((key, passage.start, passage.end))
     directions = _directions(actions, text, public.actors)
-    result = []
+    result = unconfirmed_item_actions.omitted_on_recheck(
+        first_issues, first_proof.occurrences, occurrences, actions, text
+    )
     for issue in first_issues:
         operation_id, passage_id = issue.get("operation_id"), issue.get("passage_id")
         if not isinstance(operation_id, str) or not isinstance(passage_id, str):

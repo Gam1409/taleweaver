@@ -89,9 +89,10 @@ def transfer_echo(action: Reading, effect: dict, effects: list[dict]) -> bool:
     )
 
 
-def echo(action: ItemAction, effects: list[dict]) -> bool:
+def echo(action: ItemAction, effects: list[dict], *, performer: str | None = None) -> bool:
     reading = read(action)
     return any(
         transfer_echo(reading, effect, effects) or wardrobe_echo(reading, effect)
         for effect in effects
+        if performer is None or canonical_owner(effect["actor_id"]) == canonical_owner(performer)
     )
