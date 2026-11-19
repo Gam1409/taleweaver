@@ -126,7 +126,12 @@ async def _validated(
         # A repair can echo the rejected candidate. Only a different reply may
         # continue as explicitly unreviewed when its reviewer is unavailable.
         try:
-            verdict = await _review(manager, turn, text, resolution)
+            if getattr(turn, "review_change_feedback", None):
+                verdict = await _review(
+                    manager, turn, text, resolution, repaired_from=original_text
+                )
+            else:
+                verdict = await _review(manager, turn, text, resolution)
         except RecoverableChpmError as exc:
             if not continuation.enabled(turn):
                 raise
@@ -198,9 +203,15 @@ def _candidate_key(text: str) -> str:
 
 
 @step("narration.review")
-async def _review(manager: Any, turn: Turn, text: str, resolution: str) -> Verdict:
+async def _review(
+    manager: Any, turn: Turn, text: str, resolution: str, *, repaired_from: str | None = None
+) -> Verdict:
     from backend.engine.chpm import reports
 
+    # Validate the previous binding before issuing a fresh review operation and scope.
+    prior = (
+        receipt_review.recheck(turn, repaired_from, resolution) if repaired_from is not None else {}
+    )
     turn.review_change_feedback = {}
     turn.reviewed_custody = None
     available = passages.index(text)
@@ -211,13 +222,13 @@ async def _review(manager: Any, turn: Turn, text: str, resolution: str) -> Verdi
         + command_feedback.instructions(turn)
         + receipt_review.instruction(turn)
     )
-    payload = _review_payload(turn, available, resolution)
+    payload = _review_payload(turn, available, resolution) | prior
     identifiers = _review_identifiers(turn, available, scope=payload["review_scope"])
     if turn.report_origins and not inference.fits(
         turn.initial.settings, instruction, payload, receipt_review.schema(turn), identifiers
     ):
         reports.disable(turn)
-        payload = _review_payload(turn, available, resolution)
+        payload = _review_payload(turn, available, resolution) | prior
         identifiers = _review_identifiers(turn, available, scope=payload["review_scope"])
     raw, wire_failures = await receipt_review.request(
         manager, turn, instruction, payload, identifiers

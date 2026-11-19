@@ -66,7 +66,9 @@ Blocked/stale/skipped operations did not complete; preserve earlier applied effe
 An attempted interaction establishes only the NPC's attempt, never recipient
 cooperation or mechanical success. An empty plan is neither a failed attempt nor a
 requirement to act or obey. Speech, waiting, refusal and no action remain valid.
-Expressive gestures vary presentation, not command-owned fields. Emotion and
+Expressive gestures vary presentation, not command-owned fields. Picking up a
+loose item and setting it back requires both transfers, even if the final owner
+is unchanged. Check each completed step against that actor's receipts. Emotion and
 independent player, other-actor or world effects remain eligible. Preserve player agency.
 """
 

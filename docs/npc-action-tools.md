@@ -163,6 +163,13 @@ identifies an explicit current possession, wear or self-pose that conflicts
 with its authoritative state, the buffered reply is withheld and the turn rolls
 back. Recognition of a claim in free prose still depends on the model.
 
+When a claimed completion fails the receipt check, the single correction and
+its reviewer receive the rejected source excerpt and the public action details
+available for that attempt. The reviewer can follow a claim even if the rewrite
+rephrases it or moves it to another paragraph. It checks the replacement against
+the current receipts. The original passage IDs identify excerpts from the
+discarded draft and expire after this review.
+
 For item custody, the host also compares the two model outputs on the exact
 passage both cited. If the reviewer links a passage to a pickup and the item
 extractor reads the same passage and item as a return to the room, the host
@@ -260,6 +267,15 @@ property ownership does not override physical custody or scene placement.
 When several proposal alternatives have invalid motive references or lack personal
 support, the existing proposal repair receives their independent errors together.
 The host checks the repaired alternatives against the same actor's motive catalogue.
+Appraisal errors include the affected field and its permitted subjects. An NPC
+can express interest in an object with a null affect target and keep the object
+in the cited explanation.
+
+In two-phase mode the host can omit an unselected alternative whose only fault
+is missing personal support. The NPC's preferred choice must already be eligible
+in the original proposal. At least two submitted alternatives must survive, and
+the host preserves the clarification gate and its branches. The decision records
+which alternatives were omitted. The NPC retains its own choice and physical steps.
 
 Each delivered command-controlled decision retains one bounded internal action
 feedback summary for that NPC's next existing decision. It contains only the

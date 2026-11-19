@@ -26,6 +26,7 @@ custody/wear/pose/placement/travel change of a controlled actor, with passage_id
 actor_id, current applied operation_id, tool, target_id. Target is item_id, set_pose
 actor_id, approach placement.target or travel destination. Also copy recipient_id
 for give, posture for set_pose/approach, uncovered_regions for adjust; otherwise null.
+For wear_item or take_off_item, uncovered_regions may also copy an explicit [] from the public receipt.
 Exclude speech/gestures, plans, unchanged state and resolved external effects.
 Representative actions are not proof. Blocked/attempted/omitted effects cannot
 support completion; reject it, never invent a receipt. No claim authorizes a write.
@@ -118,6 +119,13 @@ def _attributes(row: dict) -> dict:
 def _same_attributes(claim: passages.CompletedChange, row: dict) -> bool:
     current = claim.model_dump(include={"recipient_id", "posture", "uncovered_regions"})
     expected = _attributes(row)
+    # Basic dressing commands can report the neutral coverage list that their owner writes.
+    if (
+        row["tool"] in {"wear_item", "take_off_item"}
+        and current["uncovered_regions"] == []
+        and row["effect"].get("uncovered_regions") == []
+    ):
+        current["uncovered_regions"] = None
     for values in (current, expected):
         if isinstance(values["uncovered_regions"], list):
             values["uncovered_regions"] = sorted(values["uncovered_regions"])
@@ -183,7 +191,11 @@ def validate(review: Any, turn: Any, available: dict) -> list[dict]:
         if reason:
             failures.append(
                 {
-                    **claim.model_dump(include={"actor_id", "passage_id", "operation_id"}),
+                    "actor_id": claim.actor_id,
+                    "passage_id": claim.passage_id,
+                    **({"operation_id": row["operation_id"]} if row is not None else {}),
+                    "claimed_tool": claim.tool if claim.tool in TOOLS else "unknown_tool",
+                    "claimed_target_id": claim.target_id,
                     "reason_code": reason,
                     "expected_public_result": _expected(row),
                 }
@@ -192,9 +204,27 @@ def validate(review: Any, turn: Any, available: dict) -> list[dict]:
 
 
 def remember(turn: Any, payload: dict, failures: list[dict]) -> None:
+    # Resolve the reviewer's references only against what this very request made public.
+    # Its guessed operation ID or arbitrary target can never become repair authority.
+    entities = payload["contract"].get("current_execution_frame", {}).get("entities", {})
+    public_rows = []
+    for failure in failures:
+        row = dict(failure)
+        if row.get("claimed_target_id") not in entities:
+            row.pop("claimed_target_id", None)
+        if row.get("actor_id") not in payload["controlled_actor_ids"]:
+            row.pop("actor_id", None)
+        source = payload["passages"].get(row.get("passage_id"))
+        if source is None:
+            row.pop("passage_id", None)
+        else:
+            row["source_passage"] = source[:256]
+            if len(source) > 256:
+                row["source_truncated"] = True
+        public_rows.append(row)
     turn.review_change_feedback = {
         "review_scope": payload["review_scope"],
-        "rejections": failures,
+        "rejections": public_rows,
         "instruction": "Ground these passages in the supplied public applied result or omit unsupported completion; preserve speech, emotions and unaffected facts. Never expose IDs in visible prose.",
     }
 
@@ -208,3 +238,26 @@ def feedback(turn: Any, text: str, resolution: str) -> dict:
     ):
         return {}
     return {"completed_change_rejections": deepcopy(value)}
+
+
+def recheck(turn: Any, original_text: str, resolution: str) -> dict:
+    """Re-open only referenced issues from the immediately preceding scoped review."""
+    value = feedback(turn, original_text, resolution).get("completed_change_rejections", {})
+    rows = [
+        row for row in value.get("rejections", []) if "source_passage" in row and "actor_id" in row
+    ]
+    if not rows:
+        return {}
+    return {
+        "previously_rejected_changes": {
+            "source_review_scope": value["review_scope"],
+            "rejections": rows,
+            "instruction": (
+                "These are findings about the previous draft. Match their meaning against the CURRENT passages, "
+                "including paraphrases and moves to other passages. Old passage IDs refer only to source_passage. "
+                "If the current prose still completes an unsupported change, reject it with the current passage ID. "
+                "If removed, or supported by a current public applied result, review normally. "
+                "Only current authoritative_command_outcomes are operation receipts."
+            ),
+        }
+    }

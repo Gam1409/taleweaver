@@ -48,14 +48,14 @@ async def reconcile(
 async def _correct(
     manager: Any, turn: Turn, text: str, resolution: str, system: str, check: Recheck
 ) -> str:
-    scope = rendering._review_scope(turn, passages.index(text), resolution)
-    receipt_review.remember(turn, {"review_scope": scope}, check.failures)
+    payload = rendering._review_payload(turn, passages.index(text), resolution)
+    receipt_review.remember(turn, payload, check.failures)
     turn.verdict = None
     issues = ["Correct the disputed custody passage. Describe only the published transfer."]
     revised = await rendering._repair(manager, turn, text, resolution, issues, system)
     if not revised.strip() or rendering._candidate_key(revised) == rendering._candidate_key(text):
         raise ChpmError("The narrator repeated the rejected custody description.")
-    verdict = await rendering._review(manager, turn, revised, resolution)
+    verdict = await rendering._review(manager, turn, revised, resolution, repaired_from=text)
     if not verdict.matches:
         raise ChpmError("The corrected custody description failed its narration review.")
     turn.verdict = verdict

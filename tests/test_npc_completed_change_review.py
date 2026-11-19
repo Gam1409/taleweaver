@@ -249,3 +249,63 @@ async def test_actual_chained_give_binds_the_specific_recipient(monkeypatch, rec
         reviewer(monkeypatch, [proposed])
         verdict = await rendering._review(manager, turn, TEXT, "")
         assert verdict.matches is expected
+
+
+@pytest.mark.parametrize("protocol", ["json", "native"])
+async def test_wear_and_removal_accept_empty_regions_copied_from_public_receipt(
+    monkeypatch, protocol
+):
+    from backend.engine.npc_actions.contracts import TakeOff, Wear
+
+    async with TestSessionLocal() as db:
+        manager, turn = await published(
+            db,
+            requests=[
+                TakeOff(tool="take_off_item", item_id="COAT"),
+                Wear(tool="wear_item", item_id="COAT"),
+            ],
+        )
+        turn.initial.settings.tool_protocol = protocol
+        for i, line in enumerate(["Lina takes off the coat.", "Lina puts the coat on."]):
+            proposed = claim(turn, i)
+            receipt = turn.action_outcomes["LINA"][i]
+            assert receipt["effect"]["uncovered_regions"] == []
+            for value in (None, []):
+                reviewer(monkeypatch, [{**proposed, "uncovered_regions": value}])
+                verdict = await rendering._review(
+                    manager, turn, 'Lina: "I will examine it."\n' + line, ""
+                )
+                assert verdict.matches, turn.review_change_feedback
+
+
+@pytest.mark.parametrize(
+    "tool,actual,claimed,hidden,reason",
+    [
+        ("take_off_item", [], ["arms"], False, "result_mismatch"),
+        ("wear_item", ["arms"], [], False, "result_mismatch"),
+        ("wear_item", None, [], False, "result_mismatch"),
+        ("wear_item", [], [], True, "effect_unavailable"),
+        ("take_item", [], [], False, "result_mismatch"),
+        ("adjust_clothing", [], None, False, "result_mismatch"),
+        ("adjust_clothing", [], [], False, ""),
+    ],
+)
+def test_empty_wardrobe_regions_never_authorize_another_attribute(
+    tool, actual, claimed, hidden, reason
+):
+    from backend.engine.chpm import passages, receipt_review
+
+    review_claim = passages.CompletedChange(
+        actor_id="LINA",
+        passage_id="p1",
+        operation_id="op1",
+        tool=tool,
+        target_id="COAT",
+        uncovered_regions=claimed,
+    )
+    row = {
+        "tool": tool,
+        "effect": {"item_id": "COAT", "uncovered_regions": actual},
+        "effect_omitted": hidden,
+    }
+    assert receipt_review._effect_reason(review_claim, row) == reason
