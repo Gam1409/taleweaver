@@ -4,7 +4,13 @@ from dataclasses import dataclass
 
 from pydantic import BaseModel
 
-from backend.engine.chpm import inference, json_contract, proposal_edits, proposal_repair_groups
+from backend.engine.chpm import (
+    inference,
+    json_contract,
+    proposal_edits,
+    proposal_repair_groups,
+    proposal_subjects,
+)
 from backend.engine.chpm.proposal_draft import Draft
 from backend.engine.chpm.proposal_references import ReferenceDraft
 
@@ -30,6 +36,13 @@ def prepare(
     limit: int,
     motive_errors: list[dict] | tuple = (),
 ) -> Prepared:
+    subject_errors = (
+        proposal_subjects.issues(candidate, identifiers["about_id"])
+        if candidate is not None
+        and issubclass(schema, ReferenceDraft)
+        and "about_id" in identifiers
+        else []
+    )
     full = payload_for(
         payload,
         schema,
@@ -39,18 +52,20 @@ def prepare(
         identifiers=identifiers,
         limit=limit,
         motive_errors=motive_errors,
+        subject_errors=subject_errors,
     )
     omitted = "rejected_proposal_omitted" in full["proposal_feedback"]
     if candidate is None or (not issubclass(schema, (Draft, ReferenceDraft)) and not omitted):
         return Prepared(full, identifiers)
     allowed = proposal_edits.paths(candidate, schema)
     structural = proposal_repair_groups.inspect(
-        candidate, schema, allowed, additional_errors=motive_errors
+        candidate, schema, allowed, additional_errors=[*motive_errors, *subject_errors]
     )
     if structural is None:
         return Prepared(full, identifiers)
     details = dict(full["proposal_feedback"])
     details.pop("motive_errors", None)
+    details.pop("subject_errors", None)
     details.pop("rejected_proposal_omitted", None)
     details.update(
         rejected_proposal=candidate,
@@ -96,6 +111,7 @@ def payload_for(
     identifiers: dict,
     limit: int,
     motive_errors: list[dict] | tuple = (),
+    subject_errors: list[dict] | tuple = (),
 ) -> dict:
     details: dict = {
         "error": feedback,
@@ -114,13 +130,16 @@ def payload_for(
     result = {**payload, "proposal_feedback": details}
     if motive_errors:
         details["motive_error_count"] = len(motive_errors)
-        details["motive_errors"] = [
+    for key, errors in (("motive_errors", motive_errors), ("subject_errors", subject_errors)):
+        if not errors:
+            continue
+        details[key] = [
             {
                 "path": proposal_edits.pointer(error["loc"]),
                 "type": error["type"],
                 "message": error["msg"],
             }
-            for error in motive_errors
+            for error in errors
         ]
     if candidate is None:
         return result

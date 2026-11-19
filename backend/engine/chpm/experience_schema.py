@@ -28,5 +28,6 @@ def rules(schema: dict) -> None:
         },
     ]
     fields["about_id"]["description"] = (
-        "Affect target or null; needs use null (observer implicit). Cite causal people."
+        "Affect toward a known_subjects ID or null. For an item or situation use null and "
+        "ground the trigger in the explanation/citations. Needs use null (observer implicit)."
     )

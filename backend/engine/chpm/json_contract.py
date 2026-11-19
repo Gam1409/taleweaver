@@ -137,10 +137,12 @@ def validate_identifiers(
     _validate_identifier_values(candidate, identifiers or {})
 
 
-def _validate_identifier_values(candidate: Any, identifiers: dict[str, list[str]]) -> None:
+def _validate_identifier_values(
+    candidate: Any, identifiers: dict[str, list[str]], location: tuple[str | int, ...] = ()
+) -> None:
     if isinstance(candidate, list):
-        for child in candidate:
-            _validate_identifier_values(child, identifiers)
+        for index, child in enumerate(candidate):
+            _validate_identifier_values(child, identifiers, (*location, index))
         return
     if not isinstance(candidate, dict):
         return
@@ -148,8 +150,20 @@ def _validate_identifier_values(candidate: Any, identifiers: dict[str, list[str]
         if key in identifiers and value is not None:
             selected = list(value) if isinstance(value, (list, dict)) else [value]
             if any(not isinstance(item, str) or item not in identifiers[key] for item in selected):
-                raise ValueError(f"CHPM {key} selects an unavailable identifier.")
-        _validate_identifier_values(value, identifiers)
+                from backend.engine.chpm import proposal_subjects
+                from backend.engine.chpm.proposal_edits import pointer
+
+                path = pointer((*location, key))
+                hint = (
+                    proposal_subjects.problem(location[0], candidate, identifiers[key])
+                    if key == "about_id" and len(location) == 2 and isinstance(location[0], str)
+                    else None
+                )
+                raise ValueError(
+                    f"CHPM {key} selects an unavailable identifier at {path}."
+                    + (f" {hint}" if hint else "")
+                )
+        _validate_identifier_values(value, identifiers, (*location, key))
 
 
 def decode(text: str) -> dict:
