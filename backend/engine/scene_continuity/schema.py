@@ -2,9 +2,18 @@
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, StrictInt, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    SerializerFunctionWrapHandler,
+    StrictInt,
+    model_serializer,
+    model_validator,
+)
 
 from backend.core.text_evidence import WithEvidenceSpan
+from backend.engine.scene_staging.schema import Placement, Posture
 
 from .wire_contract import operation_rules
 
@@ -48,10 +57,66 @@ class Update(Model, WithEvidenceSpan):
         return self
 
 
+class FramePose(Model):
+    """A classified visual assertion; it never grants a pose command or a state write."""
+
+    actor_id: str = Field(min_length=1, max_length=100)
+    basis: Literal["current", "completed"] = "current"
+    posture: Posture | None = None
+    placement: Placement | None = Field(
+        default=None,
+        description="Use a supplied public target ID, never an invented prop or prose label.",
+    )
+    clear: bool = False
+
+    @model_validator(mode="after")
+    def meaningful(self) -> "FramePose":
+        if not self.clear and self.posture is None and self.placement is None:
+            raise ValueError("Classified pose needs a posture, placement or explicit clear.")
+        if self.posture == "unknown" or self.placement and self.placement.relation == "unknown":
+            raise ValueError(
+                "Unknown is not a confirmed physical state; omit the unsupported assertion."
+            )
+        return self
+
+
 class Action(Model, WithEvidenceSpan):
     actor_ids: list[str] = Field(min_length=1, max_length=6)
     detail: str = Field(min_length=4, max_length=400)
     evidence: str = Field(min_length=4, max_length=800)
+    timeframe: Literal["current", "noncurrent"] = Field(
+        default="current",
+        description="Noncurrent is an audit-only quotation, history, negation or hypothesis, never a depicted present physical result.",
+    )
+    poses: list[FramePose] | None = Field(
+        default=None,
+        max_length=6,
+        description=(
+            "Classify this very final-frame passage: [] for expression/gesture without lasting pose "
+            "or placement; otherwise every asserted actor posture/placement. Null is unclassified, "
+            "not confirmation. This is an observation, never command or staging authority."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def classified_actors(self) -> "Action":
+        if self.timeframe != "current" and self.poses:
+            raise ValueError("Noncurrent passages cannot assert current poses.")
+        if self.poses is not None and (
+            any(pose.actor_id not in self.actor_ids for pose in self.poses)
+            or len({pose.actor_id for pose in self.poses}) != len(self.poses)
+        ):
+            raise ValueError("Frame poses use distinct actors from this action's actor_ids.")
+        return self
+
+    @model_serializer(mode="wrap")
+    def preserve_legacy_shape(self, handler: SerializerFunctionWrapHandler) -> dict:
+        result = super().preserve_legacy_shape(handler)
+        if self.poses is None:
+            result.pop("poses", None)
+        if self.timeframe == "current":
+            result.pop("timeframe", None)
+        return result
 
 
 class Evidence(Model, WithEvidenceSpan):

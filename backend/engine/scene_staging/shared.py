@@ -189,6 +189,7 @@ def apply_extraction(
     *,
     unconfirmed_sections: frozenset[str] = frozenset(),
     authority: attribution.Scope | None = None,
+    audit: bool = True,
 ) -> None:
     proposals = extraction
     validated = validate(extraction)
@@ -219,7 +220,8 @@ def apply_extraction(
     result["explicit_rejected"] += validated.rejected["explicit"]
     result["rejected_prop_references"] = rejected
     result = command_guard.restore(result, protected)
-    record_staging(result, len(extraction.changes) + validated.rejected["changes"])
+    if audit:
+        record_staging(result, len(extraction.changes) + validated.rejected["changes"])
     valid = props.candidates(
         manager.avatar, rows, manager.state, {row.id for row in rows if row.entity_type == "NPC"}
     )
@@ -243,7 +245,7 @@ def apply_extraction(
         props.invalidate(manager.state)
     if unconfirmed_sections:
         result["unconfirmed_sections"] = sorted(unconfirmed_sections)
-    if any(
+    if audit and any(
         result.get(key)
         for key in (
             "rejected",

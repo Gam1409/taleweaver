@@ -1,4 +1,4 @@
-"""Use the existing narration repair only when two source-bound custody readings disagree."""
+"""Use one existing narration repair for source-bound physical outcome disagreements."""
 
 from collections.abc import Awaitable, Callable
 from typing import Any
@@ -31,7 +31,7 @@ async def reconcile(
     reject(
         "npc_actions",
         "custody_citation_mismatch",
-        "Review and extraction assign different transfers to the same passage.",
+        "Current narration and physical owner results disagree.",
         review_operation_id=turn.review_operation["operation_id"],
         discrepancies=check.failures,
     )
@@ -51,9 +51,18 @@ async def _correct(
     payload = rendering._review_payload(turn, passages.index(text), resolution)
     receipt_review.remember(turn, payload, check.failures)
     turn.verdict = None
-    issues = ["Correct the disputed custody passage. Describe only the published transfer."]
+    issues = [
+        "Correct the disputed physical passage. Describe only current owner facts and published results; preserve expressive details."
+    ]
     revised = await rendering._repair(manager, turn, text, resolution, issues, system)
-    if not revised.strip() or rendering._candidate_key(revised) == rendering._candidate_key(text):
+    classification_only = all(
+        issue.get("reason_code") in {"pose_classification_required", "pose_classification_invalid"}
+        for issue in check.failures
+    )
+    if not revised.strip() or (
+        not classification_only
+        and rendering._candidate_key(revised) == rendering._candidate_key(text)
+    ):
         raise ChpmError("The narrator repeated the rejected custody description.")
     verdict = await rendering._review(manager, turn, revised, resolution, repaired_from=text)
     if not verdict.matches:

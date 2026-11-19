@@ -10,7 +10,7 @@ from backend.engine.narrated_items.participants import resolve_participants
 from backend.engine.narrated_items.schema import ItemExtraction
 from backend.engine.narrated_movement.runtime import exclude_commands
 from backend.engine.narrated_movement.schema import MovementProposal
-from backend.engine.npc_actions import custody_check, custody_effects, narration_fence
+from backend.engine.npc_actions import custody_check, custody_effects, narration_fence, pose_audit
 from backend.engine.npc_actions.control import validated_outcomes
 from backend.engine.physical_conditions.ledger import read
 from backend.engine.physical_conditions.schema import ConditionProposal, Ledger
@@ -119,7 +119,7 @@ def unpack(
         extraction = extraction.model_copy(
             update={"actions": [_participants(action, actors) for action in extraction.actions]}
         )
-        custody_check.compare(manager._chpm_turn, narration, resolution, extraction.actions, retry)
+        _completed_check(manager, result, extraction, actors, narration, resolution, retry)
     narration_fence.items(manager, extraction.actions)
     guarded, indices, errors = protect(manager, extraction, indices)
     if control:
@@ -137,6 +137,31 @@ def unpack(
             control=manager._chpm_turn.control,
         )
     return guarded, failures, denied, indices, errors
+
+
+def _completed_check(
+    manager: Any,
+    result: Any,
+    extraction: ItemExtraction,
+    actors: dict,
+    narration: str,
+    resolution: str,
+    retry: custody_check.Recheck | None,
+) -> None:
+    issues = pose_audit.check(manager, result, extraction, actors, narration, retry)
+    turn = manager._chpm_turn
+    try:
+        custody_check.compare(turn, narration, resolution, extraction.actions, retry)
+    except custody_check.CustodyDisagreementError as exc:
+        if issues and exc.recheck.proof is turn.reviewed_custody:
+            raise custody_check.CustodyDisagreementError(
+                custody_check.Recheck(exc.recheck.proof, [*exc.recheck.failures, *issues][:8])
+            ) from exc
+        raise
+    if issues:
+        raise custody_check.CustodyDisagreementError(
+            custody_check.Recheck(turn.reviewed_custody, issues)
+        )
 
 
 def _participants(action: Any, actors: dict) -> Any:

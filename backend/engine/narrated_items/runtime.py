@@ -32,7 +32,7 @@ from backend.engine.narrated_items.preflight import SkippedCheck, skipped_check
 from backend.engine.narrated_items.schema import INSTRUCTIONS, ItemExtraction
 from backend.engine.narrated_movement import runtime as narrated_movement
 from backend.engine.narrated_movement.schema import INSTRUCTIONS as MOVEMENT_INSTRUCTIONS
-from backend.engine.npc_actions import custody_check, narration_fence
+from backend.engine.npc_actions import custody_check, narration_fence, pose_audit
 from backend.engine.npc_actions import reconciliation as command_reconciliation
 from backend.engine.physical_conditions import runtime as physical_conditions
 from backend.engine.physical_conditions.presentation import context as condition_context
@@ -202,6 +202,7 @@ async def reconcile_items(
             ),
             "scene_continuity": scene_context,
             "scene_staging": await shared_staging.prepare_context(manager, actors, rows),
+            **(pose_audit.prepare(manager, narration, actors, rows) or {}),
             "item_changes_allowed": skipped is None,
             "independent_state_scope": {
                 "blocked_subject_ids": sorted(blocked_targets | {manager.state.current_scene_id})
@@ -238,7 +239,8 @@ async def reconcile_items(
                 else ""
             )
             + (STAGING_INSTRUCTIONS if staging_enabled else "")
-            + shared_staging.authority_instructions(manager),
+            + shared_staging.authority_instructions(manager)
+            + pose_audit.instructions(manager),
             payload,
             catalog,
             game_id=manager.game_id,
@@ -267,6 +269,9 @@ async def reconcile_items(
         original_actions = result.actions if isinstance(result, ItemExtraction) else None
         result, sections = coverage.annotate(result, catalog, sections, staging=staging_enabled)
         result = evidence.bind(result, narration, catalog=catalog)
+        await shared_staging.propose_current(
+            manager, result, unconfirmed_sections=sections.staging_missing
+        )
         extraction, schema_failures, batch_denied, source_indices, command_errors = (
             command_reconciliation.unpack(
                 manager,
@@ -278,9 +283,6 @@ async def reconcile_items(
                 retry=custody_retry,
                 actions_provided="actions" in sections.provided,
             )
-        )
-        await shared_staging.propose_current(
-            manager, result, unconfirmed_sections=sections.staging_missing
         )
         failures = list(schema_failures)
         extraction, changed, accepted, errors = await _apply_items(
@@ -309,7 +311,11 @@ async def reconcile_items(
             denied=denied,
             confirmed=skipped is None and "movements" in sections.provided,
         )
-    except (asyncio.CancelledError, custody_check.CustodyDisagreementError):
+    except (
+        asyncio.CancelledError,
+        custody_check.CustodyDisagreementError,
+        pose_audit.PoseAuditUnavailableError,
+    ):
         raise
     except Exception as exc:
         logger.exception("Completed item reconciliation failed for session %s", manager.game_id)

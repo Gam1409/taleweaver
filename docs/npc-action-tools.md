@@ -20,17 +20,23 @@ With action tools enabled, **Action decision mode** offers **Two-phase
 Standard (`legacy`) is the default, including for existing sessions. Switch
 back to Standard to use the original decision workflow on the next turn.
 
-1. The NPC reads its observer-local view and submits its usual cognitive
-   decision. It separately selects either zero physical steps or one to two
-   ordered, typed commands with their target IDs and arguments. It can refuse
-   another character's request while choosing a physical action of its own.
-   Any remaining lookup rounds are read-only with respect to the game world.
-2. A choice with physical steps uses one of the existing agent rounds. The
-   host offers only the selected functions. Native requests require tool use,
-   and the JSON envelope requires a nonempty call list. The host compares
-   command types, order, IDs and arguments to the accepted choice. A malformed
-   or mismatched batch can use one available shared proposal repair. A rejected
-   batch stages zero operations and the NPC keeps its social choice.
+1. The NPC reads its observer-local view, including `available_physical_commands`,
+   and chooses a social response. It can also describe what it chooses to do
+   now in one or two short phrases. When several items or people fit, the NPC
+   can attach observed IDs in `target_refs`. Speech, waiting and a change of
+   mind are valid choices. Remaining lookup rounds are read-only for world state.
+2. The host binds each selected phrase to the actor and turn attempt. One
+   existing agent round interprets the selection through `resolve_selected_steps`
+   in Native or JSON mode. The response accounts for every phrase in order.
+   It can propose up to two typed actions in total, identify a phrase as an
+   offer, memory, or other non-action, or report an ambiguity or an unsupported
+   effect. The host checks the proposed operands against the actor's available
+   references and previews the actions in order. A repair uses the same phrases
+   and the existing shared request allowance. An unresolvable batch stages no
+   actions. If two visible items both satisfy the operation's preconditions,
+   the deciding NPC can identify its choice with an observed ID. A plausible
+   ID guessed only by the interpreter cannot disambiguate the choice.
+   Only the deciding NPC receives its own selection history.
 3. The usual state owners resolve competing plans in publication order. After
    each successful physical change, the host checks the affected fields before
    issuing the receipt. For travel it reads the NPC's room and presence.
@@ -42,15 +48,30 @@ back to Standard to use the original decision workflow on the next turn.
    the narrator receives and each NPC can see for its own previous decision.
 
 For example, if two actors select the same loose cup, both can try. A successful
-pickup changes the owner once. The later actor can react to its failed attempt
-on the next turn. The host does not infer a pickup from either actor's prose.
-An actor can still submit zero steps while describing a physical intention.
-This semantic omission needs independent evaluation against the saved state.
+pickup changes the owner once. The later actor can react on its next turn. A
+compound phrase can also lead to two ordered results. For example, removing
+a coat and handing it over requires removal followed by transfer. If the
+recipient has departed by publication, the successful removal stands and
+the original actor still carries the coat. Holding out a coat while asking
+whether the other person wants it leaves that decision to the recipient.
 
-The offline regression entry points are `tests/test_npc_two_phase_turn.py`
-(native and JSON turns, subsequent feedback and rollback),
-`tests/test_chpm_two_phase_execution.py` (binding, validation and repairs) and
-`tests/test_npc_two_phase_postconditions.py` (real owner state). For a live
+Before any story text reaches the player, the shared extraction also checks
+visible actions used by the illustration snapshot. A description of the NPC's
+current posture or placement needs an observable state that supports it. A
+completed change by that NPC also needs a matching operation. A gesture such
+as raising an eyebrow can remain in the story without a persistent pose.
+The same check runs when scene staging is disabled. A disputed passage gets
+one correction within the normal narration budget. If the discrepancy survives,
+the turn rolls back before any text is streamed or saved in history.
+
+`tests/test_npc_prose_choice_turn.py` exercises the ordinary VN entry point
+in Native and JSON mode. It compares the selected words and operation IDs
+with the saved owner, published reply and illustration snapshot. It includes
+an offer awaiting acceptance, ambiguous cups, and a pickup followed by a return to the
+same place. `tests/test_npc_sequential_lifecycle_turn.py` covers contention,
+reload, regeneration and rollback. `tests/test_npc_approach_narration_turn.py`
+covers an allowed approach and a rejected approach that reappears in prose.
+`tests/test_npc_two_phase_postconditions.py` checks the state owners. For a live
 comparison, clone the initial save for each mode. Keep model, transport,
 generation settings, cast and player input fixed. Record per actor the selected
 intent, staged operations, publication receipts and custody after reload. For
@@ -269,8 +290,12 @@ property ownership does not override physical custody or scene placement.
 
 ## Lifecycle and psychological boundaries
 
+When a malformed choice also relies on a stale or unavailable memory, the
+existing proposal repair receives both the schema errors and the independent
+grounding errors. This lets the NPC reconsider the same choice using evidence
+it could observe. The correction shares the original request limit.
 When several proposal alternatives have invalid motive references or lack personal
-support, the existing proposal repair receives their independent errors together.
+support, the repair receives their independent errors together.
 The host checks the repaired alternatives against the same actor's motive catalogue.
 Appraisal errors include the affected field and its permitted subjects. An NPC
 can express interest in an object with a null affect target and keep the object
@@ -283,11 +308,14 @@ the host preserves the clarification gate and its branches. The decision records
 which alternatives were omitted. The NPC retains its own choice and physical steps.
 
 Each delivered command-controlled decision retains one bounded internal action
-feedback summary for that NPC's next existing decision. It contains only the
+feedback summary for that NPC's next existing decision. It contains the
 previous attempt and operation identifiers, tool names, its own requested operand
-identifiers, final statuses and typed refusal codes. In two-phase mode the
-`execution` field distinguishes a deliberate choice of no physical action
-from a selected plan rejected before publication. Published results remain in
+identifiers, final statuses and typed refusal codes. Two-phase selections also
+retain the NPC's source phrases and their resolution. In two-phase mode the
+`execution.status` records `not_attempted` for a deliberate choice of no
+physical step, `no_effect` for selected wording fully accounted for as an offer,
+memory or other non-action, `rejected` for a failed resolution and `staged`
+for a successful preview. Published results remain in
 `operations`, including later conflicts over a contested item. Older records
 without `execution` establish only which operations reached publication. The
 selected plan retains the tool and only references available to that NPC when

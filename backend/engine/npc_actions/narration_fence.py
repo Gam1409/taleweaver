@@ -227,6 +227,9 @@ def _pose_conflicts(manager: Any, poses: list[SceneDelta], actors: dict, rows: l
 
 async def enforce(manager: Any, narration: str) -> None:
     """Use final owner state, never an arbitrary rejection diagnostic or old echo."""
+    from backend.engine.npc_actions import pose_audit
+
+    await pose_audit.enforce(manager, narration)
     check = _current(manager)
     manager._npc_narration_fence = None
     if check is None or narration != check.narration:
