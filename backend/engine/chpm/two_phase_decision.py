@@ -10,19 +10,17 @@ from backend.engine.chpm.proposal_references import (
     ReferenceDevelopmentDraft,
     ReferenceDraft,
 )
-from backend.engine.npc_actions.contracts import WorldAction
-
-Step = Annotated[WorldAction, Field(discriminator="tool", json_schema_extra=_portable_union)]
+from backend.engine.npc_actions.selected_sources import Choice
 
 
 class NoAction(ReferenceContract):
     mode: Literal["none"]
-    steps: list[Step] = Field(max_length=0)
+    steps: list[Choice] = Field(max_length=0)
 
 
 class Act(ReferenceContract):
     mode: Literal["act"]
-    steps: list[Step] = Field(min_length=1, max_length=2)
+    steps: list[Choice] = Field(min_length=1, max_length=2)
 
 
 PhysicalIntent = Annotated[
@@ -48,13 +46,17 @@ def wire_schema(development: bool) -> type[ReferenceDraft]:
 
 INSTRUCTIONS = """
 Choose physical_intent independently of your social choice. For the selected
-candidate only, put every own world change you choose NOW in mode=act with one
-or two ordered command objects using exact observed IDs and final operands.
-Speech or refusal can accompany an action of your own. Include the physical
-step whenever you choose to perform one in this turn.
-Use mode=none and steps=[] for speech, expression, waiting or a future plan.
-The host requests those specific operations separately. Story text, inspecting
-a target and submitting this intention cannot perform them. Do not choose for
-another participant or invent IDs. You may inspect your view when lookup
-rounds remain. Only actual publication results establish completion.
+candidate, use mode=act and one or two own phrases in steps, in order. Write
+your intended physical conduct in your own words, not tool names or arguments.
+A phrase may contain two successive acts; at most two supported actions total.
+Optionally use {text, target_refs:[observed IDs]} instead of a string to identify
+your referents. Use this when multiple visible items or participants could fit;
+otherwise ambiguous targets cannot execute. Never invent IDs or choose another
+participant's conduct. Inspect your view first when lookup rounds remain.
+Only available_physical_commands can have persistent effects. Include offers
+or uncertain/unsupported physical intentions honestly; the execution phase
+distinguishes them from completed transfers. Speech, memories and negated or
+future actions alone use mode=none, steps=[]. Refusal may accompany own action.
+These selected words are private intentions, not world facts. Only publication
+results establish completion; a recipient still chooses its own response.
 """

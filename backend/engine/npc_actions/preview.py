@@ -1,6 +1,6 @@
 """Turn-local NPC command previews; inspecting or planning never changes the world."""
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from copy import deepcopy
 from dataclasses import dataclass, field, replace
 from hashlib import sha256
@@ -119,6 +119,36 @@ class Draft:
         """Return an isolated accepted preview for owner publication, never model output."""
         return deepcopy(self._actors), deepcopy(self._possessions), deepcopy(self._states)
 
+    def selected_item_candidates(self, tool: str) -> set[str]:
+        """Read current preview custody/wear without copying unrelated owner state."""
+        owner = SCENE if tool == "take_item" else self.scope.actor_id
+        candidates = {
+            key
+            for key, value in self._possessions.owners.items()
+            if value == owner and key in self.scope.accessible_ids
+        }
+        if tool not in {"wear_item", "take_off_item", "adjust_clothing"}:
+            return candidates
+        actor = self._actors[self.scope.actor_id]
+        worn = {
+            key
+            for key in candidates
+            if item_wear_state(
+                actor.get("visual_profile"),
+                actor.get("resolved_inventory"),
+                key,
+                equipment=actor.get("equipment"),
+            )
+            == "worn"
+        }
+        if tool != "wear_item":
+            return worn
+        return {
+            key
+            for key in candidates - worn
+            if garment_for_item(self._possessions.items[key]) is not None
+        }
+
     def available_tools(self) -> set[str]:
         if self.approved:
             return set()
@@ -202,7 +232,11 @@ class Draft:
         )
 
     def append_selected(
-        self, steps: Sequence[Request], *, issued: Sequence[turn_controls.Operation] | None = None
+        self,
+        steps: Sequence[Request],
+        *,
+        issued: Sequence[turn_controls.Operation] | None = None,
+        validate_step: Callable[["Draft", Request, int], None] | None = None,
     ) -> None:
         if issued is not None and len(issued) != len(steps):
             raise ValueError("Each selected step requires its own host operation.")
@@ -210,6 +244,8 @@ class Draft:
         # The captured scope is read-only; only the working state is copied.
         trial = deepcopy(self, {id(self.scope): self.scope})
         for index, request in enumerate(steps):
+            if validate_step is not None:
+                validate_step(trial, request, index)
             if request.tool not in trial.available_tools():
                 raise SelectedStepRejectedError(
                     index,

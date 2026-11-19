@@ -13,6 +13,7 @@ from pydantic import (
 )
 
 from backend.engine.npc_actions.contracts import ACTION_MODELS, MAX_ACTIONS
+from backend.engine.npc_actions.selected_sources import SelectionTrace
 
 MAX_SELECTED_STEPS = 2
 MAX_EXECUTION_ERRORS = 2
@@ -32,6 +33,12 @@ _EXECUTION_CODES = frozenset(
         "unclosed_requests_array",
         "unsupported_finish",
         "unavailable_actions",
+        "source_coverage_mismatch",
+        "ambiguous_target",
+        "selected_target_mismatch",
+        "unavailable_target",
+        "unsupported_effect",
+        "ambiguous",
     }
 )
 
@@ -90,20 +97,48 @@ class ExecutionRejection(BaseModel):
 
 class SelectedActionExecution(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
-    status: Literal["not_attempted", "rejected", "staged"]
+    status: Literal["not_attempted", "no_effect", "rejected", "staged"]
     steps: tuple[SelectedActionReference, ...] = Field(max_length=MAX_SELECTED_STEPS)
     gate_errors: tuple[ExecutionRejection, ...] = Field(default=(), max_length=MAX_EXECUTION_ERRORS)
+    source_selection: SelectionTrace | None = None
+    failure_stage: Literal["interpretation", "owner_precondition"] | None = None
+
+    @model_serializer(mode="wrap")
+    def legacy_shape(self, handler: SerializerFunctionWrapHandler) -> dict:
+        result: dict = handler(self)
+        if self.source_selection is None:
+            result.pop("source_selection", None)
+        if self.failure_stage is None:
+            result.pop("failure_stage", None)
+        return result
 
     @model_validator(mode="after")
     def disposition(self) -> "SelectedActionExecution":
-        if self.status == "not_attempted" and (self.steps or self.gate_errors):
+        if self.status == "not_attempted" and (
+            self.steps or self.gate_errors or self.source_selection is not None
+        ):
             raise ValueError(
                 "Deliberate no action cannot carry selected steps or execution failures."
             )
-        if self.status != "not_attempted" and not self.steps:
+        if self.status == "no_effect" and (self.steps or self.source_selection is None):
+            raise ValueError("A non-effect requires its own selected source and no operations.")
+        if (
+            self.status in {"rejected", "staged"}
+            and not self.steps
+            and (self.status == "staged" or self.source_selection is None)
+        ):
             raise ValueError("An execution disposition requires the actor's selected steps.")
         if self.status == "rejected" and not self.gate_errors:
             raise ValueError("Rejected execution requires its typed gate reason.")
+        if (
+            self.source_selection is not None
+            and self.status == "no_effect"
+            and (
+                not self.source_selection.resolutions
+                or any(row.disposition != "no_effect" for row in self.source_selection.resolutions)
+            )
+        ):
+            raise ValueError("A non-effect disposition must account for every selected phrase.")
         return self
 
 
@@ -167,4 +202,24 @@ class PublicationAcknowledgment(BaseModel):
             )
         ):
             raise ValueError("Execution feedback and publication dispositions disagree.")
+        self._source_operations()
         return self
+
+    def _source_operations(self) -> None:
+        if self.execution is None or self.execution.source_selection is None:
+            return
+        trace = self.execution.source_selection
+        if trace.selection.control.attempt_id != self.attempt_id:
+            raise ValueError("Publication and selection must belong to the same attempt.")
+        if self.execution.status != "staged":
+            return
+        actions = [action for group in trace.resolutions for action in group.actions]
+        if [(row.operation_id, row.tool) for row in actions] != [
+            (row.operation_id, row.tool) for row in self.operations
+        ]:
+            raise ValueError("Published operations must retain the selected source order.")
+        for step, operation in zip(self.execution.steps, self.operations, strict=True):
+            if any(
+                getattr(step, key) != getattr(operation, key) for key in type(step).model_fields
+            ):
+                raise ValueError("Publication feedback cannot substitute selected operands.")

@@ -14,6 +14,7 @@ from backend.engine.npc_actions.acknowledgment_contracts import (
     PublicationAcknowledgment,
 )
 from backend.engine.npc_actions.preview import operation_identity
+from backend.engine.npc_actions.selected_sources import for_context
 from backend.engine.turn_replay.transactions import release_for_model
 from backend.models.chat import ChatMessage
 
@@ -77,6 +78,7 @@ def capture(turn: Any, decision: "Decision") -> PublicationAcknowledgment | None
     }
     if any(row.get("command_id") not in requested for row in rows):
         raise control.CommandRejectedError("invalid_operation")
+    _validate_selection(draft, binding, decision.actor_id)
     return PublicationAcknowledgment(
         attempt_id=binding.attempt_id,
         execution=draft.selected_execution,
@@ -92,6 +94,35 @@ def capture(turn: Any, decision: "Decision") -> PublicationAcknowledgment | None
             for row in rows
         ),
     )
+
+
+def _validate_selection(draft: Any, binding: turn_controls.Binding, actor_id: str) -> None:
+    execution = draft.selected_execution
+    if execution is None or execution.source_selection is None:
+        return
+    trace = execution.source_selection
+    captured = trace.selection.control
+    if captured.actor_id != actor_id or any(
+        getattr(captured, key) != getattr(binding, key)
+        for key in ("attempt_id", "input_id", "input_revision", "input_hash")
+    ):
+        raise control.CommandRejectedError("invalid_operation")
+    actions = [action for row in trace.resolutions for action in row.actions]
+    if execution.status == "staged" and {(row.operation_id, row.tool) for row in actions} != {
+        (row.operation_id, row.tool) for row in draft.operations
+    }:
+        raise control.CommandRejectedError("invalid_operation")
+
+
+def _model_feedback(previous: "Decision") -> dict:
+    acknowledgment = previous.last_publication
+    if acknowledgment is None:
+        return {}
+    result = acknowledgment.model_dump(mode="json", exclude_none=True)
+    execution = acknowledgment.execution
+    if execution is not None and execution.source_selection is not None:
+        result["execution"]["source_selection"] = for_context(execution.source_selection)
+    return result
 
 
 async def context(
@@ -117,6 +148,34 @@ def _eligible(
         or previous.observation.message_id == observed.message_id
         or previous.reply_id is None
         or previous.reply_hash is None
+        or not _selection_source_matches(previous)
+    )
+
+
+def _selection_source_matches(previous: "Decision") -> bool:
+    feedback = previous.last_publication
+    if (
+        feedback is None
+        or feedback.execution is None
+        or feedback.execution.source_selection is None
+    ):
+        return True
+    captured = feedback.execution.source_selection.selection.control
+    observation = previous.observation
+    return (
+        captured.actor_id,
+        captured.attempt_id,
+        captured.phase,
+        captured.input_id,
+        captured.input_revision,
+        captured.input_hash,
+    ) == (
+        previous.actor_id,
+        feedback.attempt_id,
+        "npc_tools",
+        observation.message_id,
+        observation.revision_id,
+        observation.content_hash,
     )
 
 
@@ -186,14 +245,14 @@ def _from_sources(
             "Choose your next step; others choose theirs."
         )
         + (
-            " Execution describes selected steps, never acts; rejected was not staged, "
+            " Execution describes selection: rejected was not staged; no_effect changed nothing; "
             "not_attempted chose no action. Missing operands are unconfirmed."
             if previous.last_publication.execution is not None
             else ""
         ),
         "source_input_id": source.message_id,
         "source_reply_id": previous.reply_id,
-        **previous.last_publication.model_dump(mode="json", exclude_none=True),
+        **_model_feedback(previous),
     }
 
 

@@ -14,6 +14,7 @@ from backend.engine.npc_actions.acknowledgment_contracts import (
     SelectedActionExecution,
 )
 from backend.engine.npc_actions.contracts import Approach, ChangeState, Give, Move, Take
+from backend.engine.npc_actions.selected_sources import scope_hash
 from backend.engine.turn_replay.snapshot import capture, restore
 from backend.engine.visual_novel.continuity import SCENE
 from backend.models.chat import ChatMessage
@@ -43,9 +44,7 @@ class RejectedExecutionRoles(CupRoles):
             self.steps = [TAKE] if not self.next_turn and payload["actor_id"] == "LINA" else []
         result = super().answer(payload, functions, phase, kwargs)
         if phase == "npc_execution":
-            return [
-                (name, {**arguments, "item_id": "UNSELECTED_ITEM"}) for name, arguments in result
-            ]
+            result[0][1]["resolutions"][0]["actions"][0]["item_id"] = "UNSELECTED_ITEM"
         return result
 
 
@@ -71,8 +70,11 @@ async def test_rejected_selection_and_deliberate_no_action_survive_reload_in_own
         rejected = saved.actors["LINA"].last_publication.execution
         waiting = saved.actors["MILA"].last_publication.execution
         assert rejected.status == "rejected" and waiting.status == "not_attempted"
-        assert [step.model_dump(exclude_none=True) for step in rejected.steps] == [TAKE]
-        assert {error.code for error in rejected.gate_errors} == {"goal_operation_mismatch"}
+        assert [step.model_dump(exclude_none=True) for step in rejected.steps] == [
+            {"tool": "take_item"}
+        ]
+        assert rejected.source_selection.selection.passages[0].target_refs == (CUP,)
+        assert {error.code for error in rejected.gate_errors} == {"unavailable_target"}
         assert waiting.steps == waiting.gate_errors == ()
         roles.next_turn = True
         _, events = await run(db, user, "I wait for each of you to speak.")
@@ -84,11 +86,11 @@ async def test_rejected_selection_and_deliberate_no_action_survive_reload_in_own
         assert supplied["LINA"]["operations"] == supplied["MILA"]["operations"] == []
         assert supplied["LINA"]["execution"]["status"] == "rejected"
         assert supplied["MILA"]["execution"]["status"] == "not_attempted"
-        assert "goal_operation_mismatch" not in json.dumps(supplied["MILA"])
+        assert "unavailable_target" not in json.dumps(supplied["MILA"])
         assert "UNSELECTED_ITEM" not in json.dumps(supplied)
         assert all(
             "previous_action_results_not_current_state" not in json.dumps(payload)
-            and "goal_operation_mismatch" not in json.dumps(payload)
+            and "unavailable_target" not in json.dumps(payload)
             for payload in roles.reviews
         )
         assert len(roles.executions) == 2
@@ -202,3 +204,58 @@ async def test_failed_execution_feedback_follows_retraction_fork_and_snapshot_re
             manager, restored, await next_input(manager, db), "LINA"
         )
         assert supplied["execution"]["status"] == "rejected" and supplied["operations"] == []
+
+
+async def test_reloaded_selected_sources_cannot_borrow_another_actor_or_input(monkeypatch):
+    roles = CupRoles([TAKE])
+    install(monkeypatch, roles)
+    async with TestSessionLocal() as db:
+        user, state = await seed(db, "json", pair=False)
+        session_id, user_id = state.session_id, user.id
+        host, events = await run(db, user, PLAYER)
+        assert_committed(events)
+
+    async with TestSessionLocal() as db:
+        _, host, _ = await reload(db, session_id, user_id)
+        previous = load(host.state).actors["LINA"]
+        observed = await next_input(host, db)
+        assert await acknowledgment.context(host, previous, observed, "LINA") is not None
+        for field, value in {
+            "actor_id": "MILA",
+            "input_id": "other-input",
+            "input_revision": "other-revision",
+            "input_hash": "other-hash",
+            "phase": "narration_review",
+        }.items():
+            raw = previous.model_dump(mode="json")
+            source = raw["last_publication"]["execution"]["source_selection"]["selection"]
+            source["control"][field] = value
+            from backend.engine.npc_actions.selected_sources import Passage
+            from backend.engine.turn_controls import Operation
+
+            source["source_scope"] = scope_hash(
+                Operation.model_validate(source["control"]),
+                tuple(Passage.model_validate(row) for row in source["passages"]),
+            )
+            forged = type(previous).model_validate(raw)
+            assert await acknowledgment.context(host, forged, observed, "LINA") is None, field
+
+
+async def test_saved_publication_cannot_substitute_source_operation_order(monkeypatch):
+    from tests.test_npc_two_phase_turn import GIVE
+
+    roles = CupRoles([TAKE, GIVE])
+    install(monkeypatch, roles)
+    async with TestSessionLocal() as db:
+        user, _ = await seed(db, "json", pair=False)
+        host, events = await run(db, user, PLAYER)
+        assert_committed(events)
+        acknowledgment = load(host.state).actors["LINA"].last_publication
+        raw = acknowledgment.model_dump(mode="json")
+        raw["operations"].reverse()
+        with pytest.raises(ValidationError, match="selected source order"):
+            PublicationAcknowledgment.model_validate(raw)
+        raw = acknowledgment.model_dump(mode="json")
+        raw["operations"][0]["item_id"] = "OTHER_VISIBLE_ITEM"
+        with pytest.raises(ValidationError, match="substitute selected operands"):
+            PublicationAcknowledgment.model_validate(raw)

@@ -18,7 +18,7 @@ from backend.engine.chpm.host_state import Mind
 from backend.engine.chpm.proposal_references import ReferenceDraft
 from backend.engine.chpm.schema import Decision, Settings, Usage
 from backend.engine.chpm.two_phase_decision import PhysicalDevelopmentDraft, PhysicalDraft
-from backend.engine.npc_actions.contracts import Request
+from backend.engine.npc_actions.selected_sources import Choice
 
 
 async def submit(
@@ -36,7 +36,7 @@ async def submit(
     physical = settings.npc_decision_mode == "two_phase"
     parallel_budget.dispatched("physical_intent_accepted" if physical else "proposal")
 
-    def accept(value: ReferenceDraft) -> tuple[Decision, Mind, Sequence[Request] | None]:
+    def accept(value: ReferenceDraft) -> tuple[Decision, Mind, Sequence[Choice] | None]:
         # Capture only the candidate which passes the entire existing acceptance pipeline,
         # including any in-budget repair. A rejected raw response has no command authority.
         decision, mind = prepared.accept(value)
@@ -80,9 +80,9 @@ async def submit(
     )
     if steps is None:
         return decision, mind
-    from backend.engine.chpm import two_phase_execution
+    from backend.engine.chpm import two_phase_selection
 
-    report = await two_phase_execution.execute(
+    report = await two_phase_selection.execute(
         manager, settings, usage, tools, llm, captured, seen_ids, steps
     )
     return Decision.model_validate(

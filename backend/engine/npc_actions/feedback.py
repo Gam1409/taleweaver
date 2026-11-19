@@ -126,20 +126,19 @@ def _round_records(turn: Any, actor: str, decision: Any, step: dict) -> list[dic
         or any(not isinstance(row, dict) for row in [*requests, *results])
     ):
         raise control.CommandRejectedError("invalid_operation")
-    by_call = _by_call(results)
-    rows = [_record(turn, actor, decision, request, by_call) for request in requests]
+    by_operation = _by_operation(results)
+    rows = [_record(turn, actor, decision, request, by_operation) for request in requests]
     return [row for row in rows if row is not None]
 
 
-def _record(turn: Any, actor: str, decision: Any, request: dict, by_call: dict) -> dict | None:
+def _record(turn: Any, actor: str, decision: Any, request: dict, by_operation: dict) -> dict | None:
     tool = request.get("tool")
     if not isinstance(tool, str):
         raise control.CommandRejectedError("invalid_operation")
     # Old audit summaries have no control authority; keep them readable.
     if tool not in ACTION_MODELS or "operation_id" not in request or _legacy_summary(request):
         return None
-    call_id = request.get("tool_call_id")
-    result = by_call.get(call_id) if isinstance(call_id, str) else None
+    result = by_operation.get(request.get("operation_id"))
     if not isinstance(result, dict):
         raise control.CommandRejectedError("invalid_operation")
     operation = _operation(turn, actor, decision, request, result)
@@ -163,12 +162,12 @@ def _legacy_summary(request: dict) -> bool:
     }
 
 
-def _by_call(results: list[dict]) -> dict:
-    bound = [result for result in results if result.get("tool_call_id") is not None]
-    keys = [result["tool_call_id"] for result in bound]
+def _by_operation(results: list[dict]) -> dict:
+    bound = [result for result in results if result.get("operation_id") is not None]
+    keys = [result["operation_id"] for result in bound]
     if any(not isinstance(key, str) for key in keys) or len(keys) != len(set(keys)):
         raise control.CommandRejectedError("invalid_operation")
-    return {result["tool_call_id"]: result for result in bound}
+    return {result["operation_id"]: result for result in bound}
 
 
 def _operation(

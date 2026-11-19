@@ -14,6 +14,7 @@ from backend.engine.chpm.native_tool_contracts import NativeToolArgumentError, p
 from backend.engine.chpm.notebook_tools import result_summary
 from backend.engine.chpm.schema import Settings, Usage
 from backend.engine.npc_actions.acknowledgment_contracts import (
+    MAX_EXECUTION_ERRORS,
     MAX_SELECTED_STEPS,
     ExecutionRejection,
     SelectedActionExecution,
@@ -23,6 +24,7 @@ from backend.engine.npc_actions.acknowledgment_contracts import (
 from backend.engine.npc_actions.contracts import ACTION_MODELS, Adjust, Request
 from backend.engine.npc_actions.feedback import summarize
 from backend.engine.npc_actions.preview import Draft, Scope, SelectedStepRejectedError
+from backend.engine.npc_actions.selected_sources import SelectionTrace
 from backend.engine.npc_actions.tool_schema import definitions
 
 INSTRUCTION = (
@@ -135,18 +137,26 @@ def _selected_references(scope: Scope, request: Request) -> SelectedActionRefere
 def _audit(
     draft: Draft,
     protocol: str,
-    status: Literal["not_attempted", "rejected", "staged"],
+    status: Literal["not_attempted", "no_effect", "rejected", "staged"],
     failures: list[ExecutionGateError],
     repaired: bool,
     steps: Sequence[Request],
+    *,
+    source_selection: SelectionTrace | None = None,
+    failure_stage: Literal["interpretation", "owner_precondition"] | None = None,
 ) -> list[dict]:
+    errors = tuple(
+        ExecutionRejection(code=execution_reason(failure.code), path=failure.path)
+        for failure in failures
+    )
     summary = SelectedActionExecution(
         status=status,
         steps=tuple(_selected_references(draft.scope, step) for step in steps),
-        gate_errors=tuple(
-            ExecutionRejection(code=execution_reason(failure.code), path=failure.path)
-            for failure in failures
-        ),
+        # Keep both final phrase failures in bounded next-turn feedback. The
+        # existing host audit below retains earlier correction failures too.
+        gate_errors=errors[-MAX_EXECUTION_ERRORS:],
+        source_selection=source_selection,
+        failure_stage=failure_stage,
     )
     draft.selected_execution = summary
     handles = [
@@ -168,8 +178,14 @@ def _audit(
             "status": summary.status,
             "stop": summary.status,
             "repaired": repaired,
-            "gate_errors": [failure.model_dump() for failure in summary.gate_errors],
+            "gate_errors": [failure.model_dump() for failure in errors],
+            **(
+                {"source_selection": source_selection.model_dump(mode="json", exclude_none=True)}
+                if source_selection is not None
+                else {}
+            ),
             **({"error_type": summary.gate_errors[-1].code} if status == "rejected" else {}),
+            **({"failure_stage": failure_stage} if failure_stage is not None else {}),
         }
     ]
 

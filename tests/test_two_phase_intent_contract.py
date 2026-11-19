@@ -16,12 +16,12 @@ def test_explicit_phase_a_schema_survives_transport_and_rejects_non_world_steps(
     validator = Draft202012Validator(adapter.json_schema())
     valid = [
         {"mode": "none", "steps": []},
-        {"mode": "act", "steps": [{"tool": "take_item", "item_id": "cup"}]},
-        {"mode": "act", "steps": [{"tool": "set_pose", "posture": "sitting"}]},
+        {"mode": "act", "steps": ["I pick up the cup."]},
+        {"mode": "act", "steps": [{"text": "I sit down.", "target_refs": []}]},
     ]
     for candidate in valid:
         assert validator.is_valid(candidate)
-        assert adapter.validate_python(candidate).model_dump() == candidate
+        assert adapter.validate_python(candidate).model_dump(mode="json") == candidate
     invalid = [
         {"mode": "none"},
         {"mode": "act", "steps": []},
@@ -29,6 +29,7 @@ def test_explicit_phase_a_schema_survives_transport_and_rejects_non_world_steps(
         {"mode": "act", "steps": valid[1]["steps"] * 3},
         {"mode": "act", "steps": [{"tool": "inspect_entity", "argument": "cup"}]},
         {"mode": "act", "steps": [{"tool": "discard_actions"}]},
+        {"mode": "act", "steps": [{"tool": "take_item", "item_id": "cup"}]},
         {"mode": "act", "steps": [{"tool": "take_item", "item_id": "cup", "actor_id": "@player"}]},
     ]
     for candidate in invalid:

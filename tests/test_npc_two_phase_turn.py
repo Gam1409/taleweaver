@@ -5,6 +5,7 @@ from copy import deepcopy
 
 import pytest
 
+from backend.engine.chpm import inference
 from backend.engine.chpm.state import KEY, load
 from backend.engine.clothing.visuals import session_objects
 from backend.engine.gameplay.manager import GameTurnManager
@@ -31,11 +32,34 @@ class CupRoles(LocalFailureRoles):
         super().__init__()
         self.steps, self.wrong_once = steps, wrong_once
         self.choices, self.executions = [], []
+        self.native_turns = 0
 
     def for_role(self, *args, **kwargs):
         model = super().for_role(*args, **kwargs)
         model.aexecute_tool_turn = self.native
         return model
+
+    def selected_phrases(self):
+        texts = {
+            "take_item": "I pick up the selected item.",
+            "give_item": "I hand the selected item to the selected recipient.",
+            "take_off_item": "I take off my selected garment.",
+            "put_down_item": "I put down the selected item.",
+            "wear_item": "I put on the selected garment.",
+            "approach": "I approach the selected target.",
+            "set_pose": "I sit down.",
+        }
+        return [
+            {
+                "text": texts[step["tool"]],
+                "target_refs": [
+                    value
+                    for key, value in step.items()
+                    if key in {"item_id", "recipient_id", "target_id", "destination_scene_id"}
+                ],
+            }
+            for step in self.steps
+        ]
 
     def answer(self, payload, functions, phase, kwargs):
         offered = {row["name"]: row for row in (item.get("function", item) for item in functions)}
@@ -45,7 +69,17 @@ class CupRoles(LocalFailureRoles):
             if self.wrong_once and len(self.executions) == 1:
                 # A malformed second command must not leave a take staged on retry.
                 steps[-1]["item_id"] = "UNRELATED"
-            return [(step.pop("tool"), step) for step in steps]
+            return [
+                (
+                    "resolve_selected_steps",
+                    {
+                        "resolutions": [
+                            {"passage_id": f"p{index}", "disposition": "action", "actions": [step]}
+                            for index, step in enumerate(steps)
+                        ]
+                    },
+                )
+            ]
 
         self.choices.append((payload, offered))
         result = wire_proposal()
@@ -54,14 +88,18 @@ class CupRoles(LocalFailureRoles):
             "Decline to open the parcel and act on my own choice about the cup."
         )
         result["choice"] = preferred_choice(payload, preferred="REFUSE")
-        result["physical_intent"] = {"mode": "act" if self.steps else "none", "steps": self.steps}
+        result["physical_intent"] = {
+            "mode": "act" if self.steps else "none",
+            "steps": self.selected_phrases(),
+        }
         return [("submit_decision", proposal(result, payload))]
 
     async def native(self, messages, tools, model, **kwargs):
+        self.native_turns += 1
         requests = self.answer(initial_payload(messages), tools, kwargs["phase"], kwargs)
         return turn(
             *(
-                call(f"cup-{len(self.choices)}-{len(self.executions)}-{index}", name, arguments)
+                call(f"cup-{self.native_turns}-{index}", name, arguments)
                 for index, (name, arguments) in enumerate(requests)
             )
         )
@@ -120,6 +158,32 @@ def assert_committed(events):
 
 
 @pytest.mark.parametrize("protocol", ["native", "json"])
+async def test_prose_first_ordinary_entry_keeps_tier_zero_and_the_24k_cap(monkeypatch, protocol):
+    admissions = []
+    reserve = inference.reserve
+
+    def reserved(settings, usage, size):
+        admissions.append(size)
+        return reserve(settings, usage, size)
+
+    monkeypatch.setattr(inference, "reserve", reserved)
+    roles = CupRoles([TAKE])
+    install(monkeypatch, roles)
+    async with TestSessionLocal() as db:
+        user, state = await seed(db, protocol, pair=False)
+        configured = load(state)
+        configured.settings = configured.settings.model_copy(update={"max_input_chars": 24000})
+        state.entity_states = {**state.entity_states, KEY: configured.model_dump()}
+        await db.commit()
+        host, events = await run(db, user, PLAYER)
+        assert_committed(events)
+        assert load(host.state).settings.max_input_chars == 24000
+        assert load(host.state).usage.calls == 4
+    assert roles.choices[0][0]["context_packing"]["tier"] == 0
+    assert len(roles.executions) == 1 and max(admissions) <= 24000
+
+
+@pytest.mark.parametrize("protocol", ["native", "json"])
 async def test_competing_refusals_publish_one_cup_then_recall_only_own_result(
     monkeypatch, protocol
 ):
@@ -144,7 +208,7 @@ async def test_competing_refusals_publish_one_cup_then_recall_only_own_result(
         for _, offered in roles.choices:
             assert set(offered) == {"submit_decision"}
             assert "physical_intent" in offered["submit_decision"]["parameters"]["required"]
-        assert all(names == {"take_item"} for names, _ in roles.executions)
+        assert all(names == {"resolve_selected_steps"} for names, _ in roles.executions)
         if protocol == "native":
             assert all(choice == "required" for _, choice in roles.executions)
         assert load(manager.state).usage.calls == 6  # perception, two choices/actions, review
@@ -180,7 +244,7 @@ async def test_wrong_second_operand_can_be_repaired_without_a_duplicate_take(mon
         manager, events = await run(db, user, PLAYER)
         assert_committed(events)
         assert len(roles.choices) == 1 and len(roles.executions) == 2
-        assert all(names == {"take_item", "give_item"} for names, _ in roles.executions)
+        assert all(names == {"resolve_selected_steps"} for names, _ in roles.executions)
         assert load(manager.state).usage.proposal_repairs == 1
         assert [row.tool for row in drafts["LINA"].requests] == ["take_item", "give_item"]
         rows = publications[-1].action_outcomes["LINA"]
