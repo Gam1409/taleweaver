@@ -12,6 +12,7 @@ from backend.core.inference.registry import InferenceQueueError, InferenceUncert
 from backend.core.state_rejection_trace import reject
 from backend.core.system_diagnostics import service
 from backend.engine.memory_rag.cancellation import find_cancellation
+from backend.engine.memory_rag.embeddings import EmbeddingConnectionError, EmbeddingError
 from backend.engine.memory_rag.scheduling import BackgroundDeferredError
 from backend.engine.memory_rag.sqlite_busy import is_sqlite_busy
 
@@ -70,9 +71,12 @@ class Cycle:
         attempt = self.failures.get(kind, (0, 0))[0] + 1
         delay = min(60 * 2 ** min(attempt - 1, 4), 900)
         self.failures[kind] = (attempt, time.monotonic() + delay)
-        self.errors[kind] = (
-            f"Memory {kind} deferred ({type(exc).__name__}). Check its model settings; other maintenance can continue."
-        )
+        if isinstance(exc, EmbeddingConnectionError):
+            self.errors[kind] = f"Memory {kind} deferred. {exc}"
+        else:
+            self.errors[kind] = (
+                f"Memory {kind} deferred ({type(exc).__name__}). Check its model settings; other maintenance can continue."
+            )
 
     def notice(self) -> str | None:
         return next(iter(self.errors.values()), None)
@@ -81,6 +85,10 @@ class Cycle:
 def _propagate_control_error(exc: Exception) -> None:
     if cancelled := find_cancellation(exc):
         raise cancelled
+    if isinstance(exc, EmbeddingError) and isinstance(
+        exc.__cause__, (InferenceQueueError, InferenceUncertainError)
+    ):
+        raise exc.__cause__
     if isinstance(
         exc, (InferenceQueueError, InferenceUncertainError, BackgroundDeferredError)
     ) or is_sqlite_busy(exc):

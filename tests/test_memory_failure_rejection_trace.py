@@ -147,6 +147,21 @@ async def test_phase_control_errors_propagate_without_becoming_rag_failures(kind
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("kind", ["queue", "uncertain"])
+async def test_wrapped_embedding_admission_defers_memory_maintenance(kind):
+    from backend.engine.memory_rag.embeddings import EmbeddingError
+
+    error = _control(kind)
+    wrapped = EmbeddingError(str(error))
+    wrapped.__cause__ = error
+    cycle = maintenance.Cycle()
+    jobs = {"index": AsyncMock(side_effect=wrapped)}
+    with pytest.raises(type(error)):
+        await cycle.run(jobs)
+    assert cycle.failures == {} and cycle.errors == {}
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("kind", ["queue", "uncertain", "deferred", "busy", "cancelled"])
 async def test_worker_controls_keep_release_and_retry_semantics_without_failure_packet(
     monkeypatch, kind

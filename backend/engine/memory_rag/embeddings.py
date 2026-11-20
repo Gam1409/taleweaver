@@ -27,6 +27,10 @@ class EmbeddingError(ValueError):
     """A safe, actionable embedding failure without provider payloads or credentials."""
 
 
+class EmbeddingConnectionError(EmbeddingError):
+    """The embedding transport could not establish a connection."""
+
+
 def validate_embedding_url(base_url: str) -> str:
     normalized = validate_provider_url(base_url).rstrip("/")
     hostname = urlsplit(normalized).hostname
@@ -148,6 +152,11 @@ async def embed_with_settings(
         )
     except (InferenceQueueError, InferenceUncertainError) as exc:
         raise EmbeddingError(str(exc)) from exc
+    except (httpx.ConnectError, httpx.ConnectTimeout) as exc:
+        raise EmbeddingConnectionError(
+            "Could not connect to the embedding endpoint. Check that the server is running "
+            "and the configured URL is reachable."
+        ) from exc
     except (httpx.HTTPError, asyncio.TimeoutError, ValueError) as exc:
         if isinstance(exc, EmbeddingError):
             raise

@@ -38,6 +38,19 @@ def _mock_transport(monkeypatch, handler):
 
 
 @pytest.mark.asyncio
+async def test_connection_failure_reports_unreachable_endpoint_without_leaking_details(monkeypatch):
+    def offline(request):
+        raise httpx.ConnectError("private connection details", request=request)
+
+    _mock_transport(monkeypatch, offline)
+    with pytest.raises(
+        EmbeddingError, match="Could not connect to the embedding endpoint"
+    ) as error:
+        await embed_texts(_user(), ["first"])
+    assert "private connection details" not in str(error.value)
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "provider,path,payload",
     [
