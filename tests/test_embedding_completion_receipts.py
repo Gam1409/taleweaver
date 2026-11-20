@@ -77,6 +77,28 @@ async def test_expired_recall_waiting_for_admission_never_submits_an_embedding(
     assert reservations.status() == []
 
 
+async def test_opportunistic_recall_declines_a_busy_slot_before_dispatch(reservations, monkeypatch):
+    ticket = reservations.enqueue(KEY)
+    assert reservations.try_acquire(ticket)
+    monkeypatch.setattr(embeddings, "validate_embedding_url", lambda value: value)
+
+    async def unexpected_post(*args, **kwargs):
+        pytest.fail("A busy slot must decline the query before the HTTP request")
+
+    monkeypatch.setattr(httpx.AsyncClient, "post", unexpected_post)
+    config = MemoryRagSettings(
+        enabled=True, provider="ollama", model="mock", base_url=URL, timeout_seconds=60
+    )
+    with pytest.raises(embeddings.EmbeddingError, match="No immediate inference slot"):
+        await asyncio.wait_for(
+            embeddings.embed_with_settings(config, ["query"], purpose="query", wait_for_slot=False),
+            timeout=1,
+        )
+    assert len(reservations.status()) == 1
+    reservations.finish(ticket, certain=True)
+    assert reservations.status() == []
+
+
 async def test_late_connection_failure_still_requires_verified_recovery(reservations, monkeypatch):
     started, release = asyncio.Event(), asyncio.Event()
     monkeypatch.setattr(embeddings, "validate_embedding_url", lambda value: value)

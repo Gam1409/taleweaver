@@ -101,10 +101,16 @@ async def embed_texts(
     *,
     timeout: float | None = None,
     purpose: Literal["query", "document"] = "document",
+    wait_for_slot: bool = True,
 ) -> list[list[float]]:
     settings = read_settings(user)
     return await embed_with_settings(
-        settings, texts, api_key=_credential_key(user), timeout=timeout, purpose=purpose
+        settings,
+        texts,
+        api_key=_credential_key(user),
+        timeout=timeout,
+        purpose=purpose,
+        wait_for_slot=wait_for_slot,
     )
 
 
@@ -116,6 +122,7 @@ async def embed_with_settings(
     api_key: str = "",
     timeout: float | None = None,
     purpose: Literal["query", "document"] = "document",
+    wait_for_slot: bool = True,
 ) -> list[list[float]]:
     if not settings.enabled or not settings.base_url or not settings.model:
         raise EmbeddingError("Enable memory and configure an embedding URL and model first.")
@@ -135,7 +142,10 @@ async def embed_with_settings(
     if not math.isfinite(duration) or duration <= 0:
         raise EmbeddingError("Embedding request timeout must be positive and finite.")
     try:
-        return await asyncio.wait_for(_embed(settings, texts, duration, api_key), timeout=duration)
+        return await asyncio.wait_for(
+            _embed(settings, texts, duration, api_key, wait_for_slot=wait_for_slot),
+            timeout=duration,
+        )
     except (InferenceQueueError, InferenceUncertainError) as exc:
         raise EmbeddingError(str(exc)) from exc
     except (httpx.HTTPError, asyncio.TimeoutError, ValueError) as exc:
@@ -147,7 +157,12 @@ async def embed_with_settings(
 
 
 async def _embed(
-    settings: MemoryRagSettings, texts: list[str], duration: float, api_key: str
+    settings: MemoryRagSettings,
+    texts: list[str],
+    duration: float,
+    api_key: str,
+    *,
+    wait_for_slot: bool,
 ) -> list[list[float]]:
     token = service.capture_token()
     if token is not None:
@@ -161,7 +176,9 @@ async def _embed(
         )
     base = await asyncio.to_thread(validate_embedding_url, settings.base_url)
     if admission.enabled():
-        async with admission.reserve(endpoint_key(base), settings.timeout_seconds) as lease:
+        async with admission.reserve(
+            endpoint_key(base), settings.timeout_seconds, wait_for_slot=wait_for_slot
+        ) as lease:
             response = await receipts.wait_for_response(
                 _post(settings, base, texts, api_key, settings.timeout_seconds), lease
             )

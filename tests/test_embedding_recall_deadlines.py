@@ -37,6 +37,7 @@ async def test_public_recall_keeps_a_response_slower_than_the_old_fixed_cutoff(m
 
     async def delayed_embedding(*args, **kwargs):
         assert kwargs["timeout"] == 3
+        assert kwargs["wait_for_slot"] is False
         await asyncio.sleep(1.6)
         return [[1.0, 0.0]]
 

@@ -81,14 +81,16 @@ and recency, then validates results against current SQL sources. Owner, session,
 timeline generation and model signature isolate the index. Old clothing and
 possession descriptions are historical evidence; current game state wins.
 
-Foreground recall uses the configured embedding request timeout (30 seconds for new
-settings, adjustable from 1 to 60 seconds) and 0.5 seconds of additional vector-search
-grace, then falls back to SQL-based lexical selection when the embedding service fails
-or indexing is incomplete. Explicit saved timeouts are preserved; increase the value
-in Memory & RAG settings if an existing installation still has 10 seconds. Changing
-only the timeout does not rebuild the index. A larger timeout can lengthen turns when
-the server is busy. Recall never
-waits for the backlog to be indexed or summarized. Context is bounded to 2,500
+Shared turn recall tries to reserve an embedding slot immediately. If the local
+inference queue is busy, that turn uses lexical selection over its permitted SQL
+sources. A paraphrase with little matching vocabulary can therefore rank differently
+on a busy turn. Once admitted, the query uses the configured embedding request
+timeout (30 seconds for new settings, adjustable from 1 to 60 seconds) and 0.5
+seconds of additional vector-search grace. Retrieval falls back to SQL when the
+embedding service fails or indexing is incomplete. Existing installations keep
+their saved timeout. A larger timeout allows an admitted request to run longer.
+Changing the timeout does not rebuild the index. Recall never waits for the backlog
+to be indexed or summarized. Context is bounded to 2,500
 characters and filtered for the receiving pass. Disabling recall retains the
 legacy memory context.
 

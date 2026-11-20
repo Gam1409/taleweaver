@@ -87,7 +87,9 @@ def _queued(ticket: Ticket, timeout: float) -> None:
 
 
 @asynccontextmanager
-async def reserve(key: str, timeout: float, *, capacity: int | None = None) -> AsyncIterator[Lease]:
+async def reserve(
+    key: str, timeout: float, *, capacity: int | None = None, wait_for_slot: bool = True
+) -> AsyncIterator[Lease]:
     owner = registry()
     ticket = owner.enqueue(key, capacity=capacity)
     deadline = time.monotonic() + timeout
@@ -104,6 +106,8 @@ async def reserve(key: str, timeout: float, *, capacity: int | None = None) -> A
             if time.monotonic() >= deadline:
                 raise InferenceQueueError("Timed out waiting for the AI server queue.")
             acquired = owner.try_acquire(ticket, background_ready=ready(ticket))
+            if not acquired and not wait_for_slot:
+                raise InferenceQueueError("No immediate inference slot is available.")
             if not acquired:
                 await asyncio.sleep(0.025)
         events.emit(

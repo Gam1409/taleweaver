@@ -82,6 +82,9 @@ async def _query_vectors(manager: Any, query: str, scope: Scope, settings: Any) 
         [query[:4000]],
         timeout=settings.timeout_seconds,
         purpose="query",
+        # Public recall has a scoped SQL fallback. An already busy model should
+        # keep its reservation without holding up the player's turn for vectors.
+        wait_for_slot=False,
     )
     if embedding_signature(settings, len(vectors[0])) != scope.signature:
         return []
