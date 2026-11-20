@@ -133,16 +133,16 @@ def _conditional(node: dict | bool, condition: dict, local: set[str]) -> dict:
     choices = _finite_choices(properties.get(field, {}))
     if not choices:
         raise SchemaProjectionError("The discriminator requires local schema validation.")
-    branches = []
-    for value in choices:
-        branch = intersect(node, {"properties": {field: {"const": value}}})
-        if json_equal(value, expected):
-            branch = intersect(branch, {"required": [field]})
-            branch = intersect(branch, _node(condition.get("then", {}), local))
-        branches.append(branch)
-    if field not in node.get("required", []) and all(
-        json_equal(value, expected) for value in choices
-    ):
+    # All non-matching discriminator values share one outcome. Keeping them in
+    # one enum avoids copying the entire object once per allowed value.
+    others = [value for value in choices if not json_equal(value, expected)]
+    if len(others) == len(choices):
+        return node
+    matched = intersect(node, {"properties": {field: {"const": expected}}, "required": [field]})
+    branches = [intersect(matched, _node(condition.get("then", {}), local))]
+    if others:
+        branches.append(intersect(node, {"properties": {field: {"enum": others}}}))
+    elif field not in node.get("required", []):
         if node.get("additionalProperties") is not False:
             raise SchemaProjectionError(
                 "An optional discriminator requires a closed object schema."

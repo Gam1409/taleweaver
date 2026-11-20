@@ -9,20 +9,23 @@ def placement_rules(schema: dict) -> None:
     field = schema["properties"]["uncovered_regions"]
     if field.get("type") == "null":
         return  # Recovery uses its existing outer placement contract.
+    # Keep partial removal in the same exclusive placement branches. This avoids
+    # a second conditional crossing every branch during native schema projection.
     schema["oneOf"] = [
         {
             "properties": {
+                "disposition": {"enum": ["carried", "held"]},
+                "partially_removed": {"type": "null"},
                 "uncovered_regions": {"type": "null"},
                 "attachment_slot": {"type": "null"},
             }
         },
         {
-            "required": ["uncovered_regions"],
             "properties": {
                 "disposition": {"const": "worn"},
-                "uncovered_regions": {"type": "array", "uniqueItems": True},
+                "uncovered_regions": {"uniqueItems": True},
                 "attachment_slot": {"type": "null"},
-            },
+            }
         },
         {
             "required": ["attachment_slot"],
@@ -30,6 +33,7 @@ def placement_rules(schema: dict) -> None:
                 "disposition": {"const": "worn"},
                 "uncovered_regions": {"type": "null"},
                 "attachment_slot": {"enum": list(BODY_SLOT_KEYS)},
+                "partially_removed": {"type": "null"},
             },
         },
     ]
@@ -52,6 +56,7 @@ def _observation_rule(schema: dict) -> None:
             {
                 "properties": {
                     "basis": {"const": "observed_possession"},
+                    "partially_removed": {"type": "null"},
                     "disposition": {"enum": ["carried", "held"]},
                     "source_owner": {"not": {"const": "__scene__"}},
                     "destination_owner": {"not": {"const": "__scene__"}},
