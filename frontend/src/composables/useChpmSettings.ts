@@ -7,6 +7,7 @@ export interface ChpmSettings {
   workflow?: 'staged' | 'integrated'
   npc_concurrency?: number
   failure_policy?: 'continue' | 'strict'
+  reject_impossible_player_items?: boolean
   mode: 'off' | 'shadow' | 'live'
   actor_ids: string[]
   max_active_npcs: number

@@ -24,10 +24,15 @@ defineExpose({ save })
     <fieldset v-if="draft && status" :disabled="busy || !status.available" class="mt-4 space-y-4 disabled:opacity-60">
       <label class="block text-xs text-slate-300">Mode
         <select name="npc-mode" :value="draft.mode" @change="setMode(($event.target as HTMLSelectElement).value as ChpmSettings['mode'])" class="mt-1 w-full rounded-lg border border-slate-600 bg-slate-800 p-2">
-          <option value="off">Standard — no extra requests</option>
+          <option value="off">{{ isCombatControl ? 'Standard combat AI' : 'Standard — narrator handles NPCs' }}</option>
           <option v-if="!isCombatControl || draft.mode === 'shadow'" value="shadow" :disabled="isCombatControl">Observe — calculate decisions without changing replies</option>
           <option value="live">{{ isCombatControl ? 'Enabled — choose combat abilities' : 'Enabled — validate dialogue before showing it' }}</option>
         </select>
+      </label>
+      <label v-if="status.host_mode === 'vn'" class="block text-xs text-slate-300">
+        <input v-model="draft.reject_impossible_player_items" name="reject-impossible-player-items" type="checkbox" class="mr-2 accent-cyan-400" />
+        Reject player actions that contradict known item or clothing state
+        <span class="mt-1 block text-slate-400">Checks named items before narration. A blocked action shows the reason and your original words. Relevant turns may use one extra model request.</span>
       </label>
       <template v-if="draft.mode !== 'off'">
         <label v-if="draft.mode === 'live'" class="block text-xs text-slate-300">NPC decision workflow

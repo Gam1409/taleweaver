@@ -234,3 +234,12 @@ test('session action decision mode appears only for active VN commands', async (
     assert.doesNotMatch(await render(1, [], { host_mode }, draft), /name="npc-decision-mode"/)
   }
 })
+
+test('item admission is an opt-in VN session control available in Standard mode', async () => {
+  const renderMode = (host_mode, changes = {}) =>
+    render(0, [], { host_mode }, { mode: 'off', ...changes })
+  const control = /<input[^>]*name="reject-impossible-player-items"[^>]*>/
+  assert.doesNotMatch((await renderMode('vn')).match(control)[0], /checked/)
+  assert.match((await renderMode('vn', { reject_impossible_player_items: true })).match(control)[0], /checked/)
+  assert.doesNotMatch(await renderMode('rpg'), control)
+})

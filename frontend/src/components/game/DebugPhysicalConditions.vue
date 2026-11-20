@@ -89,6 +89,7 @@ function save() {
       </div>
       <button type="button" class="state-button" :disabled="!available || busy" @click="selected = ''; populate()"><Plus class="w-4 h-4" /> Record condition</button>
     </div>
+    <slot />
     <p v-if="!data" role="status">State data is unavailable. Refresh the debug inspector.</p>
     <p v-else-if="data.error" role="alert" class="text-amber-300">{{ data.error }}</p>
     <template v-else>

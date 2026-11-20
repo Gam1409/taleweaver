@@ -991,6 +991,14 @@ class GameTurnManager:
             yield f"event: final\ndata: {json.dumps(final_data)}\n\n"
             return
 
+        if actual_user_input and not actual_user_input.startswith("/") and is_vn(self.adventure):
+            from backend.engine.visual_novel.player_item_check import preflight
+
+            rejection = await preflight(self, actual_user_input)
+            if rejection:
+                yield rejection
+                return
+
         # traverse_exit internal command: move scene, then run LLM narration pass
         if user_msg.lower().startswith("/traverse_exit "):
             exit_ref = user_msg[15:].strip()

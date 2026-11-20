@@ -29,6 +29,7 @@ from backend.api.routes.adventures.living_world_decisions import (
 )
 from backend.api.routes.adventures.npc_card_settings import router as npc_card_settings_router
 from backend.api.routes.adventures.portrait_settings import router as portrait_settings_router
+from backend.api.routes.adventures.prose_evidence import router as prose_evidence_router
 from backend.api.routes.adventures.publication import router as publication_router
 from backend.api.routes.adventures.regeneration import router as regeneration_router
 from backend.api.routes.adventures.scene_debug import router as scene_debug_router
@@ -73,6 +74,7 @@ router.include_router(checkpoint_policy_router)
 router.include_router(session_exports_router)
 router.include_router(session_playtime_router)
 router.include_router(state_checks_router)
+router.include_router(prose_evidence_router)
 router.include_router(portrait_settings_router)
 router.include_router(authoring_router)
 router.include_router(scene_debug_router)

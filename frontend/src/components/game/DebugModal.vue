@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import DebugNpcTools from './DebugNpcTools.vue'
+import DebugProseEvidence from './DebugProseEvidence.vue'
 import DebugPhysicalConditions from './DebugPhysicalConditions.vue'
 import DebugPlayerLocation from './DebugPlayerLocation.vue'
 import DebugNpcClothing from './DebugNpcClothing.vue'
@@ -1238,7 +1239,9 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
             <!-- ========================================================= -->
             <!-- TAB 4: DIAGNOSTICS & RAW JSON INSPECTOR -->
             <!-- ========================================================= -->
-            <DebugPhysicalConditions v-else-if="activeTab === 'state'" :data="sessionDebug?.physical_conditions" :busy="commandBusy" @command="runCmd" />
+            <DebugPhysicalConditions v-else-if="activeTab === 'state'" :data="sessionDebug?.physical_conditions" :busy="commandBusy" @command="runCmd">
+              <DebugProseEvidence v-if="sessionDebug?.session?.id || sheet?.session_id" :session-id="sessionDebug?.session?.id || sheet?.session_id" />
+            </DebugPhysicalConditions>
 
             <section v-else-if="activeTab === 'diagnostics'" class="flex-1 flex flex-col min-h-0 p-4 sm:p-6 overflow-y-auto custom-scrollbar space-y-6">
               <div class="rounded-2xl border border-amber-500/25 bg-slate-900/80 p-4 space-y-3">

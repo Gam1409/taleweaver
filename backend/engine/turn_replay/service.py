@@ -59,18 +59,21 @@ async def record_before(manager: Any, text: str) -> None:
     manager._turn_replay_recorded = True
 
 
+async def pending_input(manager: Any, text: str) -> ChatMessage | None:
+    """Return the durable user message only when retrying that exact pending turn."""
+    row = await manager.db.get(TurnReplay, manager.game_id)
+    if row is None or row.status != "pending" or row.input_text != text:
+        return None
+    message = await latest(manager.db, manager.game_id)
+    if message is not None and message.role == "user" and message.content == text:
+        return message
+    return None
+
+
 async def record_input(manager: Any, text: str) -> ChatMessage:
     """Reuse a failed turn's durable input instead of duplicating it on retry."""
-    row = await manager.db.get(TurnReplay, manager.game_id)
-    message = await latest(manager.db, manager.game_id)
-    if (
-        row is not None
-        and row.status == "pending"
-        and row.input_text == text
-        and message is not None
-        and message.role == "user"
-        and message.content == text
-    ):
+    message = await pending_input(manager, text)
+    if message is not None:
         manager._turn_replay_recorded = True
         turn_controls.bind_input(manager, message)
         return message

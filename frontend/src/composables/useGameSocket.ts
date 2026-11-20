@@ -26,6 +26,7 @@ export interface TurnErrorState {
   message: string
   action: string
   draft?: string
+  admission?: 'edit' | 'retry'
 }
 
 export interface AgentLogEntry {
@@ -293,7 +294,11 @@ export function useGameSocket(): UseGameSocket {
 
   function applySessionSnapshot(data: any, updateMessages = true): void {
     if (!data) return
-    if (!activeChatController && 'pending_turn' in data) turnError.value = pendingTurnError(data.pending_turn, dismissedPendingAction)
+    if (!activeChatController && 'pending_turn' in data) {
+      const pending = pendingTurnError(data.pending_turn, dismissedPendingAction)
+      // A preflight refusal has no pending record. Polling must keep its explanation visible.
+      if (pending || !turnError.value?.admission) turnError.value = pending
+    }
     if ('npc_behavior' in data) updateNpcBehaviorStatus(currentGameId, data.npc_behavior)
     if (typeof data.system_debug_enabled === 'boolean') {
       systemDebugEnabled.value = data.system_debug_enabled
@@ -747,7 +752,18 @@ export function useGameSocket(): UseGameSocket {
           receivedErrorEvent = true
           committedReplyId = typeof data.committed_assistant_id === 'string' ? data.committed_assistant_id : undefined
           streamErrorDetail = data.detail || 'An error occurred.'
-          reportTurnError(streamErrorDetail)
+          if (data.code === 'impossible_player_item' || data.code === 'item_check_unavailable') {
+            // The server rejected this before persisting the input. Keep the original text
+            // on the dismissible error, without leaving an optimistic turn in the story.
+            messages.value = messages.value.filter(message =>
+              beforeAttempt.has(message) || message.id || message.role !== 'user' || message.content !== normalizedContent)
+            turnError.value = { message: streamErrorDetail, action: normalizedContent,
+              admission: data.code === 'item_check_unavailable' && data.retryable !== false ? 'retry' : 'edit' }
+            // Replay restores the original turn and clears the banner after a failed regeneration.
+            if (replayMessageId) addNotification(streamErrorDetail, 'error')
+          } else {
+            reportTurnError(streamErrorDetail)
+          }
         } else if (event === 'scene_transition') {
           // The story feed starts a new page per scene; previous scenes stay browsable.
           isSceneTransitioning.value = true
@@ -814,13 +830,13 @@ export function useGameSocket(): UseGameSocket {
   }
 
   async function retryLastAction(): Promise<void> {
-    if (!turnError.value?.action) return
+    if (!turnError.value?.action || turnError.value.admission === 'edit') return
     const actionToRetry = turnError.value.action
     await sendMessage(actionToRetry, true)
   }
 
   function cancelTurnError(): void {
-    dismissedPendingAction = turnError.value?.action || ''
+    if (!turnError.value?.admission) dismissedPendingAction = turnError.value?.action || ''
     turnError.value = null
     if (!activeChatController && (status.value === 'connecting' || status.value === 'loading')) {
       status.value = 'connected'

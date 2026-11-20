@@ -10,6 +10,7 @@ import CommandPopup from '@/components/game/CommandPopup.vue'
 import { getFilteredCommands } from '@/utils/commands'
 import { useVoiceInput } from '@/composables/useVoiceInput'
 import { Mic, SendHorizontal, AlertTriangle, RotateCcw } from 'lucide-vue-next'
+import type { TurnErrorState } from '@/composables/useGameSocket'
 
 const props = defineProps<{
   sessionId?: string
@@ -18,7 +19,7 @@ const props = defineProps<{
   statusText?: string
   agentActive?: boolean
   debugMode?: boolean
-  turnError?: { message: string; action: string; draft?: string } | null
+  turnError?: TurnErrorState | null
 }>()
 
 const emit = defineEmits<{
@@ -192,15 +193,23 @@ function handleKeydown(e: KeyboardEvent) {
   }
 }
 
+function setInputText(text: string) {
+  inputText.value = text
+  void nextTick(() => {
+    inputEl.value?.focus()
+    const pos = inputText.value.length
+    inputEl.value?.setSelectionRange(pos, pos)
+  })
+}
+
+function editRejectedAction() {
+  if (inputText.value || !props.turnError) return
+  setInputText(props.turnError.action)
+  emit('cancelTurnError')
+}
+
 defineExpose({
-  setInputText: (text: string) => {
-    inputText.value = text
-    void nextTick(() => {
-      inputEl.value?.focus()
-      const pos = inputText.value.length
-      inputEl.value?.setSelectionRange(pos, pos)
-    })
-  },
+  setInputText,
   appendText: (text: string) => {
     inputText.value = inputText.value ? `${inputText.value} ${text}` : text
     void nextTick(() => {
@@ -229,6 +238,7 @@ defineExpose({
     <!-- Turn Error / Retry Banner -->
     <div
       v-if="props.turnError"
+      role="alert"
       class="mb-2.5 p-3 rounded-2xl border border-red-500/50 bg-red-950/85 backdrop-blur-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs shadow-2xl animate-fade-in"
     >
       <div class="flex items-center gap-2.5 text-red-200 min-w-0">
@@ -237,7 +247,7 @@ defineExpose({
         </div>
         <div class="flex flex-col min-w-0">
           <span class="font-black text-red-300 uppercase tracking-wider text-[10px]">Action Failed</span>
-          <span class="break-words font-medium text-slate-200">{{ props.turnError.message }}</span>
+          <span class="whitespace-pre-line break-words font-medium text-slate-200">{{ props.turnError.message }}</span>
           <details v-if="props.turnError.draft" class="mt-2 text-slate-300">
             <summary class="cursor-pointer text-amber-200">Draft answer — not applied to the story</summary>
             <p class="mt-2 max-h-48 overflow-y-auto whitespace-pre-wrap break-words">{{ props.turnError.draft }}</p>
@@ -246,6 +256,13 @@ defineExpose({
       </div>
       <div class="flex items-center gap-2 self-end sm:self-auto shrink-0">
         <button
+          v-if="props.turnError.admission === 'edit' && !inputText"
+          type="button"
+          class="px-3.5 py-1.5 rounded-xl bg-amber-500 text-slate-950 font-bold hover:bg-amber-400"
+          @click="editRejectedAction"
+        >Edit action</button>
+        <button
+          v-if="props.turnError.admission !== 'edit'"
           type="button"
           @click="emit('retryTurn')"
           class="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black uppercase tracking-wider text-[11px] transition-all flex items-center gap-1.5 shadow-lg shadow-amber-500/20 active:scale-95 cursor-pointer"
@@ -260,7 +277,7 @@ defineExpose({
           class="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white font-bold uppercase tracking-wider text-[11px] transition-all border border-white/10 active:scale-95 cursor-pointer"
           title="Cancel error and continue"
         >
-          Cancel
+          {{ props.turnError.admission ? 'Dismiss' : 'Cancel' }}
         </button>
       </div>
     </div>

@@ -51,6 +51,7 @@ class SettingsFields(Contract):
     tool_protocol: Literal["auto", "native", "json"] = "auto"
     tool_profile: ToolProfile = "auto"
     semantic_memory: StrictBool = False
+    reject_impossible_player_items: StrictBool = False
     failure_policy: Literal["continue", "strict"] = "continue"
 
     @model_serializer(mode="wrap")
@@ -59,6 +60,8 @@ class SettingsFields(Contract):
         # A runtime dict return annotation would hide the settings fields in the API schema.
         # Existing save files and settings fingerprints omit the inactive experiment.
         result: dict = handler(self)
+        if not self.reject_impossible_player_items:
+            result.pop("reject_impossible_player_items", None)
         if self.npc_decision_mode == "legacy":
             result.pop("npc_decision_mode", None)
         return result
