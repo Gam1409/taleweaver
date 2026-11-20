@@ -129,9 +129,10 @@ today's hidden inventory or fills an old moment from later state. Vocal delivery
 cues remain available for narration/TTS rather than becoming visible objects.
 See [current moment illustration paths](comfyui/README.md#moment-illustrations).
 
-The narrator is explicitly constrained to approved NPC movements. These instructions
-do not automatically repair an existing discrepancy between prose and engine state,
-or invent a destination for a character whose whereabouts are unknown.
+The narrator is explicitly constrained to approved NPC movements. Missed departures
+from the latest completed response can be recovered only through the existing
+[movement owner's source and route checks](narrated-movement.md#vn-progression-recovery).
+Unconfirmed prose alone does not move a character or establish an unknown destination.
 
 Existing provider/workflow limitations still apply. A scene description does not
 guarantee perfect multi-character anatomy or identity consistency. This feature

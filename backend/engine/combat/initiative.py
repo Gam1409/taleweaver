@@ -6,6 +6,9 @@ import random
 from typing import Any
 
 PLAYER_ID = "PLAYER"
+# A command can resume the previous round, reach the player in the next round,
+# and advance again after that player's action. Each NPC occurs once per round.
+MAX_NPC_TURNS_PER_COMMAND = 3
 
 
 def initiative_bonus(dexterity: int) -> int:

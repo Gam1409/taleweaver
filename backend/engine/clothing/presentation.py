@@ -61,6 +61,7 @@ def player_clothing(avatar: Any, manifest: Any) -> dict | None:
                 "image_url": item.get("image_url"),
                 "slots": display_slots(item.get("wearable_slots"), list(garment.coverage)),
                 "uncovered_regions": worn.uncovered_regions if worn else [],
+                **({"partially_removed": True} if worn and worn.partially_removed else {}),
             }
         )
     return {

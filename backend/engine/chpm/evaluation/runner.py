@@ -67,7 +67,9 @@ async def run_arm(
     measured = MeasuredFactory(
         factory, limit=1 if arm == "baseline" else settings.max_calls_per_turn + 1, timeout=timeout
     )
-    host = SimpleNamespace(user=None, game_id=None, _chpm_model_factory=measured)
+    host = SimpleNamespace(
+        user=None, game_id=pair_id(case, repetition), _chpm_model_factory=measured
+    )
     result = Result(
         pair_id=pair_id(case, repetition),
         case_id=case.id,

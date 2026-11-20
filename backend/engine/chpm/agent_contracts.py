@@ -14,6 +14,8 @@ class Lookup(Contract):
         "read_memory",
         "inspect_self",
         "inspect_entity",
+        "find_entity",
+        "inspect_scene",
         "visible_clothing",
         "inspect_beliefs",
         "read_belief_basis",
@@ -22,9 +24,9 @@ class Lookup(Contract):
 
     @model_validator(mode="after")
     def valid_argument(self) -> "Lookup":
-        if (self.tool == "inspect_self") != (self.argument == ""):
+        if (self.tool in {"inspect_self", "inspect_scene"}) != (self.argument == ""):
             raise ValueError(
-                "inspect_self takes an empty argument; other tools need a query or ID."
+                "inspect_self/inspect_scene take an empty argument; other tools need a query or ID."
             )
         return self
 
@@ -50,7 +52,9 @@ including archived events. Current input is already supplied, not a memory searc
 Try concrete cues/synonyms if a previous query missed.
 read_memory(argument=memory_id): read an ID already returned by search_memory in this turn.
 inspect_self(argument=''): current host facts about this NPC's location, possessions and worn IDs.
-inspect_entity(argument=id): accessible item/actor state by exact ID; owner is not placement.
+find_entity(argument=query): find accessible current actors/items by name or ID, including omitted index entries.
+inspect_entity(argument=id): accessible item/actor state; use observer_id for yourself, @player for the player. Owner is not placement.
+inspect_scene(argument=''): current public room facts, actors and known routes; a read never moves anyone.
 visible_clothing(argument=actor_id): current visible clothing layers of a listed present NPC.
 inspect_beliefs(argument=subject_id): up to two OWN subjective beliefs about that person.
 Use player_actor_id for the player; other belief subjects are in belief_subject_ids.

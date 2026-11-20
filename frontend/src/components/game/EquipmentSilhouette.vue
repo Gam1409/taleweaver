@@ -203,7 +203,7 @@ function context(key: string, items: EquipmentDisplayItem[], event: MouseEvent) 
             <p class="break-words text-xs">{{ item.name }}</p>
             <p v-for="fact in item.current_state || []" :key="fact.dimension" class="mt-1 whitespace-pre-wrap break-words text-xs text-cyan-100">{{ fact.detail }}</p>
             <p v-for="condition in itemFacts(item)" :key="condition.id" class="mt-1 whitespace-pre-wrap break-words text-xs text-cyan-100">{{ condition.current_detail ?? condition.detail }}</p>
-            <p v-if="item.uncovered_regions?.length" class="mt-1 text-[10px] text-amber-200">
+            <p v-if="item.partially_removed || item.uncovered_regions?.length" class="mt-1 text-[10px] text-amber-200">
               Partially displaced
             </p>
           </div>

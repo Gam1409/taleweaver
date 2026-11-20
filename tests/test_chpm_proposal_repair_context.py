@@ -13,6 +13,7 @@ from backend.engine.chpm.json_contract import response_schema
 from backend.engine.chpm.proposal_draft import Draft
 from backend.engine.chpm.schema import Decision, Settings, Usage
 from backend.engine.chpm.state import KEY, load
+from tests.chpm_repair_fixture import corrections
 from tests.conftest import TestSessionLocal
 from tests.test_chpm_kernel import observation, wire_proposal
 from tests.test_chpm_reliability import Replies, Response
@@ -73,7 +74,15 @@ async def test_overlong_reason_and_wrong_motives_share_one_repair_without_rebuil
     original["choice"]["motive_ids"] = ["invented-motive"]
     corrected = deepcopy(original)
     corrected["choice"].update(reason="Preserve the established purpose.", motive_ids=["goal1"])
-    model = Replies([json.dumps(original), json.dumps(corrected)])
+    model = Replies(
+        [
+            json.dumps(original),
+            corrections(
+                ("/choice/reason", corrected["choice"]["reason"]),
+                ("/choice/motive_ids", corrected["choice"]["motive_ids"]),
+            ),
+        ]
+    )
     manager = SimpleNamespace(_chpm_model_factory=lambda _role: model, game_id="fixture")
     usage = Usage()
     context = {"authored_character": "Pinned original identity", "observation": "Current facts"}
@@ -106,7 +115,7 @@ async def test_semantically_rejected_choice_is_returned_with_exact_allowed_motiv
     original["choice"]["motive_ids"] = ["character"]
     corrected = deepcopy(original)
     corrected["choice"]["motive_ids"] = ["goal1"]
-    model = Replies([json.dumps(original), json.dumps(corrected)])
+    model = Replies([json.dumps(original), corrections(("/choice/motive_ids", ["goal1"]))])
     manager = SimpleNamespace(_chpm_model_factory=lambda _role: model, game_id="fixture")
     usage = Usage()
     await proposal_attempt.request(
@@ -168,7 +177,12 @@ async def test_large_rejected_response_does_not_displace_required_context_or_exp
 async def test_repeated_invalid_choice_remains_rejected_after_the_single_reserved_retry():
     original = wire_proposal()
     original["choice"]["motive_ids"] = ["goal1", "goal1"]
-    model = Replies([json.dumps(original), json.dumps(original)])
+    model = Replies(
+        [
+            json.dumps(original),
+            corrections(("/choice/motive_ids", original["choice"]["motive_ids"])),
+        ]
+    )
     manager = SimpleNamespace(_chpm_model_factory=lambda _role: model, game_id="fixture")
     usage = Usage()
     with pytest.raises(RecoverableChpmError, match="remains invalid"):
@@ -207,13 +221,17 @@ async def test_real_turn_commits_only_the_corrected_choice_and_closes_the_gap(mo
                 self.chpm_calls.append(phase)
                 feedback = json.loads(payload)["proposal_feedback"]
                 assert "300" in feedback["error"] and "uncited" in feedback["error"]
+                assert feedback["repair_mode"] == "field_edits"
                 draft = deepcopy(feedback["rejected_proposal"])
                 preferred = draft["choice"]["preferred"]
                 draft["choice"].update(
                     reason="Advance my established purpose.",
                     motive_ids=[draft["candidates"][preferred]["motives"][0]["motive_id"]],
                 )
-                return json.dumps(draft)
+                return corrections(
+                    ("/choice/reason", draft["choice"]["reason"]),
+                    ("/choice/motive_ids", draft["choice"]["motive_ids"]),
+                )
             response = await super().simple(system, payload, model, **kwargs)
             if phase == "proposal":
                 draft = json.loads(response)

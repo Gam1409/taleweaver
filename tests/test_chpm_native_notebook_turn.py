@@ -13,6 +13,7 @@ from backend.engine.chpm.errors import ChpmError
 from backend.engine.chpm.notebook import MAX_BYTES
 from backend.engine.chpm.state import KEY, load
 from backend.models.chat import ChatMessage
+from tests.chpm_reference_fixture import tool_turn as reference_turn
 from tests.conftest import TestSessionLocal
 from tests.test_chpm_host_turn import run
 from tests.test_chpm_local_failure_turn import LocalFailureRoles, seed_pair
@@ -44,8 +45,11 @@ class NativeRoles(NotebookRoles):
 
     def for_role(self, *args, **kwargs):
         model = super().for_role(*args, **kwargs)
-        model.aexecute_tool_turn = self.native
+        model.aexecute_tool_turn = self.reference_native
         return model
+
+    async def reference_native(self, messages, tools, model, **kwargs):
+        return reference_turn(await self.native(messages, tools, model, **kwargs), messages)
 
     async def native(self, messages, tools, model, **kwargs):
         body = initial_payload(messages)

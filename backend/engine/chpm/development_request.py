@@ -8,7 +8,8 @@ from backend.engine.chpm import (
     development,
     development_context,
     motivation,
-    proposal_draft,
+    proposal_references,
+    two_phase_decision,
 )
 from backend.engine.chpm.appraisal_contracts import GroundedProposal
 from backend.engine.chpm.core.contracts import Belief
@@ -39,6 +40,7 @@ def prepare(
     pinned: dict[str, tuple[str, Source, str]] | None = None,
     pinned_beliefs: dict[str, Belief] | None = None,
     focus_subjects: tuple[str, ...] = (),
+    reference_binding: dict | None = None,
 ) -> Prepared:
     available = development_context.episodes(
         mind, query=observation.player_request, focus_subjects=focus_subjects
@@ -54,41 +56,51 @@ def prepare(
                 supplied,
                 entries,
                 settings,
-                instruction + development.INSTRUCTIONS,
+                proposal_references.instructions(instruction + development.INSTRUCTIONS),
                 schema=DevelopmentProposal,
-                wire_schema=proposal_draft.DevelopmentDraft,
+                wire_schema=two_phase_decision.PhysicalDevelopmentDraft
+                if settings.npc_decision_mode == "two_phase"
+                else proposal_references.ReferenceDevelopmentDraft,
                 pinned=pinned,
                 pinned_beliefs=pinned_beliefs,
                 focus_subjects=focus_subjects,
                 extra={"development_context": body},
+                reference_episodes=available,
+                reference_binding=reference_binding,
             )
             return Prepared(
                 *packed,
                 DevelopmentProposal,
-                instruction + development.INSTRUCTIONS,
+                proposal_references.instructions(instruction + development.INSTRUCTIONS),
                 available,
                 "available",
             )
         except cognitive_context.ContextBudgetError:
             body["status"] = "deferred_input_budget"
             body["basis"] = []
+    # This response schema cannot propose development. Keep its status and
+    # existing tendencies, but omit rules for that unavailable operation.
+    body = {key: body[key] for key in ("policy", "current_tendencies", "basis", "status")}
     packed = cognitive_context.pack(
         mind,
         observation,
         supplied,
         entries,
         settings,
-        instruction,
+        proposal_references.instructions(instruction),
         extra={"development_context": body},
-        wire_schema=proposal_draft.Draft,
+        wire_schema=two_phase_decision.PhysicalDraft
+        if settings.npc_decision_mode == "two_phase"
+        else proposal_references.ReferenceDraft,
         pinned=pinned,
         pinned_beliefs=pinned_beliefs,
         focus_subjects=focus_subjects,
+        reference_binding=reference_binding,
     )
     return Prepared(
         *packed,
         GroundedProposal,
-        instruction,
+        proposal_references.instructions(instruction),
         {},
         "deferred_input_budget" if allowed else "not_yet_eligible",
     )

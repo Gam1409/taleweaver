@@ -11,7 +11,7 @@ from litellm import ModelResponse
 from sqlalchemy import select
 
 from backend.core.llm_router import GameMasterLLM
-from backend.engine.chpm import continuation_writer, inference, rendering
+from backend.engine.chpm import continuation_writer, inference, passages, rendering
 from backend.engine.chpm.errors import ChpmError
 from backend.engine.chpm.inference import OutputBudgetError
 from backend.engine.chpm.schema import KernelState, Settings
@@ -175,6 +175,11 @@ async def test_rejected_real_turn_commits_only_the_fresh_router_reply(monkeypatc
         sent = transport.call_args.args[0]["messages"]
         assert any(message["content"] == PRIOR for message in sent)
         assert "CHPM DIALOGUE CONTRACT" not in str(sent)
-        assert json.loads(sent[-1]["content"])["review_issues_to_avoid"] == ["Unapproved promise"]
+        assert (
+            json.loads(sent[-1]["content"])["review_issues_to_avoid"]
+            == passages.SharedReview(
+                review_scope="fixture", matches=False, rejections=[{"reason_code": "intention"}]
+            ).issues
+        )
         factory.assert_called_once_with(user, "complex")
         transport.assert_awaited_once()

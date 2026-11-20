@@ -9,7 +9,15 @@ import pytest
 from pydantic import BaseModel
 
 from backend.core.npc_presentation import PortraitPreferences
-from backend.engine.chpm import delivery, inference, proposal_attempt, rendering, runtime, state
+from backend.engine.chpm import (
+    delivery,
+    inference,
+    passages,
+    proposal_attempt,
+    rendering,
+    runtime,
+    state,
+)
 from backend.engine.chpm.kernel import ChpmError
 from backend.engine.chpm.schema import Settings, Usage, Verdict
 from backend.engine.npc_presentation import diagnostics
@@ -83,15 +91,25 @@ async def test_chpm_rejected_review_records_candidate_and_causal_contract(monkey
 
 async def test_rejected_review_does_not_recompute_its_original_context(monkeypatch, rejection):
     host = prepared()
-    payload = {"existing_context": "Keep this exact reviewed input."}
-    context = Mock(side_effect=[payload, AssertionError("Context must not be reconstructed")])
+    context = Mock(wraps=rendering._review_payload)
     monkeypatch.setattr(rendering, "_review_payload", context)
-    monkeypatch.setattr(
-        inference, "request", AsyncMock(return_value=Verdict(matches=False, issues=["Mismatch"]))
-    )
+
+    def reject_review(
+        _manager, _settings, _usage, _instruction, payload, schema, *_args, **_kwargs
+    ):
+        return schema(
+            review_scope=payload["review_scope"],
+            matches=False,
+            rejections=[
+                passages.ReviewRejection(reason_code="intention", actor_id=None, passage_id=None)
+            ],
+        )
+
+    request = AsyncMock(side_effect=reject_review)
+    monkeypatch.setattr(inference, "request", request)
     verdict = await rendering._review(host, host._chpm_turn, "Candidate.", "Resolution.")
     assert not verdict.matches and context.call_count == 1
-    assert rejection.call_args.kwargs["context"] is payload
+    assert rejection.call_args.kwargs["context"] is request.await_args.args[4]
 
 
 @pytest.mark.parametrize("completed", [False, True])

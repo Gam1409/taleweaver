@@ -6,6 +6,8 @@ from pydantic import ConfigDict, Field, model_validator
 
 from backend.core.text_evidence import WithEvidenceSpan
 
+MAX_MOVEMENTS = 8
+
 
 class MovementProposal(WithEvidenceSpan):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)

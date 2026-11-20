@@ -138,6 +138,18 @@ test('generic settings Save stops before other writes when VN pace is busy', asy
   assert.deepEqual(calls, ['pace'])
 })
 
+test('RPG combat settings failure opens its stable navigation panel and keeps later changes unsaved', async t => {
+  const calls = []
+  const f = await fixture(t, 'SessionSettingsModal', { sessionId: 's-a', mode: 'rpg', isSaving: false }, 'chpm, visualPresets, frame, section, savingExploration, saveAll', async () => reply({}))
+  f.chpm.value = { save: async () => { calls.push('combat'); return false } }
+  f.frame.value = { revealErrors: async () => { calls.push('reveal') } }
+  f.visualPresets.value = { save: async () => { calls.push('presets'); return true } }
+  await f.saveAll()
+  assert.deepEqual(calls, ['combat', 'reveal'])
+  assert.equal(f.section.value, 'npc_personality')
+  assert.equal(f.savingExploration.value, false)
+})
+
 test('scene staging toggle saves independently of narration pace', async t => {
   const calls = []
   const f = await fixture(t, 'VnNarrationSettings', { sessionId: 'session-a' }, 'sceneStaging, save', async (_url, options) => {

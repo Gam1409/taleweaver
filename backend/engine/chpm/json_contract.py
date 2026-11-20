@@ -33,14 +33,27 @@ def _bound_review_anchors(
     """Expose the existing one-anchor-per-actor limit to the prompt and decoder."""
     if "actor_id" not in identifiers:
         return
-    from backend.engine.chpm.passages import Review
+    from backend.engine.chpm.passages import Review, SharedReview
 
-    if schema is not Review:
+    if not issubclass(schema, (Review, SharedReview)):
         return
     capacity = len(set(identifiers["actor_id"]))
     for field in ("evidence", "actions", "agenda_evidence"):
+        if field not in contract["properties"]:
+            continue
         array = contract["properties"][field]
         array["maxItems"] = min(array["maxItems"], capacity)
+    if getattr(schema, "completed_changes_wire", False):
+        # These handles have their own receipt owner, which returns bounded repair feedback.
+        # Existing speech/hearing and scope identifiers retain their normal strict checks.
+        claim = contract["$defs"]["CompletedChange"]["properties"]
+        for field in ("actor_id", "passage_id"):
+            claim[field].pop("enum", None)
+        field = contract["properties"]["completed_changes"]
+        contract["properties"]["completed_changes"] = next(
+            branch for branch in field["anyOf"] if branch.get("type") == "array"
+        )
+        contract.setdefault("required", []).append("completed_changes")
 
 
 def _explicit_enum_maps(node: Any) -> None:
@@ -111,6 +124,46 @@ def _bind_ids(node: Any, identifiers: dict[str, list[str]]) -> None:
 
 def parse(schema: type[T], text: str) -> T:
     return schema.model_validate(decode(text))
+
+
+def validate_identifiers(
+    schema: type[BaseModel], candidate: dict, identifiers: dict[str, list[str]] | None
+) -> None:
+    """Mirror offered finite ID allowlists before canonical readers can trim strings."""
+    if not getattr(schema, "reference_wire", False):
+        return
+    if getattr(schema, "completed_changes_wire", False):
+        candidate = {key: value for key, value in candidate.items() if key != "completed_changes"}
+    _validate_identifier_values(candidate, identifiers or {})
+
+
+def _validate_identifier_values(
+    candidate: Any, identifiers: dict[str, list[str]], location: tuple[str | int, ...] = ()
+) -> None:
+    if isinstance(candidate, list):
+        for index, child in enumerate(candidate):
+            _validate_identifier_values(child, identifiers, (*location, index))
+        return
+    if not isinstance(candidate, dict):
+        return
+    for key, value in candidate.items():
+        if key in identifiers and value is not None:
+            selected = list(value) if isinstance(value, (list, dict)) else [value]
+            if any(not isinstance(item, str) or item not in identifiers[key] for item in selected):
+                from backend.engine.chpm import proposal_subjects
+                from backend.engine.chpm.proposal_edits import pointer
+
+                path = pointer((*location, key))
+                hint = (
+                    proposal_subjects.problem(location[0], candidate, identifiers[key])
+                    if key == "about_id" and len(location) == 2 and isinstance(location[0], str)
+                    else None
+                )
+                raise ValueError(
+                    f"CHPM {key} selects an unavailable identifier at {path}."
+                    + (f" {hint}" if hint else "")
+                )
+        _validate_identifier_values(value, identifiers, (*location, key))
 
 
 def decode(text: str) -> dict:

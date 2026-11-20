@@ -8,6 +8,7 @@ from pydantic import (
     ConfigDict,
     Field,
     SerializerFunctionWrapHandler,
+    StrictBool,
     field_validator,
     model_serializer,
     model_validator,
@@ -63,20 +64,22 @@ class ItemAction(WithEvidenceSpan):
     destination_owner: str = Field(min_length=1, max_length=100)
     disposition: Literal["carried", "held", "worn"]
     evidence: str = Field(min_length=4, max_length=800)
+    partially_removed: StrictBool | None = Field(
+        default=None,
+        description="For worn clothing only. True for a garment partly taken off, even when no whole body region is uncovered. False when restored. Null leaves this detail unspecified.",
+    )
     uncovered_regions: list[Region] | None = Field(
         default=None,
         max_length=7,
         description="For worn clothing only: the final regions this garment no longer covers. Null preserves its known placement; [] explicitly restores normal coverage. Partial removal remains worn.",
     )
-    basis: Literal[
-        "completed",
-        "observed_wear",
-        "observed_placement",
-        "attempt",
-        "claim",
-        "hypothetical",
-        "uncertain",
-    ]
+    basis: Literal[LegacyItemBasis, "observed_placement", "observed_possession"]
+    performed_by: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=100,
+        description="Public ID of the character explicitly performing the completed act in this passage, if known.",
+    )
     attachment_slot: BodySlot | None = Field(
         default=None,
         description="Explicit confirmed current body placement of this owned item, from a completed action or observed_placement. Worn only, with uncovered_regions=null. Null preserves an existing body placement for the same wearer.",
@@ -86,6 +89,23 @@ class ItemAction(WithEvidenceSpan):
     def one_identity(self) -> "ItemAction":
         if bool(self.item_id) == bool(self.new_item):
             raise ValueError("Use an existing ID or a new item, never both.")
+        if self.partially_removed is not None and (
+            self.disposition != "worn" or self.attachment_slot is not None
+        ):
+            raise ValueError("Partial removal only applies to worn clothing.")
+        if self.partially_removed:
+            # A coarse observation cannot replace independently confirmed regional facts.
+            self.uncovered_regions = None
+        if self.basis == "observed_possession" and (
+            self.source_owner != self.destination_owner
+            or self.source_owner == "__scene__"
+            or self.disposition not in {"carried", "held"}
+            or self.uncovered_regions is not None
+            or self.attachment_slot is not None
+        ):
+            raise ValueError(
+                "A possession observation requires the same actor and carried/held disposition, without placement changes."
+            )
         if self.basis == "observed_placement" and (
             not self.item_id
             or self.disposition != "worn"
@@ -111,8 +131,12 @@ class ItemAction(WithEvidenceSpan):
     @model_serializer(mode="wrap")
     def preserve_legacy_shape(self, handler: SerializerFunctionWrapHandler) -> dict:
         result = super().preserve_legacy_shape(handler)
+        if self.partially_removed is None:
+            result.pop("partially_removed", None)
         if self.attachment_slot is None:
             result.pop("attachment_slot", None)
+        if self.performed_by is None:
+            result.pop("performed_by", None)
         return result
 
 
@@ -134,7 +158,7 @@ class ExistingItemAction(ItemAction):
 
 
 class NewItemAction(ItemAction):
-    basis: LegacyItemBasis
+    basis: Literal[LegacyItemBasis, "observed_possession"]
     item_id: None = None
     new_item: Annotated[NewOrdinaryItem | NewClothingItem, Field(discriminator="kind")] = Field(
         description="Required intrinsic metadata. Clothing requires garment metadata and at least one wearable slot; never an ID."
@@ -233,6 +257,16 @@ whole group historical. Cite the exact current occurrence, not its later retelli
 Mark ambiguity for review rather than guessing an object from a literary metaphor.
 Report only completed taking, handing over, putting in a pocket/bag, wearing or removing
 an item, with an exact contiguous quote identifying the item and the participants.
+Presence/contact alone is not possession: looking, studying, pointing, touching or
+helping support another actor's held object does not itself prove carrying/acquisition/transfer.
+Table objects may remain scene facts or prose; never assign custody for metadata/coverage.
+Explicit CURRENT possession without a narrated acquisition may use basis=observed_possession:
+source_owner=destination_owner=that actor, disposition=carried or held,
+uncovered_regions=attachment_slot=null. new_item may register a newly described
+possession, not invent pickup/handover. Canonical ownership/placement wins: this basis
+cannot take from the scene/another owner, remove worn clothing, equip or replace
+saved placement. Unchanged registered possession needs no action. Use completed only
+for source-established completed actions, never claims, offers or nearby contact.
 Also report explicit current worn clothing descriptions using basis=observed_wear,
 source_owner=destination_owner=the wearer and disposition=worn. This registers a directly
 described current garment even without a dressing action or an existing visual profile.
@@ -263,7 +297,9 @@ order and continuous ownership; each step needs its own non-overlapping exact ev
 Clothing pulled down, lifted or only partly put on remains disposition=worn.
 Moving an attached strap, cuff or hem is partial displacement of that garment.
 It remains worn with the same ID and owner unless a separate completed transfer occurs.
-Set uncovered_regions to the garment regions it no longer covers, not all bare body
+For a general partial removal, set partially_removed=true and uncovered_regions=null.
+This preserves prior coverage. Set partially_removed=false when put fully back on.
+Set uncovered_regions to the whole garment regions it no longer covers, not all bare body
 regions. [] explicitly restores normal coverage; null leaves known placement unchanged.
 Review the supplied worn entries: covering a previously uncovered region is a placement
 change even when the same garment stays on the same owner. Report that existing item

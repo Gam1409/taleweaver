@@ -3,6 +3,7 @@
 from backend.engine.chpm import (
     agent_beliefs,
     agent_observable,
+    authored_capabilities,
     continuation,
     host_observations,
     narrative_context,
@@ -23,7 +24,12 @@ def build(
     facts = host_observations.previous(mind)
     return {
         "observer_id": mind.genesis.scope.observer_id,
-        "identity": mind.genesis.identity.model_dump(mode="json"),
+        # Lookup tools do not consume identity revision hashes or implicit schema defaults.
+        # Canonical identity and the complete final decision context remain unchanged.
+        "identity": mind.genesis.identity.model_dump(
+            mode="json", exclude_defaults=True, exclude={"source_revision"}
+        ),
+        **authored_capabilities.lookup_fields(supplied, mind.genesis.scope.observer_id),
         "observation": observation.model_dump(),
         "current_state": {
             key: value
@@ -51,4 +57,5 @@ def build(
         "max_tool_calls_per_round": 2,
         "previous_lookups": previous_lookups,
         **({"personal_notebook": tools.notebook.metadata()} if tools.notebook else {}),
+        **({"pending_actions_not_world_facts": tools.actions.context()} if tools.actions else {}),
     }

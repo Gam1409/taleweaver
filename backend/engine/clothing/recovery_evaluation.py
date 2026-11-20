@@ -119,7 +119,9 @@ def _finish_addition(
             f"{entry.source_message_id}:wardrobe:{index}",
             SimpleNamespace(id=entry.source_message_id, content=text, role=source["role"]),
         )
-    if entry.uncovered_regions or entry.restore_coverage:
+    if entry.partially_removed:
+        addition["partially_removed"] = True
+    if entry.partially_removed or entry.uncovered_regions or entry.restore_coverage:
         _set_partial_wear(actor, addition, text)
     if entry.restore_coverage:
         addition["restore_coverage"] = True
@@ -143,17 +145,23 @@ def _finish_addition(
 
 def _set_partial_wear(actor: dict, addition: dict, text: str) -> None:
     for worn in actor["visual_profile"]["worn"]:
-        if worn["item_id"] == addition["item"]["id"]:
+        if worn["item_id"] != addition["item"]["id"]:
+            continue
+        if addition.get("partially_removed"):
+            worn["partially_removed"] = True
+            addition["uncovered_regions"] = list(worn["uncovered_regions"])
+        else:
+            worn.pop("partially_removed", None)
             worn["uncovered_regions"] = addition["uncovered_regions"]
-            if addition["uncovered_regions"]:
-                worn["source"] = WearSource(
-                    source_message_id=addition["source_message_id"],
-                    content_hash=sha256(text.encode()).hexdigest(),
-                    evidence=addition["placement_evidence"],
-                    source_role=addition.get("source_role", "assistant"),
-                ).model_dump()
-            else:
-                worn.pop("source", None)
+        if worn.get("partially_removed") or worn["uncovered_regions"]:
+            worn["source"] = WearSource(
+                source_message_id=addition["source_message_id"],
+                content_hash=sha256(text.encode()).hexdigest(),
+                evidence=addition["placement_evidence"],
+                source_role=addition.get("source_role", "assistant"),
+            ).model_dump()
+        else:
+            worn.pop("source", None)
 
 
 def evaluated_preview(

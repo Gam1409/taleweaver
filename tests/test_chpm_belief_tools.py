@@ -10,6 +10,8 @@ from backend.engine.chpm.agent_contracts import Lookup
 from backend.engine.chpm.agent_tools import MAX_PINNED_CHARS, Tools
 from backend.engine.chpm.host_state import before_messages, record
 from backend.engine.chpm.schema import Settings, Usage
+from tests.chpm_reference_fixture import evidence_text
+from tests.chpm_reference_fixture import proposal as reference_proposal
 from tests.test_chpm_appraisal import accept, heard, proposal
 from tests.test_chpm_host_state import mind, source
 from tests.test_chpm_kernel import observation, wire_proposal
@@ -164,7 +166,7 @@ async def test_two_agent_rounds_feed_old_belief_and_exact_basis_into_real_decisi
             assert phase == "proposal"
             context = payload["appraisal_context"]
             assert any(b["belief_id"] == "ab1" for b in context["existing_beliefs"])
-            assert any(s["text"] == "missed my promise" for s in context["visible_evidence"])
+            assert any(evidence_text(s) == "missed my promise" for s in context["visible_evidence"])
             current = next(s for s in context["visible_evidence"] if s["current_turn"])
             raw = wire_proposal()
             raw["belief_revisions"] = [
@@ -176,7 +178,7 @@ async def test_two_agent_rounds_feed_old_belief_and_exact_basis_into_real_decisi
                     ],
                 ).model_dump()
             ]
-            return json.dumps(raw)
+            return json.dumps(reference_proposal(raw, payload))
 
     host = SimpleNamespace(game_id="session", _chpm_model_factory=lambda role: Model())
     usage = Usage()

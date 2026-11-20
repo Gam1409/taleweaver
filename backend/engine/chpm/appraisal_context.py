@@ -12,6 +12,7 @@ from backend.engine.chpm import (
 from backend.engine.chpm.core import relationships
 from backend.engine.chpm.core.contracts import Belief
 from backend.engine.chpm.host_state import Mind, Source
+from backend.engine.narrated_movement.outcomes import descriptor
 
 
 @dataclass(frozen=True)
@@ -155,6 +156,7 @@ def build(
                     "kind": "reported" if source.reported else "witnessed",
                     **({"channel": "narration"} if source.kind == "narration" else {}),
                     **observation_sources.descriptor(source),
+                    **descriptor(source),
                     "text": text,
                     "excerpted": len(text) < len(source.text),
                     "source_message_id": source.message_id,

@@ -12,6 +12,7 @@ from backend.engine.session_exporter import SessionExporter
 from backend.engine.session_importer import SessionImporter
 from backend.engine.turn_replay.snapshot import capture, restore
 from backend.models.session_state import SessionState
+from tests.chpm_reference_fixture import evidence_text
 from tests.conftest import TestSessionLocal
 from tests.test_chpm_host_turn import configured, run
 from tests.test_chpm_physical_continuity_turn import manually
@@ -29,7 +30,7 @@ class StateFeelingRoles(ChpmRoles):
         observed = next(
             row
             for row in supplied["appraisal_context"]["visible_evidence"]
-            if row.get("currently_observed") and "CURRENT_NECK_PAIN" in row["text"]
+            if row.get("currently_observed") and "CURRENT_NECK_PAIN" in evidence_text(row)
         )
         body = json.loads(raw)
         body["experiences"] = (

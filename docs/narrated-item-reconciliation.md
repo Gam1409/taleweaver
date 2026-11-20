@@ -18,6 +18,24 @@ room-level proxy for it, cannot be restored through independent state updates.
 The original physical/scene validators still check evidence, ownership, audience,
 operations and game time. Rejected independent updates are counted and reported.
 
+A localized preliminary denial includes typed `player_item_actions` as well as
+legacy inventory proposals. Its scope covers supplied performer and recipient
+identities, referenced items and the participants' current possessions. Unknown,
+unresolved or malformed typed scope retains the global block; it never defaults
+to the player. This scope only excludes affected subjects from independent state
+updates. It grants no custody, completion or evidence authority.
+
+That localized scope can also admit existing items already owned by unrelated,
+present NPCs, including changes to their own clothing. Every step in an item
+chain must avoid the rejected items, participants, player and room custody.
+Missing or empty rejection scope remains fail-closed. New creations and room
+acquisitions remain blocked. Original action indices,
+source checks and the normal ownership validators are retained, including in the
+existing correction preview. Applied independent changes are recorded beside the
+original warning and are not replayed on a retry of the same input.
+The legacy route represents an owned garment on a bench as carried custody plus
+staging placement; this does not add a new transfer-to-scene operation.
+
 The local response parser now preserves independent sections with staging both
 enabled and disabled. With staging disabled, the wire schema and instructions
 still omit staging; the tolerant parser does not enable that feature. Each item
@@ -109,7 +127,18 @@ garment, treatment versus healing, partial cleaning and repeated occurrences.
 They score missed and false updates independently of a model's “all checked” claim.
 Mocked output verifies host behavior; live-model recall remains unmeasured here.
 
-Existing items retain IDs and gameplay metadata. Transfers remove the previous owner's inventory, worn reference and equipment reference, then update the recipient. Receiving or holding does not equip the item. Wearing needs existing appearance and valid garment metadata. Each action is validated against copies before any changes are stored. Reprocessing the same input message is a no-op.
+Existing items retain IDs and gameplay metadata. Transfers remove the previous owner's inventory, worn reference and equipment reference, then update the recipient. Receiving or holding does not equip the item. Wearing needs valid garment metadata and a supported appearance profile; a missing neutral profile can be initialized without assessing the remaining outfit. Each action is validated against copies before any changes are stored. Reprocessing the same input message is a no-op.
+
+When placement is only partly assessed, version-1 profiles retain unresolved owned
+garment IDs in optional `unassessed_wear_item_ids` (at most 128 distinct IDs).
+Establishing one worn or carried item resolves only that item. Confirmed carried
+placement survives reload and later inputs; it does not depend on a previous
+turn's transient receipt. Other garments remain unknown and cannot be transferred
+as if known not to be worn. Unknown layers also conservatively block clothing and
+body visibility. A missing outfit baseline stays unassessed after one placement,
+even when no other canonical garment ID is available. Empty unresolved lists are
+omitted, preserving existing complete profile serialization. Oversized fresh assessments fail before overwriting the
+previous profile rather than truncating unresolved facts.
 
 Completed narration can update the existing worn garment's `uncovered_regions`.
 Partly lowered or partly donned clothing remains `worn`; it is not a completed
@@ -176,6 +205,25 @@ Skipped checks distinguish an earlier rules/ownership rejection from narration e
 Dynamic-location confirmation includes currently present NPCs and evidence for co-arrival from the current action. Confirmed companions are bound to the server-created destination ID before normal movement validation. Stationary NPC and access restrictions still apply; recorded results distinguish moved, not moved and rejected companions. This does not retroactively relocate NPCs based on unsupported assertions.
 
 Explicit current worn-garment descriptions now use `observed_wear`. They must cite the completed response and identify the wearer as both source and destination; these garment observations cannot transfer or remove possessions. A missing appearance profile can be initialized without inventing appearance details. Malformed existing profiles still require review. Repeated observations preserve existing worn coverage. Later changes in the response take precedence; recognizing their semantics remains a model responsibility.
+
+Explicit current carried or held possessions can use `observed_possession`, with the
+same present actor as source and destination. This registers intrinsic metadata for
+a newly described possession without inventing an acquisition event. It cannot take
+an existing item from the scene or another canonical owner, change wear or body
+placement, or equip anything. A source-valid observation of an existing owned item
+is a no-op: inventory order, item metadata, equipment, wear and staged placement
+remain intact. Same-item completed transfers and removals retain their existing
+ordered, atomic validation; observations cannot bypass an invalid step. The live
+schema and its conditional coverage correction share the six-action limit and exact
+current-source requirements. Clothing recovery retains its separate existing bases.
+
+Possession observations still require semantic interpretation. Object presence,
+study, pointing or contact alone does not establish custody; an ordinary object may
+remain a scene fact or prose without becoming an inventory card. The host validates
+the proposed basis, exact source, identity and ownership. It does not independently
+understand arbitrary prose: a model that incorrectly labels contact as a completed
+acquisition can still propose a structurally valid transfer. Mocked/schema tests
+establish the admission boundary, not a measured reduction in those semantic errors.
 
 An existing object's directly established current body placement uses
 `observed_placement`. Literary narration can establish this fact without a new

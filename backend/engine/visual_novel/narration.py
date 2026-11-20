@@ -1,5 +1,6 @@
 """Visual-novel narration contracts, independent of mechanics and image style."""
 
+from string import Template
 from typing import Any
 
 from backend.core import mature_content_prompts
@@ -31,7 +32,7 @@ Allow the story to develop through conversations, choices and their consequences
 Do not force a predetermined solution or ending onto the player's decisions.
 """
 
-_NARRATION = f"""VISUAL NOVEL NARRATION CONTRACT:
+_NARRATION_TEMPLATE = Template(f"""VISUAL NOVEL NARRATION CONTRACT:
 Respond to the player's latest contribution first. Give each speaking character
 a distinct voice based on established personality, current intention, relationship
 history and what that character actually knows. Express subtext through wording,
@@ -73,16 +74,12 @@ their weight without suspending the world or inserting an obligatory twist.
 Current state constrains canonical facts, not creative initiative. State-changing
 mechanics still require their approved updates; narrative freedom cannot create
 an item in an empty bag, move an absent NPC here or rewrite a completed event.
-NPCs may carry out their own feasible actions without a player command or approval:
-move within access, take/put/drop/use reachable items, act on their own clothing/body
-and initiate interaction. Ground actions in character, motives and capabilities;
-preserve item identities. Neither speech nor a question is required.
+$own_actions
 
 CANON AND AGENCY:
 Honor the resolved player action and approved mechanical outcomes. Use social
 reactions and scene directions as a starting point for autonomous characterization.
-Preserve resolved transfers, failures and elapsed time. New completed NPC item actions
-use the same-turn state check; placement retains identity. Offers/plans are not effects
+Preserve resolved transfers, failures and elapsed time. $item_completion
 or acceptance.
 {PLAYER_ACTION_ATTRIBUTION}
 Player travel must follow
@@ -91,14 +88,10 @@ may choose to disclose what they know, but do not expose hidden data through an
 omniscient narrator. Private hopes are not evidence of mutual feelings; do not
 decide the player's commitments or overwrite established relationships by fiat.
 NPC PRESENCE: Use approved NPC movement in TURN RESOLUTION as authoritative.
-A movable present NPC may also complete a departure through a known open exit
-within its movement permissions. Local departures and returns must be physically
-described, using present/audible/absent appropriately. A same-turn completed-state check
-reconciles these actual movements; poses, thoughts and emotion tags cannot move anyone.
+$departures
 An emotional intention alone does not authorize leaving the room. Never invent a destination or teleport a
 character to explain an earlier inconsistency. Use CURRENT STATE's present cast,
-not everyone mentioned in history. Small gestures may change a pose within the
-same place, but must not contradict an established position or create a new scene.
+not everyone mentioned in history. $gestures
 STORY CLOCK: CURRENT GAME TIME and the approved elapsed duration are authoritative.
 Do not invent minutes passing or decrease a remaining-time countdown when the
 engine clock has not advanced. Derive remaining time from an established deadline
@@ -125,7 +118,56 @@ Write all prose and speech in the session's content language while preserving
 existing names and technical voice tags. Reserve colons for speaker attribution;
 use periods or dashes in narration. Return only narrative text, with no JSON,
 code blocks, state labels, separators or out-of-story analysis.
-"""
+""")
+
+_NARRATION_LEGACY = {
+    "own_actions": (
+        "NPCs may carry out their own feasible actions without a player command or approval:\n"
+        "move within access, take/put/drop/use reachable items, act on their own clothing/body\n"
+        "and initiate interaction. Ground actions in character, motives and capabilities;\n"
+        "preserve item identities. Neither speech nor a question is required."
+    ),
+    "item_completion": (
+        "New completed NPC item actions\n"
+        "use the same-turn state check; placement retains identity. Offers/plans are not effects"
+    ),
+    "departures": (
+        "A movable present NPC may also complete a departure through a known open exit\n"
+        "within its movement permissions. Local departures and returns must be physically\n"
+        "described, using present/audible/absent appropriately. A same-turn completed-state check\n"
+        "reconciles these actual movements; poses, thoughts and emotion tags cannot move anyone."
+    ),
+    "gestures": (
+        "Small gestures may change a pose within the\n"
+        "same place, but must not contradict an established position or create a new scene."
+    ),
+}
+_NARRATION_CONTROLLED = {
+    "own_actions": (
+        "For NPCs without authoritative_command_outcomes, own feasible actions need no player\n"
+        "command or approval: move within access, take/put/drop/use reachable items, act on\n"
+        "their own clothing/body and initiate interaction. Ground actions in character,\n"
+        "motives and capabilities; preserve item identities. Neither speech nor a question is required.\n"
+        "For actors with results, follow AUTHORITATIVE NPC COMMANDS in the current turn contract."
+    ),
+    "item_completion": (
+        "New completed NPC item actions\n"
+        "follow their existing owners, including command publication when supplied; placement\n"
+        "retains identity. Offers/plans are not effects"
+    ),
+    "departures": (
+        "An NPC without authoritative_command_outcomes may also complete a departure\n"
+        "through a known open exit within its movement permissions. Such local departures\n"
+        "and returns must be physically described, using present/audible/absent appropriately;\n"
+        "the same-turn completed-state check reconciles these movements. Command-controlled\n"
+        "actors follow the published outcomes. Poses, thoughts and emotion tags cannot move anyone."
+    ),
+    "gestures": (
+        "Small expressive gestures may vary presentation;\n"
+        "command-owned posture and placement still follow the published results."
+    ),
+}
+_NARRATION = _NARRATION_TEMPLATE.substitute(_NARRATION_LEGACY)
 
 _PACES = {
     "leisurely": (
@@ -170,9 +212,10 @@ def build_static_prompt(
     return _BASE + "\n" + "\n\n".join(blocks)
 
 
-def narration_suffix(state: Any) -> str:
+def narration_suffix(state: Any, *, command_owned: bool = False) -> str:
     """One formatting/agency policy; pace never changes authoritative story facts."""
-    prompt = _NARRATION + "\n" + _PACES[read_settings(state).pace]
+    policy = _NARRATION_TEMPLATE.substitute(_NARRATION_CONTROLLED) if command_owned else _NARRATION
+    prompt = policy + "\n" + _PACES[read_settings(state).pace]
     states = getattr(state, "entity_states", None)
     snapshot = states.get("__manifest_snapshot__") if isinstance(states, dict) else None
     manifest = snapshot.get("original_manifest") if isinstance(snapshot, dict) else None

@@ -10,11 +10,13 @@ from pydantic import BaseModel
 from backend.core.reliability_metrics import record_staging
 from backend.core.state_rejection_trace import reject
 from backend.engine.clothing.context import actor_records
+from backend.engine.npc_actions import narration_fence
 from backend.engine.visual_novel.config import read_settings
 from backend.engine.visual_novel.continuity import PLAYER
 
-from . import bindings, props
+from . import attribution, bindings, command_guard, props
 from .proposals import validate
+from .room_items import placement_targets, visible_targets
 from .state import KEY, digest, project, reconcile
 
 logger = logging.getLogger(__name__)
@@ -28,11 +30,13 @@ class Pending:
     before_props: Any
     cast: list[dict] = field(default_factory=list)
     rows: list[Any] = field(default_factory=list)
+    offered_objects: frozenset[str] | None = None
     extraction: Any = None
     accepted: list[dict] = field(default_factory=list)
     error: str = "The shared state extraction did not complete."
     unconfirmed_sections: frozenset[str] = frozenset()
     reuse: bool = False
+    authority: attribution.Scope | None = None
 
 
 def begin(manager: Any, narration: str, *, reuse: bool = False) -> bool:
@@ -48,6 +52,35 @@ def begin(manager: Any, narration: str, *, reuse: bool = False) -> bool:
         reuse=reuse,
     )
     return True
+
+
+async def prepare_authority(manager: Any) -> None:
+    pending = getattr(manager, "_shared_scene_staging", None)
+    if isinstance(pending, Pending):
+        pending.authority = await attribution.capture(manager)
+
+
+async def refresh_authority(manager: Any) -> None:
+    pending = getattr(manager, "_shared_scene_staging", None)
+    if isinstance(pending, Pending):
+        pending.authority = await attribution.refresh(manager, pending.authority)
+
+
+async def prepare_context(manager: Any, actors: dict, rows: list[Any]) -> dict | None:
+    await prepare_authority(manager)
+    return prepare(manager, actors, rows)
+
+
+async def propose_current(
+    manager: Any, response: Any, *, unconfirmed_sections: frozenset[str] = frozenset()
+) -> None:
+    await refresh_authority(manager)
+    propose(manager, response, unconfirmed_sections=unconfirmed_sections)
+
+
+def authority_instructions(manager: Any) -> str:
+    pending = getattr(manager, "_shared_scene_staging", None)
+    return attribution.INSTRUCTIONS if isinstance(pending, Pending) and pending.authority else ""
 
 
 def _cast(manager: Any, actors: dict, rows: list[Any]) -> list[dict]:
@@ -70,9 +103,11 @@ def prepare(manager: Any, actors: dict, rows: list[Any]) -> dict | None:
     if not isinstance(pending, Pending):
         return None
     pending.rows, pending.cast = rows, _cast(manager, actors, rows)
-    people, previous = bindings.input_cast(
-        pending.cast, project(manager.state, pending.cast), manager.avatar.id
-    )
+    targets = placement_targets(manager.avatar, rows, manager.state)
+    previous = project(manager.state, pending.cast, scene_objects=targets, target_ids=True)
+    objects = visible_targets(targets, previous)
+    pending.offered_objects = frozenset(objects)
+    people, previous = bindings.input_cast(pending.cast, previous, manager.avatar.id)
     items = props.candidates(
         manager.avatar,
         rows,
@@ -83,7 +118,10 @@ def prepare(manager: Any, actors: dict, rows: list[Any]) -> dict | None:
     return {
         "scene_id": pending.scene_id,
         "present_cast": people,
+        "scene_objects": objects,
         "previous_staging": previous,
+        **command_guard.metadata(manager, pending.cast),
+        **attribution.context(manager, pending.authority),
         "owned_items": [
             {
                 "item_id": item["item_id"],
@@ -120,20 +158,29 @@ def approve_items(manager: Any, accepted: list[dict]) -> None:
         pending.accepted = deepcopy(accepted)
 
 
-def invalidate(state: Any, narration: str, reason: str) -> None:
+def invalidate(
+    state: Any,
+    narration: str,
+    reason: str,
+    *,
+    manager: Any = None,
+    cast: list[dict] | None = None,
+    rows: list[Any] | None = None,
+) -> None:
     reject(
         "scene_staging", "unconfirmed", reason, narration=narration, scene_id=state.current_scene_id
     )
     props.invalidate(state)
+    result = {
+        "scene_id": state.current_scene_id,
+        "status": "unconfirmed",
+        "source_hash": digest(narration),
+        "reason": reason,
+        "actors": {},
+    }
     state.entity_states = {
         **(state.entity_states or {}),
-        KEY: {
-            "scene_id": state.current_scene_id,
-            "status": "unconfirmed",
-            "source_hash": digest(narration),
-            "reason": reason,
-            "actors": {},
-        },
+        KEY: command_guard.preserve(manager, result, cast, rows) if manager is not None else result,
     }
 
 
@@ -146,10 +193,31 @@ def apply_extraction(
     accepted: list[dict] | None = None,
     *,
     unconfirmed_sections: frozenset[str] = frozenset(),
+    authority: attribution.Scope | None = None,
+    audit: bool = True,
+    offered_objects: frozenset[str] | None = None,
 ) -> None:
     proposals = extraction
     validated = validate(extraction)
     extraction, rejected = bindings.resolve(validated.value, manager.avatar.id, accepted or [])
+    targets = placement_targets(manager.avatar, rows, manager.state)
+    pending = getattr(manager, "_shared_scene_staging", None)
+    if offered_objects is None and isinstance(pending, Pending):
+        offered_objects = pending.offered_objects
+    original = extraction
+    extraction, sources, external, denied = attribution.admit(
+        manager,
+        extraction,
+        cast,
+        narration,
+        authority,
+        scene_objects=targets,
+        offered_objects=offered_objects,
+    )
+    narration_fence.poses(manager, original, external=external)
+    protected = command_guard.capture(manager, cast, scene_objects=targets)
+    protected = command_guard.excluding(protected, external)
+    extraction = command_guard.filter_changes(extraction, protected)
     result = reconcile(
         manager.state,
         cast,
@@ -160,10 +228,18 @@ def apply_extraction(
         }
         | ({person["id"] for person in cast} if "changes" in unconfirmed_sections else set()),
         invalid_changes=validated.rejected["changes"],
+        resolved_sources=sources,
+        scene_objects=targets,
+        offered_objects=offered_objects,
     )
+    result["rejected"] += len(denied)
+    if denied:
+        result["rejected_command_pose_changes"] = denied
     result["explicit_rejected"] += validated.rejected["explicit"]
     result["rejected_prop_references"] = rejected
-    record_staging(result, len(extraction.changes) + validated.rejected["changes"])
+    result = command_guard.restore(result, protected)
+    if audit:
+        record_staging(result, len(extraction.changes) + validated.rejected["changes"])
     valid = props.candidates(
         manager.avatar, rows, manager.state, {row.id for row in rows if row.entity_type == "NPC"}
     )
@@ -187,7 +263,7 @@ def apply_extraction(
         props.invalidate(manager.state)
     if unconfirmed_sections:
         result["unconfirmed_sections"] = sorted(unconfirmed_sections)
-    if any(
+    if audit and any(
         result.get(key)
         for key in (
             "rejected",
@@ -234,16 +310,33 @@ def consume(manager: Any, narration: str, *, completed: bool) -> bool:
         or pending.scene_id != manager.state.current_scene_id
         or pending.source_hash != digest(narration)
     ):
-        invalidate(manager.state, narration, "The shared staging source no longer matches.")
+        invalidate(
+            manager.state,
+            narration,
+            "The shared staging source no longer matches.",
+            manager=manager,
+        )
         return True
-    if pending.error:
-        if pending.reuse:
-            return True
-        invalidate(manager.state, narration, pending.error)
+    if pending.error and pending.reuse:
         return True
+    current_cast = None
     try:
-        current_cast = _cast(manager, actor_records(manager, pending.rows), pending.rows)
-        if current_cast != pending.cast:
+        current_cast = (
+            _cast(manager, actor_records(manager, pending.rows), pending.rows)
+            if pending.cast
+            else None
+        )
+        if pending.error:
+            invalidate(
+                manager.state,
+                narration,
+                pending.error,
+                manager=manager,
+                cast=current_cast,
+                rows=pending.rows,
+            )
+            return True
+        if current_cast is None or current_cast != pending.cast:
             raise ValueError("The present cast or its position changed during extraction.")
         apply_extraction(
             manager,
@@ -253,8 +346,17 @@ def consume(manager: Any, narration: str, *, completed: bool) -> bool:
             pending.extraction,
             pending.accepted,
             unconfirmed_sections=pending.unconfirmed_sections,
+            authority=pending.authority,
+            offered_objects=pending.offered_objects,
         )
     except Exception:
         logger.exception("Shared scene staging failed for session %s", manager.state.session_id)
-        invalidate(manager.state, narration, "The shared staging response could not be confirmed.")
+        invalidate(
+            manager.state,
+            narration,
+            "The shared staging response could not be confirmed.",
+            manager=manager,
+            cast=current_cast,
+            rows=pending.rows,
+        )
     return True

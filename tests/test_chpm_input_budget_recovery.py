@@ -7,6 +7,7 @@ from types import SimpleNamespace
 import pytest
 from sqlalchemy import select
 
+from backend.core.llm_schema_compaction import share_schema
 from backend.engine.chpm import continuation, inference, json_contract, proposal_draft, runtime
 from backend.engine.chpm.cognitive_context import ContextBudgetError
 from backend.engine.chpm.schema import KernelState, Settings, Usage
@@ -42,7 +43,9 @@ def test_lossless_wire_encoding_fits_without_raising_the_saved_input_limit():
     system, content = inference.compose(instruction, payload, proposal_draft.Draft, {})
     inference.reserve(settings, usage, len(system) + len(content))
     assert json.loads(content) == payload
-    assert json.loads(system.split("JSON schema:\n", 1)[1]) == schema
+    assert json.loads(system.split("JSON schema:\n", 1)[1]) == share_schema(
+        schema, short_names=True
+    )
     assert settings.max_input_chars == 24000 and usage.calls == 1
 
 

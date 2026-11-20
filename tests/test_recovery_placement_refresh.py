@@ -87,3 +87,48 @@ def test_a_current_exact_proof_is_a_noop_and_no_proposal_never_changes_state():
         changed, accepted, errors, skipped = evaluate(current, response, True, "session")
         assert not accepted and not errors and not skipped
         assert changed["NPC"] == before
+
+
+@pytest.mark.parametrize("known_regions", [[], ["torso"]])
+def test_coarse_recovery_retains_known_regions_until_evidenced_restoration(known_regions):
+    text = "Anna has slipped one arm out of her shirt."
+    current = context(None)
+    current["messages"][0]["content"] = text
+    current["actor"]["visual_profile"]["worn"][0]["uncovered_regions"] = known_regions
+    data = proposal().entries[0].model_dump()
+    data["action"]["evidence"] = text
+    data.update(partially_removed=True, uncovered_regions=[], placement_evidence=text)
+    coarse = RecoveryProposal(entries=[RecoveryEntry.model_validate(data)])
+    changed, accepted, errors, skipped = evaluate(current, coarse, True, "session")
+    assert not errors and not skipped
+    assert accepted[0]["partially_removed"] is True
+    row = changed["NPC"]["visual_profile"]["worn"][0]
+    assert row["partially_removed"] and row["uncovered_regions"] == known_regions
+    assert row["source"]["evidence"] == text
+    current["actor"] = changed["NPC"]
+    assert not evaluate(current, coarse, True, "session")[1]
+    data.update(partially_removed=False, placement_evidence="")
+    unchanged = RecoveryProposal(entries=[RecoveryEntry.model_validate(data)])
+    assert not evaluate(current, unchanged, True, "session")[1]
+    normal = "Anna pulls the shirt fully back into place."
+    current["messages"][0]["content"] = normal
+    data["action"]["evidence"] = normal
+    data.update(restore_coverage=True, placement_evidence=normal)
+    restored = RecoveryProposal(entries=[RecoveryEntry.model_validate(data)])
+    changed, accepted, errors, skipped = evaluate(current, restored, True, "session")
+    assert accepted and not errors and not skipped
+    assert changed["NPC"]["visual_profile"]["worn"] == [
+        {"item_id": "SHIRT", "uncovered_regions": []}
+    ]
+
+
+def test_coarse_recovery_requires_exact_placement_evidence():
+    current = context(None)
+    data = proposal().entries[0].model_dump()
+    data.update(partially_removed=True, uncovered_regions=[], placement_evidence="")
+    for evidence in ("", TEXT[:3], "Not a quote from the source."):
+        data["placement_evidence"] = evidence
+        changed, accepted, errors, _ = evaluate(
+            current, RecoveryProposal(entries=[RecoveryEntry.model_validate(data)]), True, "session"
+        )
+        assert errors and not accepted and changed["NPC"] == current["actor"]

@@ -144,7 +144,7 @@ async def _repair_schema(
         "New clothing requires kind=clothing, garment metadata and nonempty wearable_slots. "
         "New ordinary body objects require kind=ordinary, no clothing metadata, and a worn action with an explicit attachment_slot. "
         "Use only schema enums, integer layers 0–4 and JSON booleans. "
-        "Keep uncovered_regions and placement_evidence on the entry, not inside action."
+        "Keep uncovered_regions, partially_removed and placement_evidence on the entry, not inside action."
     )
     try:
         return await _request(llm, prompt + feedback, payload, model, session_id, "schema_retry")

@@ -11,7 +11,13 @@ from backend.engine.visual_novel.config import read_settings
 
 
 def observations(
-    state: Any, cast: list[dict], items: list[dict], observer_id: str, player_id: str
+    state: Any,
+    cast: list[dict],
+    items: list[dict],
+    observer_id: str,
+    player_id: str,
+    *,
+    scene_objects: dict[str, str | None] | None = None,
 ) -> tuple[tuple[CharacterPose, ...] | None, tuple[PlacedItem, ...] | None, dict | None]:
     if not read_settings(state).scene_staging:
         return None, None, None
@@ -22,7 +28,7 @@ def observations(
         and data.get("status") == "ready"
         and data.get("scene_id") == state.current_scene_id
     ):
-        poses = _poses(state, cast, player_id)
+        poses = _poses(state, cast, player_id, scene_objects)
     placed = None
     if props.KEY in (state.entity_states or {}):
         placed = _items(state, items, observer_id, player_id)
@@ -37,10 +43,12 @@ def observations(
     )
 
 
-def _poses(state: Any, cast: list[dict], player_id: str) -> tuple[CharacterPose, ...] | None:
+def _poses(
+    state: Any, cast: list[dict], player_id: str, scene_objects: dict[str, str | None] | None
+) -> tuple[CharacterPose, ...] | None:
     result = []
     try:
-        projected = project(state, cast)
+        projected = project(state, cast, scene_objects=scene_objects)
     except (KeyError, TypeError, ValueError):
         return None
     for actor_id, raw in sorted(projected.items()):

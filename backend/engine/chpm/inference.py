@@ -3,6 +3,7 @@
 import asyncio
 import json
 import logging
+from copy import deepcopy
 from typing import Any, TypeVar
 
 from pydantic import BaseModel, ValidationError
@@ -10,7 +11,15 @@ from pydantic import BaseModel, ValidationError
 from backend.core.llm_completion_capture import Completion, capture_completions
 from backend.core.llm_router import GameMasterLLM
 from backend.core.llm_schema_choices import SchemaChoiceError
-from backend.engine.chpm import json_contract, parallel_budget, performance, wire_normalization
+from backend.core.llm_schema_compaction import share_schema
+from backend.engine.chpm import (
+    json_contract,
+    parallel_budget,
+    performance,
+    required_tools,
+    tool_profiles,
+    wire_normalization,
+)
 from backend.engine.chpm.errors import InferenceUnavailableError, RecoverableChpmError
 from backend.engine.chpm.schema import Settings, Usage
 
@@ -30,16 +39,27 @@ class OutputBudgetError(RecoverableChpmError):
     """Do not repeat a cut-off response with the same output budget."""
 
 
+class ToolEnvelopeError(InvalidResponseError):
+    """A completed structural error that the owning workflow may explain once."""
+
+    def __init__(
+        self, message: str, *, code: str = "invalid_structure", call_ids: tuple[str, ...] = ()
+    ) -> None:
+        super().__init__(message)
+        self.code = code
+        self.call_ids = call_ids
+
+
 def check_output_budget(
     records: list[Completion], limit: int, phase: str, *, invalid_json: bool = False
 ) -> None:
     if len(records) != 1:
         return
     record = records[0]
-    explicit = isinstance(record.finish_reason, str) and record.finish_reason in {
-        "length",
-        "max_tokens",
-    }
+    explicit = any(
+        isinstance(reason, str) and reason in {"length", "max_tokens"}
+        for reason in (record.finish_reason, record.tool_finish_reason)
+    )
     inferred = (
         invalid_json
         and record.finish_reason is None
@@ -67,7 +87,9 @@ def compose(
     instruction: str, payload: dict, schema: type[BaseModel], identifiers: dict | None
 ) -> tuple[str, str]:
     try:
-        contract = json_contract.response_schema(schema, identifiers)
+        contract = share_schema(
+            json_contract.response_schema(schema, identifiers), short_names=True
+        )
     except SchemaChoiceError as exc:
         raise RecoverableChpmError(
             "CHPM has no usable source-bound contract. No request was sent; no decision was applied."
@@ -152,9 +174,13 @@ async def request(
         candidate = json_contract.decode(result)
         candidate, corrections = wire_normalization.normalize(schema, candidate, identifiers)
         usage.format_repairs += len(corrections)
+        # Shape errors and the existing choice-ground hint share one bounded repair.
+        # Check handles against the untouched raw object before canonical conversion.
+        parsed = schema.model_validate(deepcopy(candidate))
+        json_contract.validate_identifiers(schema, candidate, identifiers)
         if corrections:
             logger.info("CHPM wire format corrected: phase=%s fields=%s", phase, corrections)
-        return schema.model_validate(candidate)
+        return parsed
     except ValueError as exc:
         check_output_budget(
             completions, llm.max_tokens, phase, invalid_json=isinstance(exc, json.JSONDecodeError)
@@ -162,6 +188,25 @@ async def request(
         raise InvalidResponseError(
             f"CHPM {phase} response invalid: {validation_feedback(exc)}", candidate=candidate
         ) from exc
+
+
+def tool_input_size(
+    llm: Any, messages: list[dict], tools: list[dict], *, require_tools: bool = False
+) -> int:
+    sizing = getattr(llm, "input_size", None)
+    if callable(sizing):
+        size: int = (
+            sizing(messages, tools, require_tools=True)
+            if require_tools
+            else sizing(messages, tools)
+        )
+        return size
+    payload = {
+        "messages": messages,
+        "tools": tools,
+        **({"tool_choice": "required"} if require_tools else {}),
+    }
+    return len(json.dumps(payload, ensure_ascii=False))
 
 
 async def tool_request(
@@ -174,17 +219,18 @@ async def tool_request(
     llm: Any,
     phase: str = "agent_lookup",
     output_limit: int = 768,
+    require_tools: bool = False,
 ) -> Any:
     """Reserve one native round through the same deadlines, admission and timings."""
     from backend.core.llm_tool_turn import InvalidToolTurnError
 
-    sizing = getattr(llm, "input_size", None)
-    size = (
-        sizing(messages, tools)
-        if callable(sizing)
-        else len(json.dumps({"messages": messages, "tools": tools}, ensure_ascii=False))
-    )
-    reserve(settings, usage, size)
+    if getattr(llm, "protocol", "native") != "json":
+        tool_profiles.validate_native(settings.tool_profile, tools)
+    try:
+        names = required_tools.names(tools) if require_tools else None
+    except InvalidToolTurnError as exc:
+        raise ToolEnvelopeError(str(exc), code=exc.code) from exc
+    reserve(settings, usage, tool_input_size(llm, messages, tools, require_tools=require_tools))
     parallel_budget.dispatched(phase)
     llm.max_tokens = min(llm.max_tokens, settings.max_output_tokens, output_limit)
     llm.enable_thinking = False
@@ -195,15 +241,25 @@ async def tool_request(
                     messages,
                     tools,
                     llm.model,
+                    **({"tool_choice": "required"} if require_tools else {}),
                     game_id=manager.game_id,
                     operation="chpm",
                     phase=phase,
                 ),
                 timeout=float(llm.request_timeout),
             )
+            if names is not None:
+                required_tools.check(result, names)
     except InvalidToolTurnError as exc:
-        check_output_budget(completions, llm.max_tokens, phase)
-        raise InvalidResponseError("CHPM received an invalid native tool envelope.") from exc
+        check_output_budget(completions, llm.max_tokens, phase, invalid_json=True)
+        rejected_finish = exc.code == "unsupported_finish" or any(
+            record.tool_rejected for record in completions
+        )
+        if rejected_finish:
+            raise InvalidResponseError("CHPM received an unsupported tool completion.") from exc
+        raise ToolEnvelopeError(
+            "CHPM received an invalid tool envelope.", code=exc.code, call_ids=exc.call_ids
+        ) from exc
     except Exception as exc:
         raise InferenceUnavailableError(
             f"CHPM {phase} failed ({type(exc).__name__}). No tool request was applied."

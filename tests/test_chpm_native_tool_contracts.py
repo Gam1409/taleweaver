@@ -34,12 +34,14 @@ def write(value, **arguments):
 def test_native_functions_are_distinct_and_only_notebook_tools_are_optional():
     tools = tool_definitions()
     names = [tool["function"]["name"] for tool in tools]
-    assert len(names) == len(set(names)) == 12
+    assert len(names) == len(set(names)) == 14
     assert {tool["function"]["name"] for tool in tool_definitions(False)} == {
         "search_memory",
         "read_memory",
         "inspect_self",
         "inspect_entity",
+        "find_entity",
+        "inspect_scene",
         "visible_clothing",
         "inspect_beliefs",
         "read_belief_basis",
@@ -53,9 +55,14 @@ def test_native_functions_are_distinct_and_only_notebook_tools_are_optional():
 
 
 def test_canonical_tool_metadata_uses_only_the_immutable_capability_allowlist():
+    from backend.engine.npc_actions.contracts import ACTION_MODELS
+    from backend.engine.npc_actions.tool_schema import definitions
+
     names = known_tool_names()
     assert isinstance(names, frozenset)
-    assert names == {tool["function"]["name"] for tool in tool_definitions()}
+    assert names == {
+        tool["function"]["name"] for tool in [*tool_definitions(), *definitions(set(ACTION_MODELS))]
+    }
     assert {canonical_tool_name(name) for name in names} == names
 
 
@@ -71,6 +78,8 @@ def test_unknown_tool_names_cannot_copy_private_text_into_metadata(name):
     [
         "inspect_self",
         "inspect_entity",
+        "find_entity",
+        "inspect_scene",
         "notebook_info",
         "notebook_read",
         "search_memory",

@@ -9,7 +9,7 @@ from uuid import uuid4
 
 from backend.core.llm_completion_capture import Completion, capture_completions
 from backend.core.llm_tool_turn import InvalidToolTurnError, ToolCall, ToolTurn
-from backend.engine.chpm import json_contract
+from backend.engine.chpm import json_contract, json_tool_output, required_tools
 from backend.engine.chpm.native_tool_contracts import canonical_tool_name
 from backend.engine.chpm.notebook.codec import decode, preflight
 
@@ -129,17 +129,12 @@ def _reference_results(conversation: list[dict]) -> list[dict]:
 
 
 def _schema_annotations(node: Any) -> Any:
-    if isinstance(node, list):
-        return [_schema_annotations(item) for item in node]
-    if not isinstance(node, dict):
-        return node
-    return {
-        key: {name: _schema_annotations(schema) for name, schema in value.items()}
-        if key in {"properties", "$defs"}
-        else _schema_annotations(value)
-        for key, value in node.items()
-        if key not in {"title", "default"}
-    }
+    return _map_schema(
+        node,
+        lambda schema: {
+            key: value for key, value in schema.items() if key not in {"title", "default"}
+        },
+    )
 
 
 def _map_schema(node: Any, visit: Callable[[dict], dict]) -> Any:
@@ -185,7 +180,57 @@ def _replace_fragment(node: dict, signature: str, reference: dict) -> dict:
     return cast(dict, _map_schema(node, replace))
 
 
+def _parameter_target(schema: dict, reference: str) -> dict:
+    if reference == "#":
+        return schema
+    node: Any = schema
+    for raw in reference.removeprefix("#/").split("/"):
+        part = raw.replace("~1", "/").replace("~0", "~")
+        node = node[int(part)] if isinstance(node, list) else node[part]
+    if not isinstance(node, dict):
+        raise ValueError("A parameter schema reference must select a schema object.")
+    return node
+
+
+def _global_parameters(schema: dict, definitions: dict) -> dict:
+    """Give each local reference a stable payload-root handle before factoring moves nodes."""
+    references: dict[str, str] = {}
+    pending: list[tuple[str, dict]] = []
+
+    def address(reference: str) -> str:
+        if reference not in references:
+            key = f"d{len(definitions)}"
+            definitions[key] = {}
+            references[reference] = f"#/$defs/{key}"
+            pending.append((key, _parameter_target(schema, reference)))
+        return references[reference]
+
+    def relocate(node: dict) -> dict:
+        reference = node.get("$ref")
+        if isinstance(reference, str) and reference.startswith("#"):
+            node["$ref"] = address(reference)
+        node.pop("$defs", None)
+        return node
+
+    def mapped(node: dict) -> dict:
+        return cast(
+            dict,
+            _map_schema({key: value for key, value in node.items() if key != "$defs"}, relocate),
+        )
+
+    for name in schema.get("$defs", {}):
+        address("#/$defs/" + name.replace("~", "~0").replace("/", "~1"))
+    result = mapped(schema)
+    index = 0
+    while index < len(pending):
+        name, node = pending[index]
+        definitions[name] = mapped(node)
+        index += 1
+    return result
+
+
 def _catalog(tools: list[dict]) -> dict:
+    definitions: dict = {}
     result: dict = {
         "functions": [
             {
@@ -194,17 +239,22 @@ def _catalog(tools: list[dict]) -> dict:
                     for key, value in tool["function"].items()
                     if key not in {"parameters", "strict"}
                 },
-                "parameters": _schema_annotations(tool["function"]["parameters"]),
+                "parameters": _global_parameters(
+                    _schema_annotations(tool["function"]["parameters"]), definitions
+                ),
             }
             for tool in tools
         ],
         "parameter_schemas": {},
     }
+    if definitions:
+        result["$defs"] = definitions
     for _ in range(16):
         found: dict = {}
         for schema in [
             *(item["parameters"] for item in result["functions"]),
             *result["parameter_schemas"].values(),
+            *definitions.values(),
         ]:
             _schema_fragments(schema, found)
         reference = {"$ref": f"#/parameter_schemas/p{len(result['parameter_schemas'])}"}
@@ -224,10 +274,18 @@ def _catalog(tools: list[dict]) -> dict:
             for name, schema in result["parameter_schemas"].items()
         }
         result["parameter_schemas"][reference["$ref"].rsplit("/", 1)[-1]] = value
+        definitions.update(
+            {
+                name: _replace_fragment(schema, signature, reference)
+                for name, schema in definitions.items()
+            }
+        )
     return result
 
 
-def compose(messages: list[dict], tools: list[dict]) -> tuple[str, str]:
+def compose(
+    messages: list[dict], tools: list[dict], *, require_tools: bool = False
+) -> tuple[str, str]:
     """Factor context, instructions, results and schemas without trimming their contents."""
     context = _host_context(messages)
     conversation = _conversation(messages, context)
@@ -238,13 +296,29 @@ def compose(messages: list[dict], tools: list[dict]) -> tuple[str, str]:
         **_catalog(tools),
     }
     instructions = [message["content"] for message in messages if message.get("role") == "system"]
-    return "\n\n".join([INSTRUCTIONS, *instructions]), json.dumps(
+    transport = INSTRUCTIONS
+    if require_tools:
+        transport = transport.replace(
+            "At most two requests; [] when ready.",
+            "Return at least one and at most two requests using the offered action functions.",
+        )
+    elif any(item["function"]["name"] == "submit_decision" for item in tools):
+        transport = transport.replace(
+            "At most two requests; [] when ready.",
+            "At most two requests. When ready, call submit_decision alone.",
+        )
+        instructions.append(
+            "Put the complete proposal inside the arguments object of one request named "
+            "submit_decision. Proposal fields are never top-level response fields. "
+            "Do not return a bare proposal or empty requests array."
+        )
+    return "\n\n".join([transport, *instructions]), json.dumps(
         payload, ensure_ascii=False, separators=(",", ":")
     )
 
 
-def input_size(messages: list[dict], tools: list[dict]) -> int:
-    system, payload = compose(messages, tools)
+def input_size(messages: list[dict], tools: list[dict], *, require_tools: bool = False) -> int:
+    system, payload = compose(messages, tools, require_tools=require_tools)
     return len(system) + len(payload)
 
 
@@ -288,12 +362,20 @@ def _calls(raw: str) -> tuple[ToolCall, ...]:
         preflight(raw, extra_depth=4, extra_nodes=256, max_transport_bytes=MAX_PLAN_CHARS * 4)
         plan = json_contract.decode(raw)
         requests = plan.get("requests")
-        if (
-            set(plan) - {"purpose", "requests"}
-            or not isinstance(requests, list)
-            or len(requests) > 2
-        ):
-            raise ValueError("The portable function response needs at most two requests.")
+        if not isinstance(requests, list):
+            raise InvalidToolTurnError(
+                "The portable function response needs a requests array.", code="missing_requests"
+            )
+        if set(plan) - {"purpose", "requests"}:
+            raise InvalidToolTurnError(
+                "The portable function response has unexpected top-level fields.",
+                code="unexpected_fields",
+            )
+        if len(requests) > json_tool_output.MAX_REQUESTS:
+            raise InvalidToolTurnError(
+                "The portable function response needs at most two requests.",
+                code="too_many_requests",
+            )
         batch = uuid4().hex
         calls = []
         for index, item in enumerate(requests):
@@ -304,9 +386,14 @@ def _calls(raw: str) -> tuple[ToolCall, ...]:
             encoded.encode("utf-8")
             calls.append(ToolCall(f"json_{batch}_{index}", name, encoded))
         return tuple(calls)
+    except InvalidToolTurnError:
+        raise
     except (ValueError, TypeError, AttributeError, RecursionError, OverflowError) as exc:
         raise InvalidToolTurnError(
-            "The portable function response must be complete, finite JSON with a requests array."
+            "The portable function response must be complete, finite JSON with a requests array.",
+            code=json_tool_output.syntax_error_code(exc)
+            if isinstance(exc, json.JSONDecodeError)
+            else "invalid_json",
         ) from exc
 
 
@@ -314,7 +401,8 @@ def _turn(raw: str, completions: list[Completion]) -> ToolTurn:
     record = completions[0] if len(completions) == 1 else None
     if record and record.tool_rejected:
         raise InvalidToolTurnError(
-            "The portable function response has an unsupported finish reason."
+            "The portable function response has an unsupported finish reason.",
+            code="unsupported_finish",
         )
     reason = (record.tool_finish_reason or record.finish_reason) if record else None
     usage = {"completion_tokens": record.completion_tokens} if record else None
@@ -371,8 +459,13 @@ class JsonToolPort:
     def request_timeout(self, value: float) -> None:
         self.inner.request_timeout = value
 
-    def input_size(self, messages: list[dict], tools: list[dict]) -> int:
-        return input_size(messages, tools)
+    def input_size(
+        self, messages: list[dict], tools: list[dict], *, require_tools: bool = False
+    ) -> int:
+        response_format = json_tool_output.selected(self.inner, tools, require_tools=require_tools)
+        return input_size(messages, tools, require_tools=require_tools) + json_tool_output.size(
+            response_format
+        )
 
     async def aexecute_tool_turn(
         self,
@@ -387,11 +480,12 @@ class JsonToolPort:
         phase: str | None = None,
         metadata: dict | None = None,
     ) -> ToolTurn:
-        if tool_choice != "auto":
+        if tool_choice not in ("auto", "required"):
             raise InvalidToolTurnError(
-                "The portable function protocol requires automatic selection."
+                "The portable function protocol supports auto or required selection."
             )
-        system, payload = compose(messages, tools)
+        required_names = required_tools.names(tools) if tool_choice == "required" else None
+        system, payload = compose(messages, tools, require_tools=required_names is not None)
         options: dict[str, Any] = {
             key: value
             for key, value in {
@@ -404,8 +498,16 @@ class JsonToolPort:
             if value is not None
         }
         method = self.inner.aexecute_simple_task
+        response_format = json_tool_output.selected(
+            self.inner, tools, model=model, require_tools=required_names is not None
+        )
+        if response_format is not None:
+            options["response_format"] = response_format
         if "single_attempt" in inspect.signature(method).parameters:
             options["single_attempt"] = True
         with capture_completions() as completions:
             raw = await method(system, payload, model, **options)
-        return _turn(raw, completions)
+        turn = _turn(raw, completions)
+        if required_names is not None:
+            required_tools.check(turn, required_names)
+        return turn

@@ -2412,6 +2412,7 @@ watch(
               :personality="form.npc_personality_settings"
               :characters="editorNpcs.map((actor: any) => ({ id: actor.id, name: actor.name || actor.id }))"
               :is-vn="form.rule_enforcement_mode === 'vn'"
+              :host-mode="form.rule_enforcement_mode"
               :busy="isSaving"
               @update:living-world="form.living_world_settings = $event"
               @update:personality="form.npc_personality_settings = $event"

@@ -51,6 +51,28 @@ def _remove_previous_owners(
             states.setdefault(entity.id, {})["inventory"] = deepcopy(kept)
 
 
+def _actual_owners(
+    avatar: Avatar, entities: list[WorldEntity], states: dict
+) -> dict[str, set[str]]:
+    """Inspect this owner's working records, including holders now outside player visibility."""
+    result: dict[str, set[str]] = {}
+    carried = [*(avatar.inventory or []), *(avatar.equipment or {}).values()]
+    for item in carried:
+        if identifier := _item_id(item):
+            result.setdefault(identifier, set()).add(PLAYER)
+    for entity in entities:
+        for item in _holder_inventory(entity, states):
+            if identifier := _item_id(item):
+                result.setdefault(identifier, set()).add(entity.id)
+        override = states.get(entity.id, {})
+        if entity.entity_type == "OBJECT" and not (
+            override.get("is_in_inventory", entity.is_in_inventory)
+            or override.get("is_hidden", entity.is_hidden)
+        ):
+            result.setdefault(entity.id, set()).add(SCENE)
+    return result
+
+
 def materialize_scene_possession(
     db: AsyncSession, state: SessionState, item: InventoryItem
 ) -> WorldEntity:
@@ -83,9 +105,13 @@ async def sync_vn_ownership(
     db: AsyncSession, state: SessionState, avatar: Avatar, event: GameEvent, states: dict[str, Any]
 ) -> bool:
     """Run after item application and before legacy NPC cleanup; proposals are prevalidated."""
+    from backend.engine.visual_novel.player_items import complete
+
     destinations = _destinations(event)
     removed = set(event.deleted_entities or [])
     if not destinations and not removed:
+        # Guardrails may remove every proposed mutation; that is not an applied plan.
+        complete(event, {}, set(), {})
         return False
     entities = list(
         (await db.execute(select(WorldEntity).where(WorldEntity.session_id == state.session_id)))
@@ -126,4 +152,6 @@ async def sync_vn_ownership(
     }
     for item_id in removed:
         states.setdefault(item_id, {}).update(is_in_inventory=False, is_hidden=True)
+    # Receipts describe actual storage after cleanup, not the proposal's expected result.
+    complete(event, destinations, removed, _actual_owners(avatar, list(by_id.values()), states))
     return True

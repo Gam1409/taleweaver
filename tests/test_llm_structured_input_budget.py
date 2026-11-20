@@ -22,7 +22,7 @@ def input_size(kwargs):
     )
 
 
-@pytest.mark.parametrize("mode", ["prompt", "json_schema"])
+@pytest.mark.parametrize("mode", ["prompt", "json_object", "json_schema"])
 @pytest.mark.parametrize("single_attempt", [False, True])
 async def test_exact_prepared_budget_builds_once_and_preserves_typed_result(
     monkeypatch, mode, single_attempt
@@ -47,7 +47,7 @@ async def test_exact_prepared_budget_builds_once_and_preserves_typed_result(
     assert input_size(json.loads(seen[0].content)) == measured
 
 
-@pytest.mark.parametrize("mode", ["prompt", "json_schema"])
+@pytest.mark.parametrize("mode", ["prompt", "json_object", "json_schema"])
 @pytest.mark.parametrize("single_attempt", [False, True])
 async def test_prepared_budget_rejects_before_logging_or_http(monkeypatch, mode, single_attempt):
     async def unexpected(_request):

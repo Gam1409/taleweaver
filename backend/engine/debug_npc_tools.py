@@ -15,9 +15,11 @@ from backend.engine.clothing.profiles import (
     garment_for_item,
     load_profile,
     owned_items,
+    placement_profile,
     validate_profile,
 )
-from backend.engine.clothing.schema import Garment, VisualProfile, WornItem
+from backend.engine.clothing.projection import item_wear_state, known_worn_item_ids
+from backend.engine.clothing.schema import Garment, WornItem
 from backend.engine.clothing.wardrobe_preferences import read_preferences
 from backend.models.session_state import SessionState
 from backend.models.world_entity import WorldEntity, WorldScene
@@ -47,7 +49,7 @@ def wardrobe_info(entity: WorldEntity, entities: list[WorldEntity], states: dict
     items = owned_items(resolved_inventory(inventory, entities, states))
     raw = override.get("visual_profile", entity.visual_profile)
     profile = load_profile(raw)
-    worn = {row.item_id for row in profile.worn} if profile else set()
+    worn = {row.item_id: row for row in profile.worn} if profile else {}
     clothes = []
     for identifier, item in items.items():
         garment = garment_for_item(item)
@@ -57,21 +59,16 @@ def wardrobe_info(entity: WorldEntity, entities: list[WorldEntity], states: dict
             and str(item.get("item_type", "")).upper() not in {"CLOTHING", "WEARABLE"}
         ):
             continue
+        placement = worn.get(identifier)
         clothes.append(
             {
                 **item,
                 "clothing": garment.model_dump() if garment else None,
                 "worn": identifier in worn,
-                "uncovered_regions": next(
-                    (row.uncovered_regions for row in profile.worn if row.item_id == identifier), []
-                )
-                if profile
-                else [],
-                "attachment_slot": next(
-                    (row.attachment_slot for row in profile.worn if row.item_id == identifier), None
-                )
-                if profile
-                else None,
+                "wear_status": item_wear_state(raw, list(items.values()), identifier),
+                "uncovered_regions": placement.uncovered_regions if placement else [],
+                "attachment_slot": placement.attachment_slot if placement else None,
+                "partially_removed": bool(placement and placement.partially_removed),
             }
         )
     preview = states.get("__wardrobe_recovery__") or {}
@@ -89,6 +86,8 @@ def wardrobe_info(entity: WorldEntity, entities: list[WorldEntity], states: dict
                 "skipped",
                 "model_role",
                 "rejected_entries",
+                "review_entries",
+                "manual_indices",
                 "rejected_sources",
                 "mention_checks",
                 "context_messages",
@@ -99,7 +98,7 @@ def wardrobe_info(entity: WorldEntity, entities: list[WorldEntity], states: dict
     return {
         "items": clothes,
         "scene_items": scene_items(entity, entities, states),
-        "profile_known": profile is not None,
+        "profile_known": known_worn_item_ids(raw, list(items.values())) is not None,
         "recovery": recovery,
         "preferences": read_preferences(entity, states),
     }
@@ -244,23 +243,19 @@ async def _edit_clothing(db: AsyncSession, state: SessionState, edit: WardrobeEd
     item = {**original, **item}
     items[edit.item_id] = item
     raw = override.get("visual_profile", npc.visual_profile)
-    profile = load_profile(raw)
-    if profile is None and raw:
-        raise ValueError("Existing visual profile is invalid; repair it before editing clothing.")
-    profile = profile or VisualProfile()
-    uncovered = next(
-        (row.uncovered_regions for row in profile.worn if row.item_id == edit.item_id), []
-    )
+    profile = placement_profile(raw, list(items.values()), edit.item_id)
+    previous = next((row for row in profile.worn if row.item_id == edit.item_id), None)
     profile.worn = [row for row in profile.worn if row.item_id != edit.item_id]
     if edit.worn:
-        profile.worn.append(
-            WornItem(
-                item_id=edit.item_id,
-                uncovered_regions=[
-                    region for region in uncovered if region in edit.clothing.coverage
-                ],
-            )
+        worn = (
+            previous
+            if previous and not previous.attachment_slot
+            else WornItem(item_id=edit.item_id)
         )
+        worn.uncovered_regions = [
+            region for region in worn.uncovered_regions if region in edit.clothing.coverage
+        ]
+        profile.worn.append(worn)
     profile = validate_profile(profile.model_dump(), list(items.values()))
     # Update only the edited entry; preserve unrelated inventory representations/metadata.
     updated = [

@@ -1,16 +1,16 @@
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { BookOpen, BrainCircuit, Globe, MessageCircle, SlidersHorizontal, Users, X } from 'lucide-vue-next'
 import { useDialogFocus } from '@/composables/useDialogFocus'
 
 type Section = 'story' | 'memory' | 'characters' | 'living_world' | 'npc_personality'
-const props = defineProps<{ section: Section; saving?: boolean }>()
+const props = defineProps<{ section: Section; saving?: boolean; mode?: string }>()
 const emit = defineEmits<{ 'update:section': [value: Section]; close: []; save: [] }>()
 const dialog = ref<HTMLElement | null>(null)
 const content = ref<HTMLElement>()
 const wide = ref(false)
 let media: MediaQueryList | undefined
-const sections = [
+const sections = computed(() => [
   {
     id: 'story' as const,
     label: 'Story & world',
@@ -25,8 +25,13 @@ const sections = [
   },
   { id: 'characters' as const, label: 'Characters', hint: 'Portrait presentation', icon: Users },
   { id: 'living_world' as const, label: 'Living World', hint: 'World simulation', icon: Globe },
-  { id: 'npc_personality' as const, label: 'NPC Personality', hint: 'Decisions and private memory', icon: MessageCircle }
-]
+  {
+    id: 'npc_personality' as const,
+    label: props.mode === 'rpg' ? 'NPC combat actions' : 'NPC Personality',
+    hint: props.mode === 'rpg' ? 'Authored ability choices' : 'Decisions and private memory',
+    icon: MessageCircle
+  }
+])
 useDialogFocus(dialog, () => emit('close'))
 watch(
   () => props.section,
@@ -52,7 +57,7 @@ async function select(value: Section, focus = false) {
     dialog.value?.querySelector<HTMLButtonElement>(`[data-settings-tab="${value}"]`)?.focus()
 }
 function onNavKey(event: KeyboardEvent) {
-  const index = sections.findIndex(section => section.id === props.section)
+  const index = sections.value.findIndex(section => section.id === props.section)
   if (!['ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key))
     return
   event.preventDefault()
@@ -61,9 +66,9 @@ function onNavKey(event: KeyboardEvent) {
     event.key === 'Home'
       ? 0
       : event.key === 'End'
-        ? sections.length - 1
-        : (index + delta + sections.length) % sections.length
-  void select(sections[next]!.id, true)
+        ? sections.value.length - 1
+        : (index + delta + sections.value.length) % sections.value.length
+  void select(sections.value[next]!.id, true)
 }
 async function revealErrors() {
   await nextTick()

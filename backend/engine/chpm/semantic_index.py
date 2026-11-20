@@ -14,6 +14,7 @@ from backend.engine.memory_rag.persistence import claim_fence, retry_transaction
 from backend.engine.memory_rag.scheduling import BackgroundDeferredError, scheduler
 from backend.engine.memory_rag.settings import embedding_signature, read_settings
 from backend.engine.memory_rag.store import LanceMemoryStore, Scope
+from backend.engine.visual_novel.presentation import session_is_vn
 from backend.models.game_session import GameSession
 from backend.models.memory_rag import MemoryIndexState
 from backend.models.session_state import SessionState
@@ -31,7 +32,12 @@ async def index_batch(claim: Any, user: Any) -> bool:
         if state is None:
             return False
         settings = control_settings.read((state.entity_states or {}).get(KEY))
-        if not settings.semantic_memory or settings.mode != "live":
+        if (
+            not settings.semantic_memory
+            or settings.mode != "live"
+            or settings.control_scope != "dialogue"
+            or not await session_is_vn(db, state)
+        ):
             return False
         current = load(state)
         minds = {}

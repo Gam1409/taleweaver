@@ -19,7 +19,7 @@ claims, hypothetical events and earlier moments are excluded by the extraction
 contract; quotation checks do not prove semantic correctness. Model accuracy still
 needs evaluation on actual stories.
 
-Supported postures are standing, sitting, lying, kneeling and crouching. A placement
+Supported postures are standing, sitting, lying, kneeling, crouching and on all fours. A placement
 relates a character to another present character or an explicitly mentioned scene
 object. No precise distances, limb coordinates, private feelings or new objects
 are inferred. Missing deltas retain established facts. Explicit uncertainty clears
@@ -39,8 +39,17 @@ explicitly for both the player and NPCs. Historical snapshots are not updated by
 later turns. Their provenance quotes are kept out of public visual facts.
 
 An incomplete reply, oversized input, rejected delta or model failure marks staging
-**unconfirmed** and discards stale pose assumptions. A model failure does not discard
-the narrator's reply. Illustrations display a warning and fall back to explicit
-facts in that reply, plus canonical appearance and clothing. Database failures and
+**unconfirmed** and discards stale pose assumptions. When the current cast is known,
+a missing or failed extraction preserves still-valid command-owned poses and
+placements with their original sources, including those of other actors and
+earlier turns. These retained facts remain available without a new pose command.
+Changed presence, scene, origin or unavailable targets invalidate them; a later
+supported update or explicit clear can replace them. An actor-specific rejected
+delta retains its existing uncertainty behavior. An early abort without prepared
+cast information keeps the conservative current-command fallback.
+
+A model failure does not discard the narrator's reply. Illustrations use the
+available validated facts and explicit narration, plus canonical appearance and
+clothing; unconfirmed staging retains its warning. Database failures and
 turn cancellation still use the existing turn recovery path. This is continuity
 assistance, not a guarantee that an image model will follow the resulting composition.

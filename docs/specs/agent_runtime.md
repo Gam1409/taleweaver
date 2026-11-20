@@ -5,6 +5,12 @@ opaque transport, validation and capability negotiation. It is not an official
 upstream standard. Importing a blueprint does not enable background execution,
 download RAG corpora or overwrite existing games.
 
+The implemented [NPC action tools](../npc-action-tools.md) use session settings
+and existing state owners independently of this portable activation proposal.
+Their VN command and RPG initiative adapters do not advertise the extension's
+capabilities automatically. Installing a blueprint or declaring `npc.autonomy.v1`
+does not enable these tools or bypass their host-mode and controller checks.
+
 ## Upstream boundary
 
 The namespace is `extensions.agent_runtime`; NPC seeds live in

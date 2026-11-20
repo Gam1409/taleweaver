@@ -63,7 +63,10 @@ Resolve attached straps, cuffs and hems through the known garment and full conte
 they do not become new items merely because the source uses a component reference.
 For partial displacement, put uncovered_regions and placement_evidence on the entry,
 not inside action. The placement quote must be from the same message; exposed
-regions must belong to the garment's coverage. Otherwise leave both empty.
+regions must belong to the garment's coverage. If a garment is partly off but the source
+establishes no new whole uncovered region, set partially_removed=true on the entry,
+leave uncovered_regions empty and quote the displacement in placement_evidence. This
+keeps known coverage. Compare against target_actor.partially_removed_item_ids.
 To restore explicitly confirmed normal coverage, use restore_coverage=true,
 uncovered_regions=[] and its exact restoring placement quote. Omitted placement
 means unchanged placement, never restored coverage. Reuse the existing garment ID.

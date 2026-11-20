@@ -41,7 +41,7 @@ def prepare(
             else narration.count(action.evidence) == 1
         )
         if (
-            action.basis not in {"completed", "observed_placement"}
+            action.basis not in {"completed", "observed_placement", "observed_possession"}
             or action.source_owner != owner
             or start < end
             or not verified

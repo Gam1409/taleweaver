@@ -65,6 +65,7 @@ class TurnLlmContext:
     compression_model_provider: str = "openai"
     compression_model: str = ""
     compression_max_tokens: int = 4096
+    narration_addendum: str = ""
 
     @property
     def mechanics_system_prompt(self) -> str:
@@ -359,6 +360,19 @@ class TurnLlmContextBuilder:
             + private_context(state, visible),
         )
 
+    async def refresh_narration_state(self, context: TurnLlmContext) -> None:
+        """Refresh owner facts after NPC commands without repeating inference or recall."""
+        world = await self._load_world()
+        visible, hidden = self._partition_scene_entities(world.all_entities)
+        _, current = self._build_state_blocks(
+            world, visible, hidden, context.global_unlock_rules_prompt_block
+        )
+        context.narration_state_block = current + context.narration_addendum
+        context.entities = visible
+        context.all_entities = world.all_entities
+        context.exits = world.exits
+        context.all_scenes = world.all_scenes
+
     @step("turn.build_context", result=False)
     async def build_context(self, user_msg: str, language: str | None) -> TurnLlmContext:
         db_start = time.perf_counter()
@@ -383,9 +397,8 @@ class TurnLlmContextBuilder:
         mechanics_state_block, narration_state_block = self._build_state_blocks(
             world, visible, hidden, global_unlock_rules_prompt_block
         )
-        narration_state_block += await prepare_choice(
-            self.manager, user_msg, visible, history=history
-        )
+        narration_addendum = await prepare_choice(self.manager, user_msg, visible, history=history)
+        narration_state_block += narration_addendum
         narration_static_prompt = static_prompt + narration_style_block(self.manager.state)
         if language:
             logger.info(
@@ -396,6 +409,7 @@ class TurnLlmContextBuilder:
         if user_msg == "[EVALUATE STATE]":
             mechanics_state_block += TECHNICAL_TURN_INSTRUCTION
             narration_state_block += TECHNICAL_TURN_INSTRUCTION
+            narration_addendum += TECHNICAL_TURN_INSTRUCTION
         mechanics_awards = self.manager._build_mechanics_awards()
 
         log_structured_event(
@@ -428,6 +442,7 @@ class TurnLlmContextBuilder:
             narration_static_prompt=narration_static_prompt,
             mechanics_state_block=mechanics_state_block,
             narration_state_block=narration_state_block,
+            narration_addendum=narration_addendum,
             mechanics_awards=mechanics_awards,
             **resolve_model_settings(self.manager.user.llm_settings or {}),
         )

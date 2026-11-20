@@ -82,3 +82,21 @@ turn routing, review input, persistence, accepted speech sources, recovery and
 independent clothing/portrait/snapshot behavior. These verify ownership and transport,
 not that a real model always chooses a sufficiently concrete or emotionally credible
 plan. Existing semantic review remains fallible. Live evaluation is still paused.
+
+### Pose targets and partial clothing
+
+The staging extractor can link a placement to a visible scene object's canonical ID.
+The passage reference supplies evidence for the movement. Unregistered scenery can
+still be described with a grounded phrase. An empty change row carries no pose
+instruction. Conflicting substantive changes for one actor remain unconfirmed.
+
+NPC inspection exposes the bound room object ID. Character memory, narration and
+illustration snapshots resolve its label against the current room. Picking up or
+hiding the object removes its placement from those views, while an independently
+confirmed posture can still appear. Pose review and publication use the same
+identity check when the narrator repeats a previously established placement.
+
+A worn garment can carry the optional `partially_removed` flag. It refers to the
+same owned item. A general partial removal preserves previously established coverage.
+An explicit regional adjustment can update whole uncovered regions. Fully restoring
+or removing the garment clears the flag. Reading an older save requires no migration.

@@ -23,9 +23,10 @@ from backend.engine.chpm.core.replay import restore, rewind
 from backend.engine.chpm.host_observation_contracts import HostFacts
 from backend.engine.chpm.recovery_contracts import HistoricalObservation
 from backend.engine.chpm.report_contracts import ReportLineage
+from backend.engine.narrated_movement.outcomes import WithMovementOutcomes, overlaps
 
 
-class Source(BaseModel):
+class Source(WithMovementOutcomes):
     model_config = ConfigDict(extra="forbid", frozen=True)
     message_id: str = Field(min_length=1, max_length=100)
     revision_id: str | None = None
@@ -55,6 +56,10 @@ class Source(BaseModel):
             result.pop("history", None)
         if self.report is None:
             result.pop("report", None)
+        if not self.movement_outcomes:
+            result.pop("movement_outcomes", None)
+        if self.action_span is None:
+            result.pop("action_span", None)
         return result
 
     @property
@@ -67,6 +72,22 @@ class Source(BaseModel):
 
     @model_validator(mode="after")
     def frame_facts_only(self) -> "Source":
+        if self.action_span and (self.role != "assistant" or self.kind != "narration"):
+            raise ValueError("An action occurrence requires assistant narration.")
+        if self.movement_outcomes and (
+            self.kind != "narration"
+            or self.role != "assistant"
+            or any(
+                (self.history is None and entry.actor_id != self.speaker_id)
+                or not (
+                    overlaps(entry, self.text, self.action_span)
+                    if self.action_span
+                    else entry.evidence in self.text
+                )
+                for entry in self.movement_outcomes
+            )
+        ):
+            raise ValueError("Movement outcomes require their actor's assistant narration source.")
         if self.report is not None and (
             self.role != "assistant"
             or self.kind != "speech"

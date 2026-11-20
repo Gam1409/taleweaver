@@ -7,7 +7,7 @@ import pytest
 from sqlalchemy import select
 
 from backend.api.routes.adventures.gameplay_logic import GameTurnManager
-from backend.engine.chpm import continuation_writer, inference, rendering
+from backend.engine.chpm import continuation_writer, inference, passages, rendering
 from backend.engine.chpm.schema import KernelState, Settings
 from backend.engine.chpm.state import KEY, load
 from backend.engine.npc_presentation.settings import KEY as PORTRAIT_KEY
@@ -88,7 +88,7 @@ async def test_completed_invalid_analysis_continues_rp_without_committing_psycho
             next(c for c in chunks if c.startswith("event: final")).split("data: ", 1)[1]
         )
         assert final["npc_behavior"]["quality"] == "simplified"
-        assert final["npc_behavior"]["module_version"] == "1.2.0"
+        assert final["npc_behavior"]["module_version"] == "1.3.0"
         assert (await db.get(TurnReplay, "session-1")).status == "ready"
         replies = list(await db.scalars(select(ChatMessage).where(ChatMessage.role == "assistant")))
         assert len(replies) == 2
@@ -174,7 +174,14 @@ async def test_rejected_narration_uses_real_ordinary_writer_once_and_commits_aft
                 self.chpm_calls.append("rp_continuation")
                 data = json.loads(payload)
                 assert "TURN RESOLUTION" in data["current_scene_and_resolution"]
-                assert data["review_issues_to_avoid"] == ["Unapproved promise"]
+                assert (
+                    data["review_issues_to_avoid"]
+                    == passages.SharedReview(
+                        review_scope="fixture",
+                        matches=False,
+                        rejections=[{"reason_code": "intention"}],
+                    ).issues
+                )
                 assert "narration" not in data
                 assert "CHPM DIALOGUE CONTRACT" not in str(kwargs["messages"])
                 return "Лина: «Давай продолжим разговор»."

@@ -31,12 +31,13 @@ def restore(
     )
     if (
         not entry.placement_evidence
-        or not (entry.uncovered_regions or entry.restore_coverage)
+        or not (entry.uncovered_regions or entry.partially_removed or entry.restore_coverage)
         or action.disposition != "worn"
         or worn is None
         or (
-            worn.uncovered_regions == entry.uncovered_regions
-            and (not entry.uncovered_regions or _same_source(worn, entry, source))
+            worn.partially_removed == entry.partially_removed
+            and (entry.partially_removed or worn.uncovered_regions == entry.uncovered_regions)
+            and (entry.restore_coverage or _same_source(worn, entry, source))
         )
     ):
         return actors, [], []
@@ -48,7 +49,14 @@ def restore(
         if profile is None:
             raise ValueError("The appearance profile is unavailable.")
         profile.worn = [
-            row.model_copy(update={"uncovered_regions": list(entry.uncovered_regions)})
+            row.model_copy(
+                update={
+                    "uncovered_regions": row.uncovered_regions
+                    if entry.partially_removed
+                    else list(entry.uncovered_regions),
+                    "partially_removed": entry.partially_removed,
+                }
+            )
             if row.item_id == action.item_id
             else row
             for row in profile.worn

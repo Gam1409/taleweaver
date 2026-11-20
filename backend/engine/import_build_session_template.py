@@ -15,8 +15,16 @@ def build_session_template(
     from backend.engine.adventure_importer import _resolve_license_url
 
     old_adv = data["adventure"]
+    enforcement_mode = (
+        old_adv.get("rule_enforcement_mode") or data.get("rule_enforcement_mode") or "rpg"
+    )
     return AdventureTemplate(
-        npc_personality_settings=personality_defaults(old_adv.get("npc_personality_settings")),
+        npc_personality_settings=personality_defaults(
+            old_adv.get("npc_personality_settings"),
+            mode=enforcement_mode,
+            living_world=old_adv.get("living_world_settings"),
+            preserve_saved=True,
+        ),
         living_world_settings=stored_defaults(old_adv.get("living_world_settings")),
         id=generate_adventure_id(old_adv["title"]),
         owner_id=user.id,
@@ -31,9 +39,7 @@ def build_session_template(
         original_prompt=old_adv.get("original_prompt") or old_adv.get("context"),
         image_url=old_adv.get("image_url"),
         strict_rules=old_adv.get("strict_rules", True),
-        rule_enforcement_mode=old_adv.get("rule_enforcement_mode")
-        or data.get("rule_enforcement_mode")
-        or "rpg",
+        rule_enforcement_mode=enforcement_mode,
         time_per_turn=old_adv.get("time_per_turn", 10),
         pacing_minutes=old_adv.get("pacing_minutes", 5),
         max_time_per_turn=old_adv.get("max_time_per_turn"),

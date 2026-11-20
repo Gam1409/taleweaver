@@ -30,7 +30,7 @@ their measurements and proposed work are evidence from that snapshot.
 | Layer | Reference |
 | --- | --- |
 | Application release | [version.json](../version.json): 0.7.1-beta |
-| NPC Personality module | [public module version](../backend/engine/chpm/version.py): 1.2.0, independent of the app and saved-state schemas |
+| NPC Personality module | [public module version](../backend/engine/chpm/version.py): 1.3.0, independent of the app and saved-state schemas |
 | Adventure export format | [format owner](../backend/core/adventure_format.py): 1.3; the [catalog adapter](adventure-catalog.md) admits checked records through 1.3.1 |
 | Portable agent configuration | [contract v1](specs/agent_runtime.md): authored schemas/transport/negotiation; activation adapters and remote corpus ingestion remain separate integration work |
 | Saved subsystem schemas | Owned by their runtime modules; see [CHPM lifecycle](chpm-memory-lifecycle.md), [memory](memory-rag.md) and [checkpoint behavior](session-checkpoints.md) |
@@ -98,6 +98,7 @@ NPC controls, implementation references and maintained module history. Dated eva
 - [NPC decision workflows](npc-decision-workflows.md)
 - [Characters introduced during play](npc-introductions.md)
 - [Private NPC notebooks](npc-notebook.md)
+- [NPC tool-calling compatibility profiles](npc-tool-profiles.md)
 - [NPC observable state tools](npc-observable-state.md)
 - [World features: current foundations and remaining work](planned-world-features.md)
 - [Player input and character history](player-tools.md)
@@ -193,6 +194,9 @@ Plans, original research, dated audits, experiment reports and release announcem
 - [Final pilot validation before merge](chpm-final-validation.md)
 - [Cast and history evaluation matrix](chpm-matrix-evaluation.md)
 - [NPC analysis performance](chpm-performance.md)
+- [NPC tool calling: implementation review, templates and action interface](research/npc-tool-calling.md)
+- [NPC action tools: current implementation and remaining integration](npc-action-tools.md)
+- [Harness²: applicability to NPC tools and controlled comparisons](research/harness2-for-npc-tools.md)
 - [CHPM research implementation map](chpm-research-roadmap.md)
 - [Clothing integration audit](clothing-audit.md)
 - [Default ComfyUI workflow validation](comfyui-default-validation.md)

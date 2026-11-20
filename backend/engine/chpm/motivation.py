@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 from typing import Final
 
+from backend.engine.chpm import motivation_diagnostics, semantic_choice
 from backend.engine.chpm.appraisal_context import Window
 from backend.engine.chpm.appraisal_contracts import GroundedProposal
 from backend.engine.chpm.errors import RecoverableChpmError
@@ -18,6 +19,18 @@ POLICY: Final = "source-grounded-v1"
 class Catalogue:
     sources: dict[str, MotiveSource]
     observer_id: str
+
+    def identifiers(self) -> dict[str, list[str]]:
+        return {
+            "motive_id": list(self.sources),
+            "motive_ids": list(self.sources),
+            "personal_motive_ids": [
+                key
+                for key, source in self.sources.items()
+                if source.status in {"authored", "declared"}
+                and source.subject_id == self.observer_id
+            ],
+        }
 
     def payload(self) -> dict:
         return {
@@ -142,52 +155,60 @@ def _agenda_sources(entries: list[AgendaEntry], actor: str) -> list[MotiveSource
     ]
 
 
-def resolve(raw: GroundedProposal, catalogue: Catalogue) -> dict[ActionKind, list[ResolvedMotive]]:
+def _omittable(raw: GroundedProposal, errors: list[dict]) -> set[ActionKind]:
+    if raw.choice is None or any(error["type"] != "motive_own_support" for error in errors):
+        return set()
+    # motive_own_support is emitted exactly once per unsupported candidate.
+    unsupported = {error["loc"] for error in errors}
+    omitted = {kind for kind in raw.candidates if ("candidates", kind, "motives") in unsupported}
+    protected = {raw.choice.preferred}
+    if raw.question_gate is not None:
+        protected.add("CLARIFY")
+        protected.update(branch.action for branch in raw.question_gate.branches)
+    if (
+        len(omitted) != len(unsupported)
+        or omitted & protected
+        or len(raw.candidates) - len(omitted) < 2
+    ):
+        return set()
+    # Check the original offer before removing anything. A candidate cannot gain
+    # eligibility by losing an alternative or a decision-changing question.
+    eligible, _ = semantic_choice.eligible(raw.canonical(), raw.question_gate)
+    return (
+        omitted if any(candidate.kind == raw.choice.preferred for candidate in eligible) else set()
+    )
+
+
+def resolve(
+    raw: GroundedProposal, catalogue: Catalogue, *, omit_unsupported_alternatives: bool = False
+) -> dict[ActionKind, list[ResolvedMotive]]:
+    errors = motivation_diagnostics.inspect(raw.model_dump(mode="json"), catalogue, canonical=True)
+    omitted = _omittable(raw, errors) if errors and omit_unsupported_alternatives else set()
+    if errors and not omitted:
+        raise ChpmError("; ".join(error["msg"] for error in errors))
     result: dict[ActionKind, list[ResolvedMotive]] = {}
     for kind, candidate in raw.candidates.items():
-        ids = [motive.motive_id for motive in candidate.motives]
-        if len(ids) != len(set(ids)) or not set(ids) <= catalogue.sources.keys():
-            raise ChpmError(f"CHPM {kind} motives repeat or reference unavailable sources.")
+        if kind in omitted:
+            continue
         resolved = [
             ResolvedMotive(
                 source=catalogue.sources[m.motive_id], effect=m.effect, relevance=m.relevance
             )
             for m in candidate.motives
         ]
-        if not any(_own_support(motive, catalogue.observer_id) for motive in resolved):
-            raise ChpmError(f"CHPM {kind} lacks a supporting character or active agenda motive.")
-        alignment = candidate.goal_alignment
-        if alignment in {"supports", "conflicts"} and not any(
-            motive.source.kind == "authored_goal"
-            and candidate.goal_quote
-            and candidate.goal_quote in motive.source.text
-            and motive.effect == ("supports" if alignment == "supports" else "tension")
-            for motive in resolved
-        ):
-            raise ChpmError(f"CHPM {kind} goal alignment disagrees with its cited motive.")
         result[kind] = resolved
     return result
 
 
-def _own_support(motive: ResolvedMotive, actor: str) -> bool:
-    return (
-        motive.effect == "supports"
-        and motive.source.subject_id == actor
-        and motive.source.status in {"authored", "declared"}
-    )
-
-
 INSTRUCTIONS = """
-MOTIVES: Each of 2-4 plausible candidates, selected or not, needs 1-3 distinct
-motivation_context IDs, supports/tension and specific relevance.
-appraisal_ref: appraisal_context; context_ref: outer input. At least one support
-must be this NPC's authored identity/trait/value/role/goal or active own agenda.
-No kind is required: omit/replace unsupported kinds; never invent support or
-relabel tension to fill the set. ACCEPT may agree to a request/offer or accept an
-apology; it does not by itself verify a report. Belief may remain tentative.
-Traits are tendencies: reserve need not refuse; trust need not obey. Preserve
-conflicts and evidence status; grounds remain provisional. Player demands alone
-are not own motives; infer no authority. Never cite another observer's knowledge,
-absent/closed agenda or new interpretations as existing sources. Never backfill
-feelings/desires/obstacles for compliance or refusal.
+MOTIVES: Give each of 2-4 plausible candidates 1-3 distinct motivation_context IDs,
+supports/tension and specific relevance. appraisal_ref uses appraisal_context;
+context_ref uses outer input. One support must be the NPC's authored identity,
+trait, value, role, goal or active own agenda.
+Omit unsupported kinds. Never invent support or turn tension into support.
+ACCEPT can accept a request, offer or apology without verifying a report.
+Reserve need not mean refusal, nor trust obedience. Keep conflicts, uncertainty
+and evidence status. Player demands alone supply neither motive nor authority.
+Never cite another observer's knowledge, absent/closed agenda or new interpretations
+as existing sources. Never invent feelings, desires or obstacles to justify a choice.
 """

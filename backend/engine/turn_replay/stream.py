@@ -9,6 +9,7 @@ from typing import Any
 from anyio import CancelScope
 from sqlalchemy import select
 
+from backend.engine import turn_controls
 from backend.engine.chpm.kernel import ChpmError
 from backend.engine.turn_replay import drafts, service
 from backend.models.chat import ChatMessage
@@ -44,24 +45,28 @@ async def run(
     hooks: Any,
 ) -> AsyncGenerator[str, None]:
     """Hold CHPM narration until the inner runner commits its recovery boundary."""
+    attempt = turn_controls.begin(manager)
     manager._chpm_turn = None
     manager._committed_response_id = None
     manager._visible_narration_draft = ""
     manager._visible_narration_truncated = False
     manager._chpm_publish_after_commit = False
     held: list[str] = []
-    async with aclosing(
-        _run(manager, message, auto_visualize, language, replay_id, hooks)
-    ) as stream:
-        async for chunk in stream:
-            if _hold_chunk(manager, chunk):
-                held.append(chunk)
-                continue
-            if chunk.startswith("event: final"):
-                for item in held:
-                    yield item
-                held.clear()
-            yield chunk
+    try:
+        async with aclosing(
+            _run(manager, message, auto_visualize, language, replay_id, hooks)
+        ) as stream:
+            async for chunk in stream:
+                if _hold_chunk(manager, chunk):
+                    held.append(chunk)
+                    continue
+                if chunk.startswith("event: final"):
+                    for item in held:
+                        yield item
+                    held.clear()
+                yield chunk
+    finally:
+        turn_controls.close(manager, attempt=attempt)
 
 
 def _hold_chunk(manager: Any, chunk: str) -> bool:

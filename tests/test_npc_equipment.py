@@ -18,7 +18,7 @@ __all__ = ["portrait_world"]
 TEXT = "Lina lowers her shirt to her waist and places the sensor in its body slot."
 
 
-async def place(*, source_case="confirmed", attachment=False):
+async def place(*, source_case="confirmed", attachment=False, coarse=False):
     async with TestSessionLocal() as db:
         state = await db.scalar(
             select(SessionState).where(SessionState.session_id == "portrait-session")
@@ -37,6 +37,15 @@ async def place(*, source_case="confirmed", attachment=False):
         if source_case == "bad_span":
             proof["evidence_span"] = {"start": 0, "end": 4}
         profile["worn"][1].update(uncovered_regions=["torso", "arms"], source=proof)
+        if coarse:
+            profile["worn"][1].update(uncovered_regions=[], partially_removed=True)
+            profile["worn"][0]["uncovered_regions"] = []
+            state.entity_states = {
+                **state.entity_states,
+                "COAT": {
+                    "metadata_json": {"clothing": {"layer": 2, "coverage": ["torso", "arms"]}}
+                },
+            }
         if attachment:
             profile["body"] = {"form": "humanoid", "attachment_slots": ["anal"]}
             profile["worn"].append(
@@ -65,17 +74,19 @@ async def place(*, source_case="confirmed", attachment=False):
 @pytest.mark.parametrize(
     "source_case", ["confirmed", "edited", "missing", "other_session", "bad_span"]
 )
-async def test_fully_displaced_wear_stays_known_only_with_its_original_source(
-    auth_client, portrait_world, source_case
+@pytest.mark.parametrize("coarse", [False, True])
+async def test_hidden_displaced_wear_stays_known_only_with_its_original_source(
+    auth_client, portrait_world, source_case, coarse
 ):
     await configure()
-    before = await place(source_case=source_case)
+    before = await place(source_case=source_case, coarse=coarse)
     data = (await auth_client.get(URL)).json()["current_state"]
     shirt = [item for item in data["clothing"]["items"] if item["item_id"] == "SHIRT"]
     assert bool(shirt) is (source_case == "confirmed")
     if shirt:
         assert shirt[0]["slots"] == ["Chest"]
-        assert shirt[0]["uncovered_regions"] == ["torso", "arms"]
+        assert shirt[0]["uncovered_regions"] == ([] if coarse else ["torso", "arms"])
+        assert bool(shirt[0].get("partially_removed")) is coarse
     async with TestSessionLocal() as db:
         state = await db.scalar(
             select(SessionState).where(SessionState.session_id == "portrait-session")

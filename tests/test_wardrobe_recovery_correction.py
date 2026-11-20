@@ -12,6 +12,7 @@ from sqlalchemy import select
 from backend.engine.clothing.recovery_context import KEY
 from backend.engine.clothing.recovery_schema import RecoveryProposal
 from backend.engine.debug_engine import DebugEngine
+from backend.engine.debug_npc_tools import wardrobe_info
 from backend.models.chat import ChatMessage
 from backend.models.world_entity import WorldEntity
 from tests.conftest import TestSessionLocal
@@ -73,15 +74,18 @@ def command(token, correction=None, index=1):
 
 
 @pytest.mark.asyncio
-async def test_correct_partial_wear_then_apply_only_that_garment(monkeypatch):
+@pytest.mark.parametrize("coarse", [False, True])
+async def test_correct_partial_wear_then_apply_only_that_garment(monkeypatch, coarse):
     async with TestSessionLocal() as db:
         user, avatar, state, npc, llm = await preview(db, monkeypatch)
         original = deepcopy(state.entity_states)
         template_inventory = deepcopy(npc.inventory)
         player_inventory = deepcopy(avatar.inventory)
         token = original[KEY]["token"]
+        regions = [] if coarse else ["pelvis"]
+        correction = {**CORRECTION, "partially_removed": coarse, "uncovered_regions": regions}
         result = await DebugEngine.handle_debug_command(
-            db, state, command(token), user=user, avatar=avatar
+            db, state, command(token, correction), user=user, avatar=avatar
         )
         assert "corrected" in result, result
         corrected = state.entity_states[KEY]
@@ -91,7 +95,10 @@ async def test_correct_partial_wear_then_apply_only_that_garment(monkeypatch):
         assert avatar.inventory == player_inventory and npc.inventory == template_inventory
         corrected_item = corrected["accepted"][1]
         assert corrected_item["disposition"] == "worn"
-        assert corrected_item["uncovered_regions"] == ["pelvis"]
+        assert corrected_item["uncovered_regions"] == regions
+        assert bool(corrected_item.get("partially_removed")) is coarse
+        reviewed = wardrobe_info(npc, [npc], state.entity_states)["recovery"]["review_entries"]
+        assert bool(reviewed[1].get("partially_removed")) is coarse
         assert corrected_item["evidence"] == CORRECTION["evidence"]
         result = await DebugEngine.handle_debug_command(
             db, state, "wardrobe_apply " + corrected["token"] + " 1", user=user, avatar=avatar
@@ -104,7 +111,8 @@ async def test_correct_partial_wear_then_apply_only_that_garment(monkeypatch):
         assert actor["visual_profile"]["worn"] == [
             {
                 "item_id": corrected_item["item"]["id"],
-                "uncovered_regions": ["pelvis"],
+                "uncovered_regions": regions,
+                **({"partially_removed": True} if coarse else {}),
                 "source": {
                     "request_id": None,
                     "source_message_id": corrected_item["source_message_id"],

@@ -2,15 +2,16 @@
 
 from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, SerializerFunctionWrapHandler, model_serializer
 
 from backend.core.text_evidence import EvidenceSpan
+from backend.engine.narrated_movement.outcomes import WithMovementOutcomes
 
 RECOVERY_NOTICE = "NPC analysis paused; RP continued with the last confirmed identity."
 RECOVERY_FRAGMENTS = 4
 
 
-class RecoveryAudit(BaseModel):
+class RecoveryAudit(WithMovementOutcomes):
     """Durable observer eligibility and progress on the canonical assistant row."""
 
     model_config = ConfigDict(extra="forbid")
@@ -23,6 +24,16 @@ class RecoveryAudit(BaseModel):
     uncertain_fragments: dict[str, list[EvidenceSpan]] = Field(default_factory=dict, max_length=20)
     unavailable_reason: str | None = Field(default=None, max_length=120)
     unavailable_actors: list[str] = Field(default_factory=list, max_length=20)
+    command_controlled_actor_ids: (
+        list[Annotated[str, Field(min_length=1, max_length=100)]] | None
+    ) = Field(default=None, max_length=20)
+
+    @model_serializer(mode="wrap")
+    def legacy_audit_shape(self, handler: SerializerFunctionWrapHandler) -> dict:
+        result = super().legacy_movement_shape(handler)
+        if self.command_controlled_actor_ids is None:
+            result.pop("command_controlled_actor_ids", None)
+        return result
 
 
 class HistoricalObservation(BaseModel):

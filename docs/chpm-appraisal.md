@@ -6,6 +6,16 @@ Observe comparison remain available. The current wire protocol uses separate
 `new_beliefs` and `belief_revisions` arrays; the host converts both to canonical
 interpretation events without changing the stored reducer contract.
 
+The current model wire selects evidence IDs. Each visible excerpt is displayed
+once as exact `fragments` of at most 300 characters. Belief, experience and
+intention-change citations return `fragment_id`; development citations return
+`episode_id`. Motives already select catalogue IDs. The host supplies canonical
+source IDs, exact quotations and provenance before the existing validators run.
+The required `reference_scope` binds these selectors to this observer, source
+window and host attempt/operation. Request metadata remains separate from the
+semantic decision cache. Legacy canonical source/quote records keep their strict
+read, replay and lifecycle contracts; they are not accepted as modern responses.
+
 ```mermaid
 flowchart LR
   A[Observer-visible speech and original identity] --> B[Bounded evidence and belief window]
@@ -41,8 +51,13 @@ exact quote with `excerpted=true`. Relevant grounds outside a historical source'
 prefix replace that prefix, not current evidence. Missing recall proves no absence.
 Explicit agent pins keep their existing separate limits and priority.
 
-Output allows two interpretations with two citations each. These limits bound
-the protocol, not the accuracy of retrieval or psychological inference.
+Output allows two new or revised belief interpretations with up to seven visible
+citations each. Emotion/experience citations and decision-change evidence retain
+their separate two-citation limits. These limits bound the protocol, not the
+accuracy of retrieval or psychological inference. Canonical historical
+interpretations retain their existing sixteen-citation readable capacity, so
+older valid histories still load. Bounded memory views may show two citations
+and report the omitted count without discarding the stored grounds.
 The existing settings still bound total input characters and output tokens. Calls
 per successful Staged live turn with agent rounds off remain N + 2, or N + 4 with
 narration repair, plus the normal narrator. Tool rounds, shared proposal repair,

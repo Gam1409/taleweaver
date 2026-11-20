@@ -140,7 +140,10 @@ complete rejected proposal did not fit together, the former repair regenerated
 the object without seeing that proposal and could introduce different errors.
 
 The candidate now attempts bounded **field edits** in that same single reserved
-repair call when the smaller edit schema can retain the complete rejected object.
+repair call for a parsed rejected cognitive draft whenever the complete edit
+request fits, including when a full-object repair would also fit. This preserves
+unedited fields rather than requiring the model to regenerate them. Other proposal
+schemas retain their existing budget-triggered edit behavior.
 It keeps required context, permits at most eight edits to enumerated JSON data
 paths, reconstructs an uncommitted copy and rechecks the original schema and
 semantic acceptance. It cannot execute commands, write files or publish partial

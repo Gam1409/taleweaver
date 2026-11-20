@@ -18,6 +18,13 @@ VN turns reuse the existing completed-narration item/physical-state extraction r
 `final_frame_actions` describes the final visible instant. No extra summarization
 request or agent framework is added.
 
+Final-frame actions remain available with scene staging disabled. They include
+explicitly observed voluntary hand configurations, expressions and gaze direction;
+the optional staging registry separately represents its supported general posture
+and spatial relations. A held pose does not become a persistent bodily condition
+merely because it lasts to the end of the reply. Explicit physiological signs and
+injuries use the existing physical ledger, independently of poses in the same quote.
+
 When the existing **scene staging** session option is enabled, its pose and prop
 deltas also use this same request. The `SharedItemExtraction` transport preserves
 independent sections; item actions still pass the original strict `ItemExtraction`

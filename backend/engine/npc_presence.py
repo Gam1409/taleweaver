@@ -64,7 +64,7 @@ def presence_context(entities: list[Any], state: Any) -> str:
 
 
 def movement_resolution(entities: list[Any], state: Any, event: Any) -> str:
-    """Keep the latest approved cast beside narration, after historical dialogue."""
+    """Report resolved movements. The narration state block owns the current cast."""
     moves = getattr(event, "moved_entities", None) or []
     if not moves:
         return ""
@@ -82,10 +82,4 @@ def movement_resolution(entities: list[Any], state: Any, event: Any) -> str:
                 "current_scene_id": override.get("current_scene_id", actor.current_scene_id),
             }
         )
-    return (
-        "NPC MOVEMENT RESOLUTION: "
-        + json.dumps(outcomes, ensure_ascii=False)
-        + presence_context(entities, state)
-        + "Use this current cast after movement. Earlier dialogue cannot bring an NPC back. "
-        "Only NPCs in this current scene may act beside the player."
-    )
+    return "NPC MOVEMENT RESOLUTION: " + json.dumps(outcomes, ensure_ascii=False)

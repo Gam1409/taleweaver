@@ -11,6 +11,7 @@ from backend.engine.chpm import agenda, expression, inference, json_contract, pa
 from backend.engine.chpm.errors import ChpmError
 from backend.engine.chpm.passages import Review
 from backend.engine.chpm.schema import AgendaIntent, Projection, Verdict
+from tests.test_chpm_json_schema_references import resolved
 
 FIELDS = ("evidence", "actions", "agenda_evidence")
 AVAILABLE = {
@@ -144,7 +145,7 @@ def test_prompt_schema_and_native_decoder_receive_the_same_anchor_capacity():
     prompted = json.loads(system.split("JSON schema:\n", 1)[1])
     native = decoder(["lina"])
     for field in FIELDS:
-        assert prompted["properties"][field]["maxItems"] == 1
+        assert resolved(prompted, prompted["properties"][field])["maxItems"] == 1
         body = {"matches": True, field: [{"actor_id": "lina", "passage_id": "p0"}]}
         for contract in (prompted, native):
             validator = Draft202012Validator(contract)

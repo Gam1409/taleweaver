@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from typing import Any
 
 from backend.engine.chpm import (
+    authored_capabilities,
     host_observations,
     host_scene,
     host_sources,
@@ -67,12 +68,15 @@ async def prepare(manager: Any, turn: Any, actor: Any, observed: Any) -> Mind:
 
 
 def actor_view(actor: Any, mind: Mind) -> Any:
+    if actor.id != mind.genesis.scope.observer_id:
+        raise ChpmError("CHPM authored card belongs to another observer.")
     identity = mind.genesis.identity
     return SimpleNamespace(
         id=actor.id,
         name=actor.name,
         character=identity.description,
         goal="\n".join(identity.authored_goals),
+        own_authored_capabilities=authored_capabilities.project(actor),
         metadata_json={
             "personality_profile": {trait.key: trait.value for trait in identity.traits}
         },
@@ -131,6 +135,8 @@ def finish(turn: Any, reply: Any, additions: list[Any], actor_id: str, *, minute
                 speaker_id=entry.speaker_id,
                 kind="narration" if action else "speech",
                 text=entry.quote,
+                movement_outcomes=getattr(entry, "movement_outcomes", ()),
+                action_span=getattr(entry, "action_span", None),
                 report=None if action else reports.lineage(turn, actor_id, entry),
             )
         )

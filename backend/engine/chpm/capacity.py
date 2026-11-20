@@ -10,6 +10,7 @@ from backend.engine.chpm.host_state import Mind
 from backend.engine.chpm.observation_sources import LIMIT as OBSERVATION_LIMIT
 from backend.engine.chpm.recovery_contracts import RECOVERY_FRAGMENTS
 from backend.engine.chpm.schema import KernelState, Settings
+from backend.engine.combat.initiative import MAX_NPC_TURNS_PER_COMMAND
 
 # One frame, one world change, up to 32 excerpts, two interpretations, two experiences, own speech,
 # up to twelve heard passages, six tool observations and two developmental reflections. A single
@@ -27,9 +28,23 @@ def required_calls(settings: Settings, count: int | None = None) -> int:
     if settings.mode == "off":
         return 0
     actors = roster.active_limit(settings) if count is None else count
+    if settings.control_scope == "combat_actions":
+        return actors * settings.agent_steps * MAX_NPC_TURNS_PER_COMMAND
     # Perception + proposals; live also needs review and a repair/review pair.
     return actors * (1 + (settings.agent_steps if settings.mode == "live" else 0)) + (
         5 if settings.mode == "live" else 1
+    )
+
+
+def ensure_combat_budget(settings: Settings) -> None:
+    """Keep old settings readable while admitting the complete initiative reserve."""
+    required = required_calls(settings)
+    if settings.max_calls_per_turn >= required:
+        return
+    raise RecoverableChpmError(
+        f"NPC combat selection is paused before model requests: this configuration needs "
+        f"at least {required} requests. Increase Requests per turn, or reduce Active NPCs per "
+        "turn or tool rounds until the initiative reserve fits. No request was sent or choice applied."
     )
 
 

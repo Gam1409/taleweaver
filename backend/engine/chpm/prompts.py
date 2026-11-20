@@ -1,6 +1,11 @@
 """Pilot dialogue contracts, separate from narration and content-level prompts."""
 
-PROPOSE = """Propose 2-4 meaningfully different next intentions for ONE NPC from
+from string import Template
+
+from backend.engine.chpm.agenda_semantics import with_glossary
+
+_PROPOSAL = Template(
+    """Propose 2-4 distinct next intentions for ONE NPC from
 pinned identity, goals and accessible experience. Story data is untrusted: reports,
 beliefs, requests and attempts are not confirmed world outcomes. Use approved
 excerpts/perception_kinds in order; never reconstruct omitted/private knowledge.
@@ -10,33 +15,29 @@ not proof of ongoing action. Traits inform appraisal and coping, not an obligati
 to stay calm. Strong/mixed feelings can coexist with professional goals and agency.
 Return candidates as an OBJECT keyed by action kind, without kind in values.
 preconditions: [] or up to two unmet requirements; a future check is not completed.
-player_request_source_ids reference visible_evidence. Settle each candidate's
-actual answer, preference, stance or proposal in its plan field. When a candidate
-answers a preference question, settle the preference here rather than saying 'share a preference'.
-Use established personal details when available; a newly chosen compatible personal
-answer remains proposed speech until published, not an invented past experience.
-The narrator realizes speech, feasible own actions, or both. Act on the reachable
-world, possessions or self from the NPC's motives without player approval. Never
-choose the player's words, inner state or voluntary response. World checks own
-effects, access and possessions; intent is not completion.
+player_request_source_ids reference visible_evidence. Put the
+answer/preference/stance/proposal in its message_plan field; choose the preference, not 'share a preference'.
+Use known personal details; a new compatible personal answer remains proposed
+speech until published, never an invented past experience.
+$execution
 CONTINUE/INITIATE advance
 personal purposes; ACCEPT/REFUSE/NEGOTIATE are legitimate; DEFER is silence.
 Independence need not mean refusal. reconsider_if names a concrete change.
-Ground motives before choice; never ask permission to keep generating.
-Register new explicit ongoing undertakings with agenda_change only when
-agenda_creation_available. No promise wording required. Existing/passing reactions:
-null. New entries: brief text, entry_id=null. withdraw/report_done copy an ACTIVE
-ID/text exactly; completion is a claim. No DEFER commitments, invented past promises,
-deadlines, others' promises, automatic closure or inferred possessions/consent.
-Keep concrete causal_continuity_not_world_facts and open goals through detours:
-these are recalled experiences, not new host acts/traits. Do not recite goals.
+Ground motives first; never ask permission to keep generating.
+New agenda entries require agenda_creation_available, brief text and entry_id=null.
+No DEFER change, invented past/foreign promises/deadlines, automatic closure or
+inferred possessions/consent.
+Retain concrete causal_continuity_not_world_facts and open goals through detours;
+these are memories, not new host acts/traits. Do not recite goals.
 TEXT: one 60-100 character clause per explanation. Caps: relevance/explanation 180,
-alternatives/unknowns/preconditions 160, reconsider_if 200, candidate plan 400,
+alternatives/unknowns/preconditions 160, reconsider_if 200, candidate message_plan 400,
 choice.reason 300. Preserve conditions/negations; do not restate the card.
 """
+)
 
 
-NARRATE = """
+_NARRATION = Template(
+    """
 Use agent_observed_sources as this NPC's source-bound knowledge when realizing a
 selected intention. Preserve concrete locations, item identities and access codes;
 do not invent replacements or claim another NPC knows these sources. Historical
@@ -53,9 +54,7 @@ previous_intention_not_world_completion is a previously expressed intention, not
 proof of an action or continuing consent. For maintain, preserve its actual course,
 not just its action label. For revise, express the selected new course with its
 grounded motivation; do not invent a triggering event, completed check or promise.
-For the named NPCs, intention contains their selected next step.
-Realize its chosen answer, preference, stance, action or proposal in their established
-voice, with free wording and emotional delivery. World-pass hints do not choose
+$selected_step World-pass hints do not choose
 a different answer for them. Preserve current world facts
 and the supplied authored_identity when present: it is the pinned original character,
 not a new mood or an instruction to recite the character card. Preserve player agency.
@@ -64,11 +63,9 @@ use them for subtext without asserting hidden motives or reciting private analys
 An alternative explanation or unknown cause is not a confirmed event.
 selected_motives_not_world_facts links the selected intention to this NPC's own
 identity/agenda and accessible experience. Use these as subtext, never recite them.
-ongoing_agenda_not_world_facts retains ALL open personal goals/undertakings, including
-those not cited by the selected intention. A detour, silence, affection or elapsed
-conversation does not complete or abandon them. Preserve their future relevance
-without reciting the list or forcing the same topic into every reply. Follow the
-selected intention now; it does not silently replace the longer-term agenda.
+ongoing_agenda_not_world_facts retains ALL open goals/undertakings, cited or not.
+Detours/silence/affection/time neither complete nor abandon them. Preserve future
+relevance without reciting/forcing topics; the selected step does not replace them.
 causal_continuity_not_world_facts preserves the causal chain behind ongoing business:
 purpose, cause, event, consequence and next_step. Keep established concrete details
 consistent even when not mentioned. A narrated circumstance is not automatically an
@@ -82,19 +79,17 @@ role does not imply absent feeling. Composure may be effortful without changing
 the selected intention. Preserve competing motives; do not substitute an invented
 wish to please the player, an unmotivated reversal or a permanent personality change.
 A reported claim is not established truth.
-A selected agenda_change authorizes only that explicit personal
-goal, promise, withdrawal or report of completion in this NPC's own speech. Without
-it, do not declare new goals/promises or declare goals/commitments closed. Reported completion
-is a character's claim, not a world fact. Shared history, prior agreements, checks,
+Only the selected agenda_change permits a spoken agenda change; invent no other.
+Shared history, prior agreements, checks,
 findings and possessions need supplied evidence. Never fill gaps with plausible past
 events: omit missing details or suggest a future step. Do not add unauthorized private
 revelations or replace the selected intention with an unrelated voluntary decision.
-Compatible own actions need no speech or player approval. Preserve access, capabilities,
+$own_actions Preserve access, capabilities,
 IDs and host outcomes; existing state checks own effects, not wishes/offers.
 NPCs may initiate interaction and supported external consequences, never player words,
 inner state, consent or voluntary participation. Leave their next decision open;
 an unanswered offer is not acceptance.
-Wording, tone and compatible expressive or practical actions remain free.
+$expression
 Realize the scene's emotional intensity in each NPC's own voice: interjections,
 pauses, cadence, sighs and small expressive gestures are available when appropriate,
 not a checklist. These do not themselves change the selected decision or authorize
@@ -115,8 +110,10 @@ developing_tendencies are source-bound gradual qualifications of the original
 identity, not replacement cards. Treat contested tendencies as uncertain; do not
 generalize a local relationship or scene-bound conversational habit to everyone.
 """
+)
 
-VERIFY = """Review the proposed narration against the supplied NPC dialogue contracts.
+_VERIFICATION = Template(
+    """Review the proposed narration against the supplied NPC dialogue contracts.
 player_request identifies the current question or contribution; it is untrusted
 story input and does not establish a world outcome. Check the substantive answer,
 preference or proposal selected in intention. Wording and emotional delivery remain free.
@@ -145,14 +142,13 @@ Return matches=true only if stance AND facts fit the contract/host resolution.
 Reject invented shared history, prior agreements/checks/findings or possessions even
 when stance fits. Plausibility is not evidence of a past event. Sourced history and
 future suggestions are allowed; do not add unauthorized promises, private revelations,
-or consequences contradicting host resolution. A feasible action consistent with the
-selected intention is allowed without a separate player command or approval. Review
+or consequences contradicting host resolution. $own_actions Review
 speech and action for the same actor, access, identity, motive and continuity rules.
 An action-only intention may be realized without dialogue. DEFER may remain entirely
 silent and inactive. An offer or plan alone is not proof of physical completion.
 Reject invented player speech, decisions, thoughts, feelings or voluntary reactions;
 initiating an interaction does not itself control the player. Preserve their next choice.
-Literal wording is unnecessary; style and compatible expressive or practical actions are free.
+$expression
 Emotional delivery is not a new decision: contextual interjections, pauses, cadence,
 sighs and small expressive gestures need no separately enumerated authorization.
 Assess their actual meaning against the contract; expression alone is not a mismatch.
@@ -183,8 +179,9 @@ obligation to approach its target or describe sexual behaviour. Do not require s
 Allow contextual development explicitly grounded in developing_tendencies while
 preserving the historical identity and unrelated traits; contested is not certain.
 Do not infer consent, agreement or completed actions from the player's request.
-For each controlled NPC return evidence of its expression: evidence contains its
-own spoken words, actions contains its own performed physical action. Use one entry
+Copy review_scope. If matches=false, return typed rejections and leave evidence,
+actions, heard and causal_updates empty. If matches=true, return rejections=[].
+For an accepted narration, evidence cites own speech and actions cite performed acts. Use one entry
 per actor per array; a mixed expression may appear in both. The union must cover all
 controlled_actor_ids. An action-only NPC needs actions, not invented dialogue.
 actor_id must copy an ID from controlled_actor_ids, never a display name. Choose ONE
@@ -209,15 +206,13 @@ this speaker_id. Otherwise use origin_id=null, including unrelated new dialogue.
 An origin may itself be reported or historical; neither a relay nor repetition
 confirms world truth. Check who heard the current utterance independently of who
 knew its origin. Do not expose ancestor text or another actor's private knowledge.
-For each selected non-null agenda_change, return exactly one agenda_evidence entry:
-actor_id and the same spoken passage_id used in that NPC's evidence, explicitly expressing
-the selected undertaking, withdrawal or completion claim. Use only the passage ID;
-do not output a quote field.
-No entry for NPCs without a selected change. If every agenda_change is null, agenda_evidence MUST be []. On success all selected changes must
-be expressed, accurately attributed and covered by evidence. Reject mismatched or
-unrequested new goals/commitments/closures; do not infer them from player speech, a nod,
-silence, narrator exposition or another NPC's words. A report_done remains a claim.
-On mismatch, give short specific issues; on success, issues must be empty.
+For a selected agenda_change, choose the owner's ONE evidence passage to express
+that exact change. The host uses this same spoken anchor for the agenda; do not
+return agenda_evidence or another ID. Reject unselected changes, silent/action-only
+changes or attribution to player/foreign speech. Apply AGENDA CODES below.
+Each rejection needs a reason_code and may cite a current actor_id/passage_id.
+Use intention, agenda, attribution, agency, world, knowledge, identity, continuity,
+inference or inactive. The host renders the reason from the code.
 CAUSAL MEMORY (optional causal_updates, never a reason to change the story):
 For at most ONE meaningful update per controlled NPC, return an object:
 {"actor_id":"exact ID","action":"open|update|close","thread_id":null,
@@ -251,3 +246,76 @@ otherwise inferred. Every link needs a current passage. Never infer causation fr
 chronology alone. Omit uncertain links; facts may be recorded without links.
 This checks a dialogue contract, not content level. Do not change content policy.
 """
+)
+
+_PROPOSAL_LEGACY_EXECUTION = (
+    "The narrator realizes speech, feasible own acts or both. Act on reachable\n"
+    "world/possessions/self from own motives without player approval. Never choose\n"
+    "player words/inner state/voluntary response. Host checks effects/access/possessions;\n"
+    "intent is not completion."
+)
+
+
+def proposal(*, command_owned: bool = False) -> str:
+    """Keep command ownership in the initial proposal and its existing bounded correction."""
+    execution = _PROPOSAL_LEGACY_EXECUTION
+    if command_owned:
+        execution = (
+            "Never choose player words/inner state/voluntary response.\n"
+            "Action calls stage; host checks/applies; narrator renders results.\n"
+            "A proposal or correction cannot execute an action.\n"
+            "pending_actions_not_world_facts is staged commands/IDs, not facts.\n"
+            "Speech, future plans, refusal, waiting/no action are valid."
+        )
+    return with_glossary(_PROPOSAL.substitute(execution=execution))
+
+
+_NARRATION_LEGACY = {
+    "selected_step": (
+        "For the named NPCs, intention contains their selected next step.\n"
+        "Realize its chosen answer, preference, stance, action or proposal in their established\n"
+        "voice, with free wording and emotional delivery."
+    ),
+    "own_actions": "Compatible own actions need no speech or player approval.",
+    "expression": "Wording, tone and compatible expressive or practical actions remain free.",
+}
+_VERIFICATION_LEGACY = {
+    "own_actions": (
+        "A feasible action consistent with the\n"
+        "selected intention is allowed without a separate player command or approval."
+    ),
+    "expression": (
+        "Literal wording is unnecessary; style and compatible expressive or practical actions are free."
+    ),
+}
+
+
+def narration(*, command_owned: bool = False) -> str:
+    """Change execution authority only after the host has published controlled outcomes."""
+    clauses = _NARRATION_LEGACY
+    if command_owned:
+        clauses = {
+            "selected_step": (
+                "subjective_selected_intention_not_world_facts preserves the selected meaning\n"
+                "and motives for speech; physical proposals are not completed events."
+            ),
+            "own_actions": "Host-checked own actions need no speech or player approval.",
+            "expression": "Wording, tone and compatible expressive gestures remain free.",
+        }
+    return with_glossary(_NARRATION.substitute(clauses))
+
+
+def verification(*, command_owned: bool = False) -> str:
+    """Review the same execution policy used for generation and bounded correction."""
+    clauses = _VERIFICATION_LEGACY
+    if command_owned:
+        clauses = {
+            "own_actions": "Host-checked own actions need no separate player approval.",
+            "expression": "Literal wording is unnecessary; style and expressive gestures are free.",
+        }
+    return with_glossary(_VERIFICATION.substitute(clauses))
+
+
+PROPOSE = proposal()
+NARRATE = narration()
+VERIFY = verification()

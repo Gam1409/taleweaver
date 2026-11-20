@@ -19,6 +19,7 @@ function evaluate(code, dependencies = {}) {
   return module.exports
 }
 const load = (path, dependencies) => evaluate(source(path), dependencies)
+const toolProfiles = load('utils/npcToolProfiles.ts')
 function component(path, dependencies = {}, expose = '') {
   const text = source(path).replace('</script>', `${expose}\n</script>`)
   const { descriptor } = parse(text)
@@ -43,16 +44,17 @@ function chpmFixture(t, request, session = ref('session')) {
 
 test('session mode gates notebook controls while legacy Unicode labels remain escaped', async () => {
   let mounted = 0
+  let hostMode = 'vn'
   const chpm = component('components/game/ChpmSettings.vue', { '@/composables/useChpmSettings': {
     useChpmSettings() {
       mounted++
       return {
-        status: ref({ ...status(), notebook: { document: 'INERT_NOTEBOOK_SENTINEL' } }), draft: ref(preferences()),
+        status: ref({ ...status(), host_mode: hostMode, notebook: { document: 'INERT_NOTEBOOK_SENTINEL' } }), draft: ref(preferences()),
         busy: ref(false), error: ref(''), minimumCalls: ref(6), budgetWarning: ref(false), historyWarnings: ref([]),
         load() {}, save() {}, selectStandard() {}, setNotebookEnabled() {},
       }
     },
-  } })
+  }, '@/utils/npcToolProfiles': toolProfiles })
   const frame = { setup(_props, { slots }) { return () => h('main', Object.values(slots).flatMap(slot => slot())) } }
   const children = Object.fromEntries([
     'SessionMemorySettings', 'VnNarrationSettings', 'SessionContentSettings', 'DynamicLocationSettings',
@@ -63,21 +65,23 @@ test('session mode gates notebook controls while legacy Unicode labels remain es
     '../editor/StoryVisualPresets.vue': { default: { render: () => h('div') } },
   })
   for (const mode of ['rpg', 'chat', 'story', 'vn']) {
+    hostMode = mode
     const before = mounted
     const html = await renderToString(createSSRApp({ render: () => h(modal, { mode, sessionId: 'session' }) }))
-    assert.equal(mounted - before, Number(mode === 'vn'), mode)
+    assert.equal(mounted - before, Number(mode === 'vn' || mode === 'rpg'), mode)
     assert.equal(html.includes('Private NPC notebooks'), mode === 'vn', mode)
     assert.doesNotMatch(html, /INERT_NOTEBOOK_SENTINEL|<b>Keeper/)
     if (mode === 'vn') {
       assert.match(html, /雪 &amp; &lt;b&gt;Keeper&lt;\/b&gt;/)
       assert.doesNotMatch(html, /name="npc-private-notebooks"[^>]* checked/)
     }
+    if (mode === 'rpg') assert.match(html, /NPC combat actions/)
   }
 })
 
 test('legacy notebook defaults survive template controls and generic adventure PATCH in every mode', async t => {
-  const original = preferences(), value = ref(original)
-  const defaults = component('components/living-world/NpcPersonalityDefaults.vue', {}, 'defineExpose({ setNotebookEnabled })')
+  const original = { ...preferences(), tool_profile: 'deepseek', tool_protocol: 'json' }, value = ref(original)
+  const defaults = component('components/living-world/NpcPersonalityDefaults.vue', { '@/utils/npcToolProfiles': toolProfiles }, 'defineExpose({ setNotebookEnabled })')
   defaults.render = () => null
   const renderer = createRenderer({
     createElement: () => ({}), createText: () => ({}), createComment: () => ({}),
@@ -108,6 +112,8 @@ test('legacy notebook defaults survive template controls and generic adventure P
     assert.equal(saved.npc_personality_settings.notebook_enabled, true)
     assert.equal(saved.npc_personality_settings.semantic_memory, true)
     assert.equal(saved.npc_personality_settings.npc_concurrency, 2)
+    assert.equal(saved.npc_personality_settings.tool_profile, 'deepseek')
+    assert.equal(saved.npc_personality_settings.tool_protocol, 'json')
   }
   assert.equal(calls.length, 4)
   assert.ok(calls.every(call => call.init.timeoutMs === 60_000 && call.init.method === 'PATCH'))

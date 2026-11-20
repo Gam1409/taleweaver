@@ -1,6 +1,7 @@
 """One shared proposal retry, preserving room for the remaining turn and prose review."""
 
 from collections.abc import Awaitable, Callable
+from copy import deepcopy
 from typing import Any, TypeVar
 
 from pydantic import BaseModel, ValidationError
@@ -9,6 +10,7 @@ from backend.core.state_rejection_trace import reject
 from backend.engine.chpm import (
     choice_grounds,
     inference,
+    json_contract,
     parallel_budget,
     proposal_edits,
     proposal_repair,
@@ -18,6 +20,7 @@ from backend.engine.chpm.core.errors import TransitionError
 from backend.engine.chpm.errors import ProposalRejectedError
 from backend.engine.chpm.kernel import ChpmError
 from backend.engine.chpm.proposal_draft import Draft
+from backend.engine.chpm.proposal_references import ReferenceDraft
 from backend.engine.chpm.schema import Settings, Usage
 
 T = TypeVar("T", bound=BaseModel)
@@ -35,6 +38,8 @@ async def request(
     accept: Callable[[T], R],
     *,
     initial: Callable[[], Awaitable[T]] | None = None,
+    reserved_execution: int = 0,
+    diagnose: Callable[[dict], list[dict]] | None = None,
 ) -> R:
     phase = "proposal"
     repair = None
@@ -56,6 +61,7 @@ async def request(
                 )
             )
         except inference.InvalidResponseError as exc:
+            issues = _diagnose(diagnose, exc.candidate)
             reject(
                 "emotion",
                 "chpm.proposal_invalid",
@@ -65,6 +71,8 @@ async def request(
                 phase=phase,
                 identifiers=identifiers,
                 schema=schema.__name__,
+                failure_stage="proposal_formation",
+                grounding_errors=issues,
             )
             feedback = str(exc)
             candidate = exc.candidate
@@ -84,6 +92,7 @@ async def request(
             try:
                 return accept(raw)
             except (ChpmError, TransitionError, ValidationError) as exc:
+                issues = _diagnose(diagnose, candidate)
                 reject(
                     "emotion",
                     "chpm.proposal_invalid",
@@ -95,6 +104,8 @@ async def request(
                     validation_errors=exc.errors(include_url=False)
                     if isinstance(exc, ValidationError)
                     else None,
+                    failure_stage="proposal_formation",
+                    grounding_errors=issues,
                 )
                 feedback = inference.validation_feedback(exc)
         hint = (
@@ -103,23 +114,27 @@ async def request(
                 no_previous_intention=(
                     "previous_intention" in payload and payload["previous_intention"] is None
                 ),
+                previous_intention=payload.get("previous_intention"),
             )
-            if issubclass(schema, Draft)
+            if issubclass(schema, (Draft, ReferenceDraft))
             else ""
         )
         if hint:
-            feedback = f"{feedback}; {hint}"[:600]
+            hint = hint[:280]
+            # Preserve actionable cross-field advice beside the first reported error.
+            feedback = f"{feedback[: 600 - len(hint) - 2]}; {hint}"
         # This is a two-entry diagnostic window, not canonical story history.
         usage.proposal_feedback = [*usage.proposal_feedback, feedback[:600]][-2:]
         if phase == "proposal_repair" or usage.proposal_repairs:
             raise ProposalRejectedError(
-                "CHPM proposal remains invalid; no decision applied. " + feedback
+                "CHPM proposal remains invalid; no decision applied. " + feedback,
+                grounding_issues=issues,
             )
         turn = getattr(manager, "_chpm_turn", None)
         remaining = max(0, len(turn.names) - len(turn.decisions) - 1) if turn else 0
-        reserve = parallel_budget.remaining(remaining * (1 + settings.agent_steps)) + (
-            3 if settings.mode == "live" else 0
-        )
+        reserve = parallel_budget.remaining(
+            remaining * (1 + settings.agent_steps) + reserved_execution
+        ) + (3 if settings.mode == "live" else 0)
         if usage.calls + 1 + reserve > settings.max_calls_per_turn:
             raise ProposalRejectedError(
                 "CHPM proposal retry has no reserved request budget. " + feedback
@@ -132,6 +147,8 @@ async def request(
             instruction=instruction,
             identifiers=identifiers,
             limit=settings.max_input_chars,
+            motive_errors=[issue for issue in issues if issue["loc"][0] == "candidates"],
+            grounding_errors=[issue for issue in issues if issue["loc"][0] != "candidates"],
         )
         payload = repair.payload
         request_schema = proposal_edits.Corrections if repair.original is not None else schema
@@ -144,6 +161,10 @@ async def request(
             )
         usage.proposal_repairs += 1
         phase = "proposal_repair"
+
+
+def _diagnose(diagnose: Callable[[dict], list[dict]] | None, candidate: dict | None) -> list[dict]:
+    return diagnose(candidate) if diagnose and isinstance(candidate, dict) else []
 
 
 async def _read(
@@ -176,7 +197,9 @@ async def _read(
         candidate = proposal_edits.apply(candidate, edits, schema)
         candidate, corrections = wire_normalization.normalize(schema, candidate, identifiers)
         usage.format_repairs += len(corrections)
-        return schema.model_validate(candidate)
+        parsed = schema.model_validate(deepcopy(candidate))
+        json_contract.validate_identifiers(schema, candidate, identifiers)
+        return parsed
     except ValueError as exc:
         raise inference.InvalidResponseError(
             f"CHPM {phase} edits invalid: {inference.validation_feedback(exc)}", candidate=candidate

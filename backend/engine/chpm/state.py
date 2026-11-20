@@ -55,7 +55,11 @@ def controls(state: Any, actor_id: str) -> bool:
     # Selection is a settings predicate. Turn admission still calls load() to
     # validate the complete kernel before using any psychological state.
     settings = control_settings((getattr(state, "entity_states", None) or {}).get(KEY))
-    return settings.mode == "live" and actor_id in settings.actor_ids
+    return (
+        settings.mode == "live"
+        and settings.control_scope == "dialogue"
+        and actor_id in settings.actor_ids
+    )
 
 
 def retract(state: Any, message_id: str) -> None:

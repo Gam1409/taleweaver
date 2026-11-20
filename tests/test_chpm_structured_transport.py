@@ -6,6 +6,7 @@ from types import SimpleNamespace
 import httpx
 import pytest
 
+from backend.core.llm_schema_compaction import share_schema
 from backend.engine.chpm import inference, json_contract
 from backend.engine.chpm.proposal_draft import Draft
 from backend.engine.chpm.schema import Projection, Settings, Usage
@@ -120,7 +121,7 @@ async def test_finite_candidate_keys_reach_the_http_grammar_without_expanding_in
     ]
     assert sent["properties"]["candidates"]["additionalProperties"] is False
     assert "CONTINUE" in sent["properties"]["candidates"]["properties"]
-    compact = json_contract.response_schema(Draft, identifiers)
+    compact = share_schema(json_contract.response_schema(Draft, identifiers), short_names=True)
     assert seen[0]["messages"][0]["content"].endswith(
         json.dumps(compact, ensure_ascii=False, separators=(",", ":"))
     )

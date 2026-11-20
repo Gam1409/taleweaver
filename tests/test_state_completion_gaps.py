@@ -33,7 +33,7 @@ def test_unknown_cosmetic_item_is_deferred_not_declared_failed_or_minted():
     )
     assert not result.new_inventory_items and not owner.avatar.inventory
     assert "UNREGISTERED ORDINARY ITEM CANDIDATES" in result.narrative_description
-    assert "did not occur" not in result.narrative_description
+    assert "The preliminary item proposal was not applied." not in result.narrative_description
 
 
 @pytest.mark.parametrize("item_type", ["WEAPON", "CONSUMABLE", "QUEST"])
@@ -48,7 +48,7 @@ def test_unknown_mechanical_items_still_fail_closed(item_type):
         [],
     )
     assert not result.new_inventory_items
-    assert "did not occur" in result.narrative_description
+    assert "The preliminary item proposal was not applied." in result.narrative_description
 
 
 def test_inaccessible_inline_item_cannot_be_disguised_as_new_acquisition():
@@ -65,7 +65,7 @@ def test_inaccessible_inline_item_cannot_be_disguised_as_new_acquisition():
             [npc],
         )
         assert not result.new_inventory_items
-        assert "did not occur" in result.narrative_description
+        assert "The preliminary item proposal was not applied." in result.narrative_description
 
 
 @pytest.mark.asyncio

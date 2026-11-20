@@ -62,6 +62,12 @@ and clothing policy without another model request or an inventory change. Other
 accepted entries must remain unchanged. Unsupported items should stay unselected;
 formal validation is not a guarantee of semantic correctness.
 
+A garment can remain worn with one sleeve or strap off. Choose **Partially removed**
+and quote the passage that establishes that placement. This preserves any
+previously recorded uncovered regions. Select specific regions when the source
+establishes their exposure. **Restore normal coverage** requires a passage
+showing that the garment has been put fully back in place.
+
 ## Manual proposals without inference
 
 **Recover from source manually…** loads the same bounded, session-owned history

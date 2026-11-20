@@ -45,6 +45,7 @@ export interface PlayerClothing {
     underwear: boolean
     image_url?: string | null
     slots?: string[]
+    partially_removed?: boolean
     uncovered_regions?: string[]
   }>
   detail_limited?: boolean

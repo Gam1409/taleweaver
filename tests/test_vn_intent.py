@@ -10,6 +10,7 @@ from backend.api.routes.adventures.turn_helpers import TurnProgressionBuilder
 from backend.engine.dynamic_locations.prompts import intent_schema
 from backend.engine.dynamic_locations.schema import KEY
 from backend.engine.llm_intents import ChatProgressionIntent
+from backend.engine.rule_engine import EntityMovement, GameEvent
 from backend.engine.visual_novel.intent import (
     VNProgressionIntent,
     build_progression_context,
@@ -76,6 +77,26 @@ def test_legacy_model_response_is_revalidated_and_supported_fields_survive():
     assert event.discovered_entity_ids == ["key"]
     assert event.remember_notes == ["The key was given to the player."]
     assert event.hp_change == 0 and not event.game_over
+
+
+def test_vn_movement_proof_is_optional_and_does_not_change_persisted_or_rpg_events():
+    source = {"kind": "previous_narration", "passage_id": "history:p0", "basis": "completed"}
+    proposal = VNProgressionIntent.model_validate(
+        {
+            "moved_entities": [
+                {"entity_id": "npc", "to_scene_id": "GARDEN", "movement_source": source}
+            ],
+            "updated_entities": [
+                {"entity_id": "npc", "presence": "present", "movement_source": source}
+            ],
+        }
+    )
+    assert proposal.moved_entities[0].movement_source.passage_id == "history:p0"
+    event = TurnProgressionBuilder.build_progression_event(to_chat_progression_intent(proposal))
+    assert "movement_source" not in event.model_dump_json()
+    assert GameEvent.model_validate_json(event.model_dump_json()) == event
+    assert "movement_source" not in EntityMovement.model_json_schema()["properties"]
+    assert VNProgressionIntent.model_validate({"moved_entities": None}).moved_entities is None
 
 
 def test_dynamic_place_extension_remains_available_until_world_resolution():

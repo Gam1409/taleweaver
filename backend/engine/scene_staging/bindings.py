@@ -1,5 +1,6 @@
 """Bind shared extraction aliases and accepted item actions to existing staging IDs."""
 
+from collections import Counter
 from copy import deepcopy
 
 from backend.engine.visual_novel.continuity import PLAYER
@@ -26,12 +27,37 @@ def input_cast(cast: list[dict], previous: dict, player_id: str) -> tuple[list[d
     return people, projected
 
 
+def bind_retained_objects(
+    extraction: SceneExtraction,
+    previous: dict,
+    objects: dict[str, str | None],
+    offered: frozenset[str] | None,
+) -> None:
+    """A grounded legacy echo can keep a previously bound, still unambiguous identity."""
+    name_counts = Counter(label.casefold() for label in objects.values() if label)
+    for change in extraction.changes:
+        target = change.placement
+        if target is None or target.target_kind != "scene_object" or target.target in objects:
+            continue
+        prior = previous.get(change.entity_id, {}).get("placement", {}).get("target_id")
+        if (
+            isinstance(prior, str)
+            and objects.get(prior) == target.target
+            and name_counts[target.target.casefold()] == 1
+            and target.target in change.evidence
+            and (offered is None or prior in offered)
+        ):
+            target.target = prior
+
+
 def resolve(
     extraction: SceneExtraction, player_id: str, accepted: list[dict]
 ) -> tuple[SceneExtraction, int]:
     result = extraction.model_copy(deep=True)
     for change in result.changes:
         change.entity_id = actor_id(change.entity_id, player_id)
+        if change.performer_id is not None:
+            change.performer_id = actor_id(change.performer_id, player_id)
         if change.placement and change.placement.target_kind == "character":
             change.placement.target = actor_id(change.placement.target, player_id)
     for explicit in result.explicit:

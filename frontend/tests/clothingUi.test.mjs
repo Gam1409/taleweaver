@@ -136,3 +136,12 @@ export {props,activeTab,scope,nextTick};`)
     assert.equal(fixture.activeTab.value, 'inventory')
   } finally { fixture.scope.stop() }
 })
+
+
+test('a partly removed garment stays in the worn outfit without inferring exposed regions', async () => {
+  const html = await render(clothing, { clothing: { appearance: {}, worn: [
+    garment('Sleeved coat', 3, { partially_removed: true, uncovered_regions: [] })
+  ] } })
+  assert.match(html, /Partially removed/)
+  assert.doesNotMatch(html, /exposed|uncovered/i)
+})

@@ -10,8 +10,9 @@ from backend.core.llm_router import GameMasterLLM
 from backend.core.state_rejection_trace import reject
 from backend.engine.clothing.visuals import session_objects
 from backend.engine.narrated_items import evidence, reference_schema, response_sections
-from backend.engine.scene_staging import props
+from backend.engine.scene_staging import attribution, command_guard, props
 from backend.engine.scene_staging.proposals import StagingProposal
+from backend.engine.scene_staging.room_items import placement_targets, visible_targets
 from backend.engine.scene_staging.schema import INSTRUCTIONS
 from backend.engine.scene_staging.shared import apply_extraction, consume
 from backend.engine.scene_staging.state import KEY, digest, project
@@ -45,7 +46,10 @@ async def reconcile_narration(manager: Any, narration: str, *, completed: bool) 
             narration_characters=len(narration),
             limit=MAX_NARRATION,
         )
-        state.entity_states = {**(state.entity_states or {}), KEY: result}
+        state.entity_states = {
+            **(state.entity_states or {}),
+            KEY: command_guard.preserve(manager, result),
+        }
         props.invalidate(state)
         return
     from backend.engine.gameplay.world import AdventureLogic
@@ -71,13 +75,20 @@ async def reconcile_narration(manager: Any, narration: str, *, completed: bool) 
         narration,
         scope=f"{state.session_id}:{getattr(manager, '_vn_player_message_id', '')}:{state.current_scene_id}",
     )
+    authority = await attribution.capture(manager)
+    targets = placement_targets(manager.avatar, rows, state)
+    previous = project(state, cast, scene_objects=targets, target_ids=True)
+    objects = visible_targets(targets, previous)
     payload = json.dumps(
         {
             "scene_id": state.current_scene_id,
             "present_cast": cast,
+            "scene_objects": objects,
             "owned_items": items,
-            "previous_staging": project(state, cast),
+            "previous_staging": previous,
             "current_narration": catalog.narration_passages,
+            **command_guard.metadata(manager, cast),
+            **attribution.context(manager, authority, player_text_ref=None),
         },
         ensure_ascii=False,
     )
@@ -92,7 +103,10 @@ async def reconcile_narration(manager: Any, narration: str, *, completed: bool) 
             cast=cast,
         )
         result.update(reason="Staging context exceeds the text budget.", cast_size=len(cast))
-        state.entity_states = {**(state.entity_states or {}), KEY: result}
+        state.entity_states = {
+            **(state.entity_states or {}),
+            KEY: command_guard.preserve(manager, result, cast, rows),
+        }
         props.invalidate(state)
         return
     # The turn's mutation lease and recovery record protect this short commit.
@@ -102,7 +116,9 @@ async def reconcile_narration(manager: Any, narration: str, *, completed: bool) 
         llm = GameMasterLLM.for_role(manager.user, "small")
         response = await asyncio.wait_for(
             llm.aexecute_complex_task(
-                INSTRUCTIONS,
+                INSTRUCTIONS
+                + (command_guard.INSTRUCTIONS if command_guard.metadata(manager, cast) else "")
+                + (attribution.INSTRUCTIONS if authority else ""),
                 payload,
                 StagingProposal,
                 llm.model,
@@ -113,6 +129,7 @@ async def reconcile_narration(manager: Any, narration: str, *, completed: bool) 
             ),
             timeout=role_timeout(manager.user, "small"),
         )
+        authority = await attribution.refresh(manager, authority)
         apply_extraction(
             manager,
             narration,
@@ -120,6 +137,8 @@ async def reconcile_narration(manager: Any, narration: str, *, completed: bool) 
             rows,
             evidence.bind_staging(response, catalog),
             unconfirmed_sections=response_sections.missing_staging(response),
+            authority=authority,
+            offered_objects=frozenset(objects),
         )
         applied = True
     except asyncio.CancelledError:
@@ -136,4 +155,7 @@ async def reconcile_narration(manager: Any, narration: str, *, completed: bool) 
     finally:
         if not applied:
             props.invalidate(state)
-            state.entity_states = {**(state.entity_states or {}), KEY: result}
+            state.entity_states = {
+                **(state.entity_states or {}),
+                KEY: command_guard.preserve(manager, result, cast, rows),
+            }

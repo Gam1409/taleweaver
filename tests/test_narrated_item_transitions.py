@@ -236,3 +236,40 @@ def test_interleaved_items_preserve_original_equipment_order():
     assert changed[PLAYER]["visual_profile"]["worn"] == [
         {"item_id": "SCARF", "uncovered_regions": []}
     ]
+
+
+@pytest.mark.parametrize("partial", [None, False, True])
+def test_native_partial_placement_schema_preserves_every_allowed_disposition(partial):
+    from itertools import product
+
+    from jsonschema import Draft202012Validator
+    from pydantic import ValidationError
+
+    from backend.core.llm_schema_projection import project
+    from backend.engine.clothing.body_schema import BODY_SLOT_KEYS
+    from backend.engine.narrated_items.schema import ExistingItemAction
+
+    # Normal extraction advertises separate existing-item and new-item branches.
+    # This fixture references the existing shirt; the host then validates ItemAction.
+    schema = ExistingItemAction.model_json_schema()
+    validators = (Draft202012Validator(schema), Draft202012Validator(project(schema).schema))
+    for disposition, slot, regions in product(
+        ("carried", "held", "worn"), (None, next(iter(BODY_SLOT_KEYS))), (None, [], ["torso"])
+    ):
+        raw = dict(
+            action().model_dump(),
+            disposition=disposition,
+            attachment_slot=slot,
+            uncovered_regions=regions,
+            partially_removed=partial,
+        )
+        expected = (disposition == "worn" or (partial is None and regions is None)) and (
+            slot is None or (partial is None and regions is None and disposition == "worn")
+        )
+        for validator in validators:
+            assert validator.is_valid(raw) is expected, raw
+        if expected:
+            ItemAction.model_validate(raw)
+        else:
+            with pytest.raises(ValidationError):
+                ItemAction.model_validate(raw)

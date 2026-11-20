@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from backend.core.llm_schema_choices import prune_unavailable
+from backend.core.llm_schema_compaction import map_schema
 from backend.core.llm_schema_merge import SchemaProjectionError, intersect
 from backend.core.llm_schema_values import json_equal
 
@@ -22,7 +23,20 @@ class Projection:
 def project(schema: dict) -> Projection:
     local: set[str] = set()
     result = _node(prune_unavailable(schema), local)
-    return Projection(prune_unavailable(result), tuple(sorted(local)))
+    # Resolve intersections before spelling out unconstrained values for decoders.
+    represented = map_schema(prune_unavailable(result), _explicit_json_value)
+    return Projection(represented, tuple(sorted(local)))
+
+
+def _explicit_json_value(node: dict) -> dict:
+    if node:
+        return node
+    # Some decoders interpret {} as object-only; retain its actual any-JSON meaning.
+    return {
+        "anyOf": [
+            {"type": kind} for kind in ("null", "boolean", "number", "string", "array", "object")
+        ]
+    }
 
 
 def _node(value: Any, local: set[str]) -> Any:
@@ -119,16 +133,16 @@ def _conditional(node: dict | bool, condition: dict, local: set[str]) -> dict:
     choices = _finite_choices(properties.get(field, {}))
     if not choices:
         raise SchemaProjectionError("The discriminator requires local schema validation.")
-    branches = []
-    for value in choices:
-        branch = intersect(node, {"properties": {field: {"const": value}}})
-        if json_equal(value, expected):
-            branch = intersect(branch, {"required": [field]})
-            branch = intersect(branch, _node(condition.get("then", {}), local))
-        branches.append(branch)
-    if field not in node.get("required", []) and all(
-        json_equal(value, expected) for value in choices
-    ):
+    # All non-matching discriminator values share one outcome. Keeping them in
+    # one enum avoids copying the entire object once per allowed value.
+    others = [value for value in choices if not json_equal(value, expected)]
+    if len(others) == len(choices):
+        return node
+    matched = intersect(node, {"properties": {field: {"const": expected}}, "required": [field]})
+    branches = [intersect(matched, _node(condition.get("then", {}), local))]
+    if others:
+        branches.append(intersect(node, {"properties": {field: {"enum": others}}}))
+    elif field not in node.get("required", []):
         if node.get("additionalProperties") is not False:
             raise SchemaProjectionError(
                 "An optional discriminator requires a closed object schema."

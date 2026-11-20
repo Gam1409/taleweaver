@@ -45,13 +45,48 @@ def test_narrated_movement_rejections_include_proposal_and_source(rejection, cha
     assert rejection.call_args.kwargs["source_context"] == before
 
 
-def test_unconfirmed_movement_completion_records_attempt_without_adopting_it(rejection):
+async def test_unconfirmed_movement_completion_records_attempt_without_adopting_it(
+    monkeypatch, rejection
+):
+    from backend.engine.narrated_items.runtime import KEY
+
     source = pending(None)
-    host = SimpleNamespace(_pending_narrated_movement=source)
-    runtime.complete(host, [move()], confirmed=False)
-    assert source.proposals is None
+    state = SimpleNamespace(
+        current_scene_id="ROOM",
+        entity_states={KEY: {"status": "complete", "rejected": []}, "RIN": {"presence": "present"}},
+    )
+    host = SimpleNamespace(state=state, _pending_narrated_movement=source)
+    before = deepcopy(state.entity_states)
+    proposals = [move()]
+    world_applier = Mock()
+    world_context = AsyncMock()
+    monkeypatch.setattr(runtime, "TurnStateApplier", world_applier)
+    monkeypatch.setattr(runtime, "context", world_context)
+
+    runtime.complete(host, proposals, confirmed=False)
+
+    assert source.proposals == proposals and source.proposals is not proposals
+    assert source.proposals[0] is not proposals[0] and not source.confirmed
     rejection.assert_called_once()
     assert rejection.call_args.args[:2] == ("movement", "narrated_movement.unconfirmed")
+    assert rejection.call_args.kwargs["proposals"] == proposals
+    proposals[0]["evidence"] = "Changed after extraction."
+    message = SimpleNamespace(id="reply", revision_id="v1", content=source.narration)
+
+    assert await runtime.finish(host, message) == []
+
+    audit = state.entity_states[KEY]["movement_check"]
+    assert audit["accepted"] == [] and audit["rejected"] == []
+    assert len(audit["outcomes"]) == 1
+    assert audit["outcomes"][0]["status"] == "unconfirmed"
+    assert audit["outcomes"][0]["actor_id"] == "RIN"
+    assert audit["outcomes"][0]["evidence"] == "Rin left the room."
+    assert state.current_scene_id == "ROOM"
+    assert state.entity_states == {**before, KEY: {**before[KEY], "movement_check": audit}}
+    assert host._pending_narrated_movement is None
+    world_applier.assert_not_called()
+    world_context.assert_not_awaited()
+    assert await runtime.finish(host, message) == []
 
 
 @pytest.mark.parametrize("proposals", [[], [move(destination_scene_id="ROOM")]])

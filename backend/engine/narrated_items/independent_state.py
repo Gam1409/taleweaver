@@ -5,17 +5,77 @@ from typing import Any
 from pydantic import ValidationError
 
 from backend.engine.narrated_items.errors import ItemFailure
-from backend.engine.narrated_items.schema import ItemExtraction, SharedItemExtraction
+from backend.engine.narrated_items.participants import resolve_participants
+from backend.engine.narrated_items.schema import ItemAction, ItemExtraction, SharedItemExtraction
+from backend.engine.narrated_items.transitions import batches
 from backend.engine.physical_conditions.ledger import read as read_conditions
 from backend.engine.scene_continuity.ledger import read as read_scene
+from backend.engine.visual_novel.continuity import PLAYER, SCENE
 
 INSTRUCTIONS = """
-When item_changes_allowed is false, return no item actions. Independent physical
-and scene updates are allowed only when independent_state_scope is supplied.
+When item_changes_allowed is false, no item actions are allowed unless
+independent_state_scope is supplied. Then only existing items currently owned by
+present, unblocked NPCs may change between unblocked NPCs, including their own wear.
+Every step for that item must be independent: no blocked item/person, player,
+room acquisition or new creation. Normal ownership and evidence checks still apply.
+Independent physical and scene updates also require independent_state_scope.
 Use only current supplied targets outside blocked_subject_ids; never record the rejected action's consequences through
 another section or a room-level proxy. Clothing, ownership and presence remain
 canonical. Unknown dependencies require review, not inferred success.
 """
+
+
+def items(
+    extraction: ItemExtraction,
+    actors: dict,
+    snapshot: Any,
+    denied: set[str],
+    indices: tuple[int, ...] | None = None,
+) -> tuple[ItemExtraction, tuple[int, ...], list[ItemFailure]]:
+    """Keep whole independent item chains and their original source indices."""
+    retained: list[tuple[int, ItemAction]] = []
+    failures: list[ItemFailure] = []
+    for entries in batches(extraction.actions, indices):
+        try:
+            actions = [resolve_participants(action, actors) for _index, action in entries]
+        except ValueError:
+            actions = []
+        if actions and _independent_items(actions, actors, snapshot, denied):
+            retained.extend(zip((index for index, _action in entries), actions, strict=True))
+            continue
+        failures.extend(
+            ItemFailure(
+                action.item_id or "Item creation",
+                "The item change is not independent of the rejected action.",
+                action_index=index,
+                basis=action.basis,
+                evidence=action.evidence,
+            )
+            for index, action in entries
+        )
+    retained.sort(key=lambda entry: entry[0])
+    return (
+        extraction.model_copy(update={"actions": [action for _index, action in retained]}),
+        tuple(index for index, _action in retained),
+        failures,
+    )
+
+
+def _independent_items(actions: list, actors: dict, snapshot: Any, denied: set[str]) -> bool:
+    item_id = actions[0].item_id
+    owner = snapshot.owners.get(item_id)
+    blocked = denied | {PLAYER, SCENE}
+    if not item_id or item_id not in snapshot.items or item_id in blocked:
+        return False
+    if owner not in actors or owner in blocked:
+        return False
+    return all(
+        action.source_owner in actors
+        and action.destination_owner in actors
+        and action.source_owner not in blocked
+        and action.destination_owner not in blocked
+        for action in actions
+    )
 
 
 def action_scope(actions: list[Any], actors: dict) -> set[str]:

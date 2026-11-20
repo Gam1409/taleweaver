@@ -211,7 +211,8 @@ def _actions(
             require_span(narration, row.evidence, row.evidence_span)
             if row.evidence not in narration or not set(row.actor_ids).issubset(targets):
                 raise ValueError("Final-frame action source or actors are unavailable.")
-            accepted.append(row)
+            if row.timeframe == "current":
+                accepted.append(row.model_copy(update={"poses": None}))
         except (ValueError, ValidationError):
             errors.append("A final-frame action failed source or actor validation.")
     return accepted, errors

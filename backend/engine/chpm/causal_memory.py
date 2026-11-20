@@ -18,6 +18,7 @@ from backend.engine.chpm.causal_contracts import (
 from backend.engine.chpm.host_state import Mind, Source, identifier
 from backend.engine.chpm.kernel import ChpmError, digest, fingerprint
 from backend.engine.debug_transcript import is_debug_message
+from backend.engine.narrated_movement.outcomes import MovementOutcome
 from backend.models.chat import ChatMessage
 
 
@@ -98,7 +99,14 @@ async def prepare(manager: Any, turn: Any, actor_ids: set[str]) -> None:
         )
 
 
-def apply(turn: Any, result: Any, reply: Any, available: dict[str, str]) -> None:
+def apply(
+    turn: Any,
+    result: Any,
+    reply: Any,
+    available: dict[str, str],
+    *,
+    movement_outcomes: tuple[MovementOutcome, ...] = (),
+) -> None:
     """Commit only with accepted narration; malformed optional notes never kill an RP turn."""
     if not turn.verdict or not turn.verdict.matches or not turn.decisions:
         return
@@ -115,6 +123,9 @@ def apply(turn: Any, result: Any, reply: Any, available: dict[str, str]) -> None
     for raw in turn.verdict.causal_updates:
         try:
             update = Update.model_validate(raw)
+            from backend.engine.chpm.movement_feedback import check_causal
+
+            check_causal(update, movement_outcomes, reply.content)
             if update.actor_id not in turn.decisions or update.actor_id in seen:
                 raise ValueError("Causal updates require one controlled owner per turn.")
             if update.actor_id not in result.minds:

@@ -6,7 +6,7 @@ from sqlalchemy import select
 
 from backend.engine.clothing.body_schema import WearSource
 from backend.engine.clothing.profiles import load_profile
-from backend.engine.clothing.wear_provenance import source_matches
+from backend.engine.clothing.wear_provenance import command_matches, source_matches
 from backend.engine.debug_transcript import not_debug_sql
 from backend.engine.narrated_items.schema import ItemExtraction
 from backend.models.chat import ChatMessage
@@ -18,7 +18,7 @@ def _bindings(extraction: ItemExtraction, actors: dict) -> dict[tuple[str, str],
         if action.basis not in {"observed_wear", "observed_placement"} or not action.item_id:
             continue
         if action.basis == "observed_wear" and not (
-            action.uncovered_regions or action.attachment_slot
+            action.uncovered_regions or action.attachment_slot or action.partially_removed
         ):
             continue
         actor = actors.get(action.destination_owner)
@@ -54,6 +54,10 @@ async def verified_sources(
         key
         for key, source in bindings.items()
         if (message := sources.get(source.source_message_id)) is not None
-        and message.role == source.source_role
-        and source_matches(source.model_dump(), message.content)
+        and (
+            command_matches(source, message, actor_id=key[0], item_id=key[1])
+            if source.source_role == "command"
+            else message.role == source.source_role
+            and source_matches(source.model_dump(), message.content)
+        )
     }

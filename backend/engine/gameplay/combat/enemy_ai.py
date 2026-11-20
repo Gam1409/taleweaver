@@ -7,7 +7,6 @@ from collections.abc import AsyncGenerator
 from typing import Any
 
 from backend.engine.combat.special_attacks import (
-    can_afford,
     describe_special_result,
     effective_ac,
     resolve_special_attack,
@@ -25,6 +24,7 @@ from backend.engine.gameplay.combat.context import (
 )
 from backend.engine.gameplay.combat.narration import CombatNarrationMixin
 from backend.engine.gameplay.combat.outcomes import CombatOutcomeMixin
+from backend.engine.gameplay.combat.resources import npc_can_afford
 from backend.engine.gameplay.combat.special_scripts import CombatSpecialScriptMixin
 from backend.engine.rule_engine import GameOverException
 from backend.models.avatar import Avatar
@@ -41,13 +41,6 @@ def _is_self_heal(action: dict[str, Any]) -> bool:
         e["target"] == "self" and e["stat"] == "hp" and not e["amount"].startswith("-")
         for e in action["effects"]
     )
-
-
-def npc_can_afford(action: dict[str, Any], enemy: dict[str, Any]) -> bool:
-    """NPCs without a pool for the cost resource (max 0) use the special for free."""
-    if int(enemy.get(f"max_{action['cost_type']}") or 0) <= 0:
-        return True
-    return can_afford(action, enemy)
 
 
 def special_chance(enemy: dict[str, Any]) -> float:
@@ -206,7 +199,7 @@ class CombatEnemyMixin(CombatOutcomeMixin, CombatSpecialScriptMixin, CombatNarra
             self._check_victory(combat)
             return
 
-        special = self._choose_enemy_special(enemy)
+        special = await self._selected_enemy_special(combat, enemy)
         if special:
             text, data = await self._enemy_special(combat, enemy, special)
         else:
@@ -219,6 +212,22 @@ class CombatEnemyMixin(CombatOutcomeMixin, CombatSpecialScriptMixin, CombatNarra
 
         async for chunk in self._after_enemy_action(combat, data, bool(special)):
             yield chunk
+
+    async def _selected_enemy_special(self, combat: dict, enemy: dict) -> dict | None:
+        selector = getattr(self.manager, "npc_ability_selector", None)
+        selected = getattr(self.manager, "npc_ability_actor_ids", None)
+        if selector is None or selected is not None and enemy["id"] not in selected:
+            return self._choose_enemy_special(enemy)
+        from backend.engine.gameplay.combat.ability_choices import prepare, resolve
+
+        prepared = await prepare(self, combat, enemy["id"])
+        choice = await selector(prepared)
+        if choice is not None:
+            return await resolve(self, combat, choice)
+        current = await prepare(self, combat, enemy["id"])
+        if current.frame != prepared.frame:
+            raise ValueError("The combat turn changed during NPC selection.")
+        return self._choose_enemy_special(enemy)
 
     async def _after_enemy_action(
         self, combat: dict[str, Any], data: dict[str, Any], special: bool

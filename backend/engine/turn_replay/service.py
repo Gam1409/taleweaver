@@ -5,6 +5,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.engine import turn_controls
 from backend.engine.memory_rag.dirty_queue import queue_refresh
 from backend.engine.turn_replay.control import story_message_filter
 from backend.engine.turn_replay.snapshot import capture, restore, with_current_controls
@@ -58,22 +59,27 @@ async def record_before(manager: Any, text: str) -> None:
     manager._turn_replay_recorded = True
 
 
+async def pending_input(manager: Any, text: str) -> ChatMessage | None:
+    """Return the durable user message only when retrying that exact pending turn."""
+    row = await manager.db.get(TurnReplay, manager.game_id)
+    if row is None or row.status != "pending" or row.input_text != text:
+        return None
+    message = await latest(manager.db, manager.game_id)
+    if message is not None and message.role == "user" and message.content == text:
+        return message
+    return None
+
+
 async def record_input(manager: Any, text: str) -> ChatMessage:
     """Reuse a failed turn's durable input instead of duplicating it on retry."""
-    row = await manager.db.get(TurnReplay, manager.game_id)
-    message = await latest(manager.db, manager.game_id)
-    if (
-        row is not None
-        and row.status == "pending"
-        and row.input_text == text
-        and message is not None
-        and message.role == "user"
-        and message.content == text
-    ):
+    message = await pending_input(manager, text)
+    if message is not None:
         manager._turn_replay_recorded = True
+        turn_controls.bind_input(manager, message)
         return message
     await record_before(manager, text)
     saved: ChatMessage = await manager._save_chat_message("user", text)
+    turn_controls.bind_input(manager, saved)
     return saved
 
 

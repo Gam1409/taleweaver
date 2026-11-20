@@ -18,6 +18,7 @@ from backend.schemas.authoring_completion import EquipmentSlot
 class RecoveryAction(ItemAction):
     """Historical recovery retains its reviewed, same-owner action contract."""
 
+    partially_removed: None = None
     basis: LegacyItemBasis
 
 
@@ -73,6 +74,10 @@ class RecoveryEntry(BaseModel):
         | NewRecoveryBodyAction
     )
     uncovered_regions: list[Region] = Field(default_factory=list, max_length=7)
+    partially_removed: StrictBool = Field(
+        default=False,
+        description="Garment remains partly off. Requires an exact placement quote and preserves previously established whole-region coverage.",
+    )
     placement_evidence: str = Field(default="", max_length=800)
     restore_coverage: StrictBool = Field(
         default=False,
@@ -88,7 +93,10 @@ class RecoveryEntry(BaseModel):
     @model_validator(mode="after")
     def placement_kind(self) -> "RecoveryEntry":
         if self.action.attachment_slot and (
-            self.uncovered_regions or self.placement_evidence or self.restore_coverage
+            self.uncovered_regions
+            or self.partially_removed
+            or self.placement_evidence
+            or self.restore_coverage
         ):
             raise ValueError(
                 "Body placement uses the item's exact evidence, without clothing coverage fields."

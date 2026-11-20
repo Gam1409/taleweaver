@@ -5,7 +5,7 @@ from typing import Any
 from backend.engine.clothing.projection import visible_body_regions, visible_character
 
 from .ledger import read
-from .schema import KEY
+from .schema import KEY, Condition
 
 
 def project(state: Any, actors: dict, *, detailed: bool, limit: int | None = 12) -> list[dict]:
@@ -19,18 +19,25 @@ def project(state: Any, actors: dict, *, detailed: bool, limit: int | None = 12)
         {
             "id": row.id,
             "target_id": row.target_id,
-            "detail": row.visual_detail,
+            "detail": row.detail
+            if row.kind == "item_state" and row.latest.kind == "command"
+            else row.visual_detail,
             "status": row.status,
             **subjects.get(row.target_id, {}),
         }
         for row in ledger.conditions.values()
-        if row.status != "resolved"
-        and row.visibility == "public"
-        and row.visual_detail
-        and row.latest.kind != "unavailable"
-        and row.visual_region in regions.get(row.target_id, set())
+        if row.status != "resolved" and _displayed(row, regions)
     ]
     return rows if limit is None else rows[:limit]
+
+
+def _displayed(row: Condition, regions: dict[str, set]) -> bool:
+    if row.visibility != "public" or row.latest.kind == "unavailable":
+        return False
+    surface = regions.get(row.target_id, set())
+    if row.kind == "item_state" and row.latest.kind == "command":
+        return bool(surface)
+    return bool(row.visual_detail and row.visual_region in surface)
 
 
 def _subjects(actors: dict, detailed: bool) -> dict[str, dict]:

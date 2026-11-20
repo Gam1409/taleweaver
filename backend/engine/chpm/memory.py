@@ -40,6 +40,11 @@ def valid_source(entry: MemoryEntry, source: Any, actor_id: str, session_id: str
         and source.revision_id == entry.source_revision_id
         and digest(source.content) == entry.source_hash
         and entry.quote in source.content
+        and (entry.action_span is None or entry.action_span.matches(source.content, entry.quote))
+        and all(
+            outcome.evidence_span.matches(source.content, outcome.evidence)
+            for outcome in entry.movement_outcomes
+        )
     )
 
 

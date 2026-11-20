@@ -25,12 +25,53 @@ The model chooses the existing observer-scoped memory functions or the separate
 Memory batches retain argument validation and at most two operations per round.
 After the selected memory-round limit, only submission remains available.
 
-For N configured memory rounds, there are at most N memory responses plus a
-decision response. An early decision can use fewer calls. Structural or semantic
-decision errors share the existing single proposal repair and turn-wide reserve;
-transport failures and truncated output do not acquire another retry. The role's
-output limit still applies; integrated responses use the decision-token budget
-because they may contain a complete proposal.
+For N configured memory rounds, there are at most N + 1 initial workflow requests,
+including failed tool responses. An early decision can use fewer calls. One
+completed protocol error may receive bounded host feedback while memory rounds
+remain. Its correction consumes an existing round and the normal request reserve;
+it does not add another allowance. Feedback identifies malformed structure, extra
+top-level fields, missing submission, mixed submission/memory calls or unavailable
+functions. No operation from the rejected response executes. Previously successful
+operations remain staged and must not be repeated merely to repair the format.
+
+Semantic correction feedback names a recall-only experience's exact array entry.
+The model may omit that unsupported optional entry while retaining other valid
+entries, or cite a genuine current trigger. Adding unrelated current evidence is
+not a correction. A maintained intention also requires `choice.change_basis=[]`;
+this independent diagnostic is retained beside structural errors within the same
+bounded feedback budget. These hints do not choose the NPC's course, change the
+validation guards or grant another repair request.
+
+An invalid final proposal uses the existing single semantic proposal repair and
+turn-wide reserve. Source, motive and continuity validators still apply after
+every correction. Native plain-text JSON proposals pass through the same final
+validator and retain the function-argument size, UTF-8, finite-number and depth
+guards. Portable JSON requires its `requests` envelope; an empty array is not a
+completed Integrated decision. Failed/unknown provider completion flags, transport
+failures and truncated output do not acquire another retry. The role's output
+limit still applies; integrated responses use the decision-token budget because
+they may contain a complete proposal.
+
+JSON compatibility uses the configured provider's structured-output policy when
+its text port supports that option. Schema-capable modes receive an outer envelope
+for the currently offered functions: submission alone, or up to two nonfinal calls.
+Memory-only investigation still permits an empty ready reply. Arguments remain
+ordinary JSON objects validated by their existing owners. Provider fallbacks and
+prompt-only ports remain available; requesting a format does not establish remote
+enforcement. The selected format counts against the existing input budget, and a
+rejection or timeout never triggers a retry without it. Local envelope, argument,
+source and world checks still run even if the server ignores its output format.
+
+Corrected protocol errors appear as `invalid_envelope` audit entries with bounded
+technical codes. Failed requests count against call and round limits. A second
+protocol error or an error on the final available round ends preparation; failed
+or cancelled turns do not publish staged notebook writes. These checks establish
+protocol and transaction behavior, not live-model reliability.
+
+A complete native text proposal without a function wrapper can use the same
+proposal validator directly. It retains the function-argument size, strict JSON,
+UTF-8 and depth limits and increments the local-format-correction counter. This
+does not establish semantic validity; the ordinary proposal checks still apply.
 
 Selecting Integrated in the session or adventure-default controls raises the draft
 input budget to at least 48,000 characters and preserves larger values. The value

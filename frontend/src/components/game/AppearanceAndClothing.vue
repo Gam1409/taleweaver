@@ -47,6 +47,10 @@ const groups = computed(() => {
             <span class="font-medium text-slate-200 break-words">{{ item.name }}</span>
             <span class="text-xs text-slate-400">{{ item.visible ? 'Visible' : 'Covered' }}</span>
           </div>
+          <p v-if="item.partially_removed" class="mt-1 text-xs text-amber-200">Partially removed</p>
+          <p v-if="item.uncovered_regions?.length" class="mt-1 text-xs text-amber-200">
+            This garment leaves {{ item.uncovered_regions.join(', ') }} uncovered.
+          </p>
           <p v-if="item.description" class="mt-1 whitespace-pre-wrap break-words leading-relaxed text-slate-400">{{ item.description }}</p>
         </li>
       </ul>

@@ -6,7 +6,7 @@ from backend.engine.chpm import (
     agent_lookup_payload,
     agent_native,
     inference,
-    tool_feedback,
+    tool_operations,
 )
 from backend.engine.chpm.agent_contracts import (
     INSTRUCTIONS,
@@ -33,7 +33,7 @@ async def investigate(
     notebook: NotebookDraft | None = None,
 ) -> tuple[Tools, list[dict]]:
     tools = make_tools(manager, mind, observation, pinned=pinned, notebook=notebook)
-    if notebook and settings.agent_steps:
+    if settings.agent_steps and (notebook is not None or settings.tool_profile != "auto"):
         native_model = agent_native.select_model(manager, settings)
         if native_model is not None:
             return await agent_native.investigate(
@@ -48,6 +48,7 @@ async def investigate(
                 llm=native_model,
             )
     transcript: list[dict] = []
+    captured = tool_operations.capture(manager, tools)
     audit: list[dict] = []
     contract: type[Step] | type[NotebookStep] = NotebookStep if notebook else Step
     for index in range(settings.agent_steps):
@@ -81,22 +82,41 @@ async def investigate(
                 }
             )
             break
+        calls = tool_operations.legacy_calls(step.requests)
+        batch = tool_operations.execute(manager, tools, calls, step.requests, captured=captured)
         results = [
-            tool_feedback.for_model(request.tool, tools.execute(request))
-            for request in step.requests
+            tool_operations.for_model(call.name, result)
+            for call, result in tool_operations.feedback(batch)
         ]
-        transcript.append({"requests": [r.model_dump() for r in step.requests], "results": results})
+        issued = tuple(batch.operations.values())
+        request_ids = [
+            {"attempt_id": operation.attempt_id, "operation_id": operation.operation_id}
+            for operation in issued
+        ]
+        transcript.append(
+            {
+                "requests": [
+                    {**request.model_dump(), **identifiers}
+                    for request, identifiers in zip(step.requests, request_ids, strict=True)
+                ],
+                "results": results,
+            }
+        )
         audit.append(
             {
                 # A model may quote private notes in its free-form purpose too.
                 "purpose": "Private memory tool round" if notebook else step.purpose[:180],
                 "purpose_truncated": False if notebook else len(step.purpose) > 180,
                 "requests": [
-                    request_summary(r) if notebook else r.model_dump() for r in step.requests
+                    {
+                        **(request_summary(request) if notebook else request.model_dump()),
+                        **identifiers,
+                    }
+                    for request, identifiers in zip(step.requests, request_ids, strict=True)
                 ],
                 "results": [
                     result_summary(result) if notebook else _summary(result)
-                    for request, result in zip(step.requests, results, strict=True)
+                    for result in batch.results
                 ],
                 "stop": "ready"
                 if not step.requests
@@ -147,6 +167,9 @@ def make_tools(
         episode_contexts={hit.record_id: hit.context for hit in hits},
         notebook=notebook,
         observable=getattr(turn, "observable_views", {}).get(mind.genesis.scope.observer_id)
+        if getattr(turn, "input_id", None) == observation.message_id
+        else None,
+        actions=getattr(turn, "action_drafts", {}).get(mind.genesis.scope.observer_id)
         if getattr(turn, "input_id", None) == observation.message_id
         else None,
     )

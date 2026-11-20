@@ -100,6 +100,12 @@ The checked-in [Copilot Instructions](.github/copilot-instructions.md) contain
 Python, TypeScript, testing, security and migration rules. They are authoritative
 on every machine; an ignored `.agents/` directory is optional local tooling.
 
+Local continuity notes, when present, start at
+[the project notebook](.agents/project-notebook/README.md). They record module
+context, accepted scope, checked changes and deferred ideas. Keep these optional
+notes private, verify them against current source, and distinguish speculation
+from authorized work before changing the task.
+
 - [Turn pipeline](docs/diagrams/game_session_loop.mermaid)
 - [Subsystem responsibilities and contracts](docs/engineering/subsystem-contracts.md)
 - [Adventure format](docs/specs/adventure_format.md)

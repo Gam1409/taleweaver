@@ -1,5 +1,6 @@
 """Source-bound declared goals and commitments, independent of transcript eviction."""
 
+import json
 from typing import Any
 
 from backend.engine.chpm import memory
@@ -15,6 +16,7 @@ from backend.engine.chpm.schema import (
 
 MAX_ACTIVE = 8
 MAX_RECORDS = 256
+_REFERENCE_ERROR = "CHPM agenda closure must identify an active owned entry exactly."
 
 
 async def recall(manager: Any, actor: str, entries: list[AgendaEntry]) -> list[AgendaEntry]:
@@ -54,9 +56,7 @@ def validate_intent(intent: AgendaIntent | None, entries: list[AgendaEntry]) -> 
         return
     active = [entry for entry in entries if entry.closure is None]
     if intent.entry_id:
-        target = next((entry for entry in active if entry.id == intent.entry_id), None)
-        if target is None or intent.text != target.text:
-            raise ChpmError("CHPM agenda closure must identify an active owned entry exactly.")
+        _validate_closure_reference(intent, active)
         return
     if len(active) >= MAX_ACTIVE:
         raise ChpmError("CHPM active agenda is full; no new goal or commitment can be added.")
@@ -64,11 +64,31 @@ def validate_intent(intent: AgendaIntent | None, entries: list[AgendaEntry]) -> 
         raise ChpmError("CHPM agenda proposal duplicates an active entry.")
 
 
+def _validate_closure_reference(intent: AgendaIntent, active: list[AgendaEntry]) -> None:
+    """Explain bounded owned references without rewriting the proposed closure."""
+    target = next((entry for entry in active if entry.id == intent.entry_id), None)
+    if target is None:
+        identifiers = json.dumps([entry.id for entry in active[:MAX_ACTIVE]], ensure_ascii=False)
+        raise ChpmError(
+            f"{_REFERENCE_ERROR} Copy entry_id from the ACTIVE owned IDs: {identifiers}."
+        )
+    if intent.text != target.text:
+        text = json.dumps(target.text, ensure_ascii=False)
+        raise ChpmError(
+            f"{_REFERENCE_ERROR} Copy text exactly: {text}. "
+            "This is the existing entry text, not new dialogue. Put closure wording in the "
+            "existing message_plan field (legacy: intention)."
+        )
+
+
 def validate_proposal(proposal: Proposal, entries: list[AgendaEntry]) -> None:
     for candidate in proposal.candidates:
         validate_intent(candidate.agenda_change, entries)
         if candidate.kind == "DEFER" and candidate.agenda_change:
-            raise ChpmError("CHPM cannot change the agenda through a silent DEFER.")
+            raise ChpmError(
+                "CHPM cannot change the agenda through a silent DEFER. "
+                "Replace /candidates/DEFER/agenda_change with null; keep the field present."
+            )
 
 
 def validate_evidence(decisions: dict[str, Decision], verdict: Verdict) -> None:

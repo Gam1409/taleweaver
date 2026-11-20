@@ -4,6 +4,7 @@ import logging
 from typing import Any
 
 from sqlalchemy import and_, or_, select
+from sqlalchemy.exc import SQLAlchemyError
 
 from backend.engine.gameplay.turn_context import TurnContext
 from backend.engine.gameplay.world import AdventureLogic
@@ -14,6 +15,21 @@ from backend.models.world_entity import WorldEntity, WorldExit, WorldScene
 logger = logging.getLogger(__name__)
 
 CHECKPOINT_REASON_SCENE_CHANGE = "SCENE_CHANGE"
+
+
+def _sync_lock_overrides(state: Any, edge: WorldExit) -> None:
+    overrides = state.exit_states or {}
+    keys = {edge.id, f"{edge.from_scene_id}:{edge.to_scene_id}"}
+    if edge.exit_type == "bidirectional":
+        keys.add(f"{edge.to_scene_id}:{edge.from_scene_id}")
+    updates = {}
+    for key in keys:
+        entry = overrides.get(key)
+        if not isinstance(entry, dict) or "is_locked" not in entry:
+            continue
+        updates[key] = {**entry, "is_locked": edge.is_locked}
+    if updates:
+        state.exit_states = {**overrides, **updates}
 
 
 class TurnEventScenes(TurnContext):
@@ -212,56 +228,73 @@ class TurnEventScenes(TurnContext):
     async def _apply_exit_updates(self, event: GameEvent, system_messages: list[str]) -> None:
         if not (event.updated_exits):
             return
-        try:
-            world_map = await AdventureLogic.get_or_create_map(self.db, self.state.template_id)
-            for up_exit in event.updated_exits:
-                # Update DB row and get exit_type
-                exit_res = await self.db.execute(
-                    select(WorldExit).where(
-                        WorldExit.session_id == self.state.session_id,
-                        or_(
-                            and_(
-                                WorldExit.from_scene_id == up_exit.from_scene_id,
-                                WorldExit.to_scene_id == up_exit.to_scene_id,
-                            ),
-                            and_(
-                                WorldExit.from_scene_id == up_exit.to_scene_id,
-                                WorldExit.to_scene_id == up_exit.from_scene_id,
-                                WorldExit.exit_type == "bidirectional",
-                            ),
+        world_map = await self._exit_update_map()
+        for up_exit in event.updated_exits:
+            exit_res = await self.db.execute(
+                select(WorldExit).where(
+                    WorldExit.session_id == self.state.session_id,
+                    or_(
+                        and_(
+                            WorldExit.from_scene_id == up_exit.from_scene_id,
+                            WorldExit.to_scene_id == up_exit.to_scene_id,
                         ),
-                    )
+                        and_(
+                            WorldExit.from_scene_id == up_exit.to_scene_id,
+                            WorldExit.to_scene_id == up_exit.from_scene_id,
+                            WorldExit.exit_type == "bidirectional",
+                        ),
+                    ),
                 )
-                exit_db = exit_res.scalars().first()
-                exit_type = exit_db.exit_type if exit_db else "one_way"
+            )
+            exit_db = exit_res.scalars().first()
+            was_locked = bool(exit_db and exit_db.is_locked)
+            if exit_db:
+                exit_db.is_locked = up_exit.is_locked
+                _sync_lock_overrides(self.state, exit_db)
+            self._register_exit_update(world_map, up_exit, exit_db)
+            if exit_db is not None and was_locked and up_exit.is_locked is False:
+                await self._exit_unlock_effects(exit_db, up_exit, system_messages)
 
-                MapEngine.register_exit(
-                    world_map,
-                    up_exit.from_scene_id,
-                    up_exit.to_scene_id,
-                    is_locked=up_exit.is_locked,
-                    exit_type=exit_type,
+    async def _exit_update_map(self) -> Any:
+        """A derived-map error cannot discard an accepted canonical lock update."""
+        try:
+            return await AdventureLogic.get_or_create_map(self.db, self.state.template_id)
+        except SQLAlchemyError:
+            raise  # An invalid database transaction must reach the existing turn recovery.
+        except Exception:
+            logger.warning("Derived map unavailable during exit update", exc_info=True)
+            return None
+
+    @staticmethod
+    def _register_exit_update(world_map: Any, update: Any, edge: WorldExit | None) -> None:
+        if world_map is None:
+            return
+        try:
+            MapEngine.register_exit(
+                world_map,
+                update.from_scene_id,
+                update.to_scene_id,
+                is_locked=update.is_locked,
+                exit_type=edge.exit_type if edge else "one_way",
+            )
+        except SQLAlchemyError:
+            raise
+        except Exception:
+            logger.warning("Derived map exit registration failed", exc_info=True)
+
+    async def _exit_unlock_effects(self, edge: WorldExit, update: Any, messages: list[str]) -> None:
+        name = str(edge.label or "").strip() or f"{update.from_scene_id} -> {update.to_scene_id}"
+        notice = f"Exit unlocked: {name}."
+        await self._save_chat_message("system", notice)
+        messages.append(notice)
+        if edge.on_unlock_success_script:
+            messages.extend(
+                await self.manager._execute_inline_script(
+                    edge.on_unlock_success_script,
+                    "on_unlock_success",
+                    edge.id,
                 )
-                if exit_db:
-                    was_locked = bool(exit_db.is_locked)
-                    exit_db.is_locked = up_exit.is_locked
-                    if was_locked and up_exit.is_locked is False:
-                        exit_name = (
-                            str(exit_db.label or "").strip()
-                            or f"{up_exit.from_scene_id} -> {up_exit.to_scene_id}"
-                        )
-                        msg = f"Exit unlocked: {exit_name}."
-                        await self._save_chat_message("system", msg)
-                        system_messages.append(msg)
-                        if exit_db.on_unlock_success_script:
-                            msgs = await self.manager._execute_inline_script(
-                                exit_db.on_unlock_success_script,
-                                "on_unlock_success",
-                                exit_db.id,
-                            )
-                            system_messages.extend(msgs)
-                        if exit_db.on_unlock_success_text:
-                            await self._save_chat_message("system", exit_db.on_unlock_success_text)
-                            system_messages.append(exit_db.on_unlock_success_text)
-        except Exception as e:
-            logger.error(f"Manual map exit update failed: {e}")
+            )
+        if edge.on_unlock_success_text:
+            await self._save_chat_message("system", edge.on_unlock_success_text)
+            messages.append(edge.on_unlock_success_text)

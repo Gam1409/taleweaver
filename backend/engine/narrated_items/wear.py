@@ -19,6 +19,9 @@ def unchanged_observation(
     request_id: str = "",
     verified_sources: set[tuple[str, str]] | None = None,
 ) -> bool:
+    # An ownership observation cannot remove, equip, reposition or reorder a known item.
+    if action.basis == "observed_possession":
+        return action.item_id is not None
     profile = load_profile(actor.get("visual_profile"))
     if action.basis not in {"observed_wear", "observed_placement"} or profile is None:
         return False
@@ -29,12 +32,13 @@ def unchanged_observation(
                 action.uncovered_regions is None
                 or row.uncovered_regions == action.uncovered_regions
             )
+            and row.partially_removed == _partial_after(action, row)
             and (action.attachment_slot is None or row.attachment_slot == action.attachment_slot)
         )
         if (
             same
             and action.basis == "observed_wear"
-            and not (action.uncovered_regions or action.attachment_slot)
+            and not (action.uncovered_regions or action.attachment_slot or action.partially_removed)
         ):
             return True
         if same and row.source is not None:
@@ -47,6 +51,18 @@ def unchanged_observation(
             )
             return current or (actor["id"], identifier) in (verified_sources or set())
     return False
+
+
+def _partial_after(action: ItemAction, previous: WornItem | None) -> bool:
+    if action.partially_removed is not None:
+        return action.partially_removed
+    # A generic observation preserves wear. A specific region update replaces it.
+    return bool(
+        previous
+        and previous.partially_removed
+        and action.uncovered_regions is None
+        and not action.attachment_slot
+    )
 
 
 def placement(
@@ -67,16 +83,20 @@ def placement(
         else None
     )
     slot = action.attachment_slot or (old.attachment_slot if old else None)
-    if slot and action.uncovered_regions is not None:
+    if slot and (action.uncovered_regions is not None or action.partially_removed is not None):
         raise ValueError("Body placement cannot carry clothing displacement.")
     uncovered = action.uncovered_regions
     if uncovered is None:
         uncovered = old.uncovered_regions if old and not slot else []
+    partial = _partial_after(action, old)
     source = None
-    if slot or uncovered:
+    if slot or uncovered or partial:
         source = (
             old.source
-            if old and action.uncovered_regions is None and action.attachment_slot is None
+            if old
+            and action.uncovered_regions is None
+            and action.attachment_slot is None
+            and action.partially_removed is None
             else WearSource(
                 request_id=request_id,
                 content_hash=sha256(narration.encode()).hexdigest(),
@@ -88,6 +108,7 @@ def placement(
         item_id=identifier,
         uncovered_regions=uncovered,
         attachment_slot=slot,
+        partially_removed=partial,
         source=source,
     )
 

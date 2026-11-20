@@ -2,8 +2,10 @@
 
 from typing import Any
 
+from backend.engine import turn_controls
 from backend.engine.chpm import (
     agenda,
+    agenda_references,
     agent,
     belief_recall,
     causal_memory,
@@ -12,10 +14,13 @@ from backend.engine.chpm import (
     integrated_request,
     prompts,
     proposal_attempt,
+    proposal_references,
+    quote_references,
     semantic_choice,
     semantic_recall,
 )
 from backend.engine.chpm.agent_tools import Tools
+from backend.engine.chpm.errors import StaleControlError
 from backend.engine.chpm.host_state import Mind
 from backend.engine.chpm.kernel import ChpmError, existing, fingerprint, select
 from backend.engine.chpm.notebook_tools import NotebookDraft
@@ -23,8 +28,6 @@ from backend.engine.chpm.schema import (
     AgendaEntry,
     Decision,
     Observation,
-    Proposal,
-    ProposalOptions,
     Settings,
     Usage,
 )
@@ -45,17 +48,44 @@ async def decide(
     cached = existing(previous, observation, key)
     if cached is not None:
         return cached
-    raw: ProposalOptions | Proposal = await inference.request(
+    goal = supplied["authored_goal"]
+    fragments = quote_references.goal_fragments(goal)
+    payload = dict(supplied)
+    if len(goal) > quote_references.MAX_FRAGMENT_CHARS:
+        payload.pop("authored_goal")
+        payload["authored_goal_fragments"] = fragments
+    operation = turn_controls.operation(
+        turn_controls.scope(manager, "proposal", observation=observation),
+        "submit_decision",
+        actor_id=actor_id,
+    )
+    control = operation.model_dump(exclude_none=True)
+    scope = fingerprint({"control": control, "actor": actor_id, "goal": goal})
+    raw: proposal_references.GoalReferenceProposal = await inference.request(
         manager,
         settings,
         usage,
-        prompts.PROPOSE
-        + "\nGoal alignment supports/conflicts requires an exact authored_goal quote; neutral/unknown uses an empty quote.",
-        supplied,
-        ProposalOptions,
+        proposal_references.instructions(prompts.PROPOSE.replace("message_plan", "intention"))
+        + "\nFor goal alignment supports/conflicts select an offered goal_ref. "
+        "authored_goal_fragments, when supplied, contains the complete authored goal "
+        "as exact bounded excerpts; otherwise use authored_goal. Neutral/unknown uses null.",
+        {
+            **payload,
+            "proposal_contract": "goal-reference-v1",
+            "reference_scope": scope,
+            "request_control": turn_controls.request_view(operation),
+        },
+        proposal_references.GoalReferenceProposal,
         "proposal",
+        identifiers={
+            "goal_ref": list(fragments),
+            "entry_id": agenda_references.active_ids(entries, actor_id),
+            "reference_scope": [scope],
+        },
     )
-    proposal = raw.canonical() if isinstance(raw, ProposalOptions) else raw
+    if not turn_controls.bind_current(manager, control, "proposal", observation=observation):
+        raise StaleControlError("CHPM proposal belongs to an inactive or different turn attempt.")
+    proposal = raw.canonical(goal, entries, actor_id, scope)
     agenda.validate_proposal(proposal, entries)
     return select(actor_id, observation, proposal, goal=supplied["authored_goal"], context_hash=key)
 
@@ -167,4 +197,5 @@ async def deliberate(
         prepared.schema,
         prepared.identifiers,
         prepared.accept,
+        diagnose=prepared.diagnose,
     )

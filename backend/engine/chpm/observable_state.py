@@ -1,13 +1,14 @@
 """Transient observer-scoped views of existing state owners, never another world store."""
 
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
+from backend.engine.actor_aliases import public_actor_id, public_placement
 from backend.engine.chpm.kernel import ChpmError
 from backend.engine.chpm.schema import Observation
 from backend.engine.clothing.context import actor_records
-from backend.engine.clothing.projection import known_worn_item_ids, visible_character
+from backend.engine.clothing.projection import item_wear_state, visible_character
 from backend.engine.clothing.visuals import detailed_for_state, session_objects
 from backend.engine.physical_conditions.ledger import read
 from backend.engine.physical_conditions.schema import Ledger
@@ -26,10 +27,7 @@ class View:
     content_hash: str
     scene_id: str
     entities: dict[str, dict]
-
-
-def _actor_id(identifier: str) -> str:
-    return "@player" if identifier == PLAYER else identifier
+    scene: dict = field(default_factory=dict)
 
 
 def _ledger(state: Any) -> Ledger | None:
@@ -56,7 +54,11 @@ def _conditions(ledger: Ledger | None, target: str, *, own: bool, visible: set[s
             "part": row.part,
             "status": row.status,
             **(
-                {"detail": row.detail if own else row.visual_detail}
+                {
+                    "detail": row.detail
+                    if own or row.kind == "item_state" and row.latest.kind == "command"
+                    else row.visual_detail
+                }
                 if row.status != "resolved"
                 else {}
             ),
@@ -75,17 +77,18 @@ def _profile_view(actor: dict, detailed: bool) -> dict | None:
     )
 
 
-def _worn(actor: dict) -> set[str] | None:
-    return known_worn_item_ids(
+def _wear_state(actor: dict, item_id: str) -> str:
+    return item_wear_state(
         actor.get("visual_profile"),
         actor.get("resolved_inventory"),
+        item_id,
         equipment=actor.get("equipment"),
     )
 
 
 def _actor_view(identifier: str, actor: dict, visual: dict | None, conditions: list[dict]) -> dict:
     return {
-        "id": _actor_id(identifier),
+        "id": public_actor_id(identifier),
         "name": str(actor.get("name") or "")[:160],
         "kind": "actor",
         "visible_clothing": deepcopy(visual["clothing"]) if visual else None,
@@ -94,25 +97,31 @@ def _actor_view(identifier: str, actor: dict, visual: dict | None, conditions: l
     }
 
 
-def _item_view(
-    identifier: str, item: dict, owner: str, worn: set[str] | None, conditions: list[dict]
-) -> dict:
+def _item_view(identifier: str, item: dict, owner: str, wear: str, conditions: list[dict]) -> dict:
     return {
         "id": identifier,
         "name": str(item.get("name") or "")[:160],
         "kind": "item",
-        "owner_id": _actor_id(owner),
-        "worn_by": _actor_id(owner) if worn is not None and identifier in worn else None,
-        "wear_status": "unknown"
-        if worn is None and owner != SCENE
-        else "worn"
-        if worn and identifier in worn
-        else "not_worn",
+        "owner_id": public_actor_id(owner),
+        "worn_by": public_actor_id(owner) if wear == "worn" else None,
+        "wear_status": "not_worn" if wear == "carried" else wear,
         "recorded_conditions": conditions,
+        **(
+            {"spatial_position": item["spatial_position"]}
+            if owner == SCENE and item.get("spatial_position")
+            else {}
+        ),
     }
 
 
-def project(manager: Any, rows: list[Any], observer_id: str, observation: Observation) -> View:
+def project(
+    manager: Any,
+    rows: list[Any],
+    observer_id: str,
+    observation: Observation,
+    *,
+    own_facts: bool = True,
+) -> View:
     """Own facts plus public surfaces; no arbitrary metadata, bags or private other minds."""
     state = manager.state
     if (
@@ -142,16 +151,17 @@ def project(manager: Any, rows: list[Any], observer_id: str, observation: Observ
             visual["clothing"] = [
                 item for item in visual["clothing"] if snapshot.owners.get(item["item_id"]) == owner
             ]
-    own = {key for key, owner in snapshot.owners.items() if owner == observer_id}
+    own = {key for key, owner in snapshot.owners.items() if owner == observer_id and own_facts}
     entities = {
-        _actor_id(key): _actor_view(
+        public_actor_id(key): _actor_view(
             key,
             actor,
             visuals[key],
-            _conditions(ledger, key, own=key == observer_id, visible=visible),
+            _conditions(ledger, key, own=own_facts and key == observer_id, visible=visible),
         )
         for key, actor in actors.items()
     }
+    _add_poses(manager, rows, actors, entities)
     available: dict[str, str] = {
         key: SCENE for key in scope.public_ids if snapshot.owners.get(key, SCENE) == SCENE
     }
@@ -166,7 +176,9 @@ def project(manager: Any, rows: list[Any], observer_id: str, observation: Observ
         {**row, "owner_id": PLAYER if row["owner_id"] == manager.avatar.id else row["owner_id"]}
         for row in placed
     ]
-    available.update({row["item_id"]: row["owner_id"] for row in placed})
+    available.update(
+        {row["item_id"]: snapshot.owners.get(row["item_id"], row["owner_id"]) for row in placed}
+    )
     loose = {key for key in available if available[key] == SCENE} | {
         row["item_id"] for row in placed
     }
@@ -183,6 +195,35 @@ def project(manager: Any, rows: list[Any], observer_id: str, observation: Observ
         observation.scene_id,
         entities,
     )
+
+
+def _add_poses(manager: Any, rows: list, actors: dict, entities: dict) -> None:
+    from backend.engine.scene_staging.room_items import placement_targets
+    from backend.engine.scene_staging.shared import _cast
+    from backend.engine.scene_staging.state import project as poses
+    from backend.engine.visual_novel.config import read_settings
+
+    if not read_settings(manager.state).scene_staging:
+        return
+    try:
+        # Technical inspection exposes the same available object ID as an approach command.
+        current = poses(
+            manager.state,
+            _cast(manager, actors, rows),
+            scene_objects=placement_targets(manager.avatar, rows, manager.state),
+            target_ids=True,
+        )
+    except (KeyError, TypeError, ValueError):
+        return
+    for identifier, pose in current.items():
+        actor = public_actor_id(identifier, player_id=manager.avatar.id)
+        if actor not in entities:
+            continue
+        public = dict(pose)
+        placement = pose.get("placement")
+        if placement:
+            public["placement"] = public_placement(placement, player_id=manager.avatar.id)
+        entities[actor].update(public)
 
 
 def _add_worn(available: dict[str, str], visuals: dict[str, dict | None], owners: dict) -> None:
@@ -222,18 +263,18 @@ def _add_items(
                 and identifier in loose
                 and row.visibility == "public"
                 and row.status != "resolved"
-                and row.visual_detail
+                and (row.visual_detail or row.kind == "item_state" and row.latest.kind == "command")
                 and row.latest.kind != "unavailable"
             }
             if ledger
             else visible
         )
-        worn = _worn(actors[owner]) if owner in actors else set()
+        wear = _wear_state(actors[owner], identifier) if owner in actors else "carried"
         entities[identifier] = _item_view(
             identifier,
             item,
             owner,
-            worn,
+            wear,
             _conditions(ledger, identifier, own=owned, visible=surfaces),
         )
         entities[identifier]["condition_knowledge"] = "recorded_only" if ledger else "unavailable"
@@ -242,5 +283,16 @@ def _add_items(
 async def capture(
     manager: Any, observer_ids: list[str], observation: Observation
 ) -> dict[str, View]:
+    from dataclasses import replace
+
+    from backend.engine.chpm import observable_scene
+
     rows = await session_objects(manager.db, manager.game_id)
-    return {key: project(manager, rows, key, observation) for key in observer_ids}
+    routes = await observable_scene.capture(manager, rows)
+    return {
+        key: replace(
+            project(manager, rows, key, observation),
+            scene=observable_scene.project(manager, routes, key),
+        )
+        for key in observer_ids
+    }

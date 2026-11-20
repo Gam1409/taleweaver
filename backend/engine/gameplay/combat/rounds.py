@@ -87,6 +87,9 @@ class CombatRoundMixin(CombatEnemyMixin):
         if combat.get("active"):
             self._set_turn_marker(combat)
         self._set_combat_state(combat)
+        from backend.engine.npc_actions.combat_binding import complete
+
+        complete(self.manager)
 
     def _announce_player_turn(self, combat: dict[str, Any]) -> None:
         self._set_turn_marker(combat)

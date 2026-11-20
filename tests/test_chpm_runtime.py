@@ -1,5 +1,6 @@
 """Mock model checks for opt-out, isolation, budgets and publication barriers."""
 
+import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -7,7 +8,6 @@ import pytest
 
 from backend.engine.chpm import context, inference, perception, rendering, runtime
 from backend.engine.chpm.kernel import ChpmError
-from backend.engine.chpm.proposal_draft import Draft
 from backend.engine.chpm.schema import (
     KernelState,
     Perception,
@@ -18,10 +18,12 @@ from backend.engine.chpm.schema import (
 )
 from backend.engine.chpm.state import KEY, load
 from backend.engine.turn_replay import stream
+from tests.chpm_reference_fixture import response as reference_response
+from tests.npc_control_support import bind_observation
 from tests.test_chpm_kernel import decision, observation, proposal, wire_proposal
 
 
-def manager(mode="live"):
+def manager(mode="live", *, observed=None):
     value = KernelState(settings=Settings(mode=mode, actor_ids=["npc"], failure_policy="strict"))
     host = SimpleNamespace(
         game_id="session",
@@ -43,6 +45,7 @@ def manager(mode="live"):
         character="Engineer",
         metadata_json={},
     )
+    bind_observation(host, observed or observation())
     return host, actor
 
 
@@ -70,9 +73,22 @@ async def test_preparation_is_once_and_shadow_does_not_direct_narration(monkeypa
         "project",
         AsyncMock(return_value={"npc": Perception(actor_id="npc", quotes=["Hello"])}),
     )
-    mocked = AsyncMock(
-        return_value=Draft.model_validate(wire_proposal()) if mode == "live" else proposal()
-    )
+
+    def respond(_manager, _settings, _usage, _instruction, payload, schema, *_args, **_kwargs):
+        if mode == "live":
+            raw = wire_proposal()
+        else:
+            canonical = proposal()
+            raw = {
+                "appraisal": canonical.appraisal,
+                "candidates": {
+                    candidate.kind: candidate.model_dump(exclude={"kind"})
+                    for candidate in canonical.candidates
+                },
+            }
+        return schema.model_validate_json(reference_response(json.dumps(raw), payload))
+
+    mocked = AsyncMock(side_effect=respond)
     monkeypatch.setattr(inference, "request", mocked)
     result = await runtime.prepare(host, "Hello", [actor])
     assert bool(result) == (mode == "live")

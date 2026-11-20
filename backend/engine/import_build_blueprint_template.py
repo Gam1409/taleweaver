@@ -21,7 +21,12 @@ def build_blueprint_template(
 
     return AdventureTemplate(
         npc_personality_settings=personality_defaults(
-            adv_meta.get("npc_personality_settings", manifest.get("npc_personality_settings"))
+            adv_meta.get("npc_personality_settings", manifest.get("npc_personality_settings")),
+            mode=enforcement_mode,
+            living_world=adv_meta.get(
+                "living_world_settings", manifest.get("living_world_settings")
+            ),
+            preserve_saved=True,
         ),
         living_world_settings=stored_defaults(
             adv_meta.get("living_world_settings", manifest.get("living_world_settings"))

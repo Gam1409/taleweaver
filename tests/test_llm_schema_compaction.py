@@ -29,10 +29,11 @@ def repeated_schema():
     }
 
 
-def test_exact_subtree_sharing_preserves_validation_and_existing_definitions():
+@pytest.mark.parametrize("reserved_name", ["__shared_0", "_s0"])
+def test_exact_subtree_sharing_preserves_validation_and_existing_definitions(reserved_name):
     repeated = repeated_schema()
     schema = {
-        "$defs": {"__shared_0": {"type": "null"}, "a/~": repeated},
+        "$defs": {reserved_name: {"type": "null"}, "a/~": repeated},
         "type": "object",
         "properties": {
             "": repeated,
@@ -47,8 +48,9 @@ def test_exact_subtree_sharing_preserves_validation_and_existing_definitions():
     compacted = share_schema(schema)
     Draft202012Validator.check_schema(compacted)
     assert len(json.dumps(compacted)) < len(json.dumps(schema))
-    assert compacted["$defs"]["__shared_0"] == {"type": "null"}
-    assert "__shared_0_" in compacted["$defs"]
+    assert compacted["$defs"][reserved_name] == {"type": "null"}
+    generated = set(compacted["$defs"]) - set(schema["$defs"])
+    assert ("_s0_" if reserved_name == "_s0" else "_s0") in generated
     assert schema == original
     witness = {"": {"code": "OK"}, "a/~": {"code": "OK"}, "by_ref": {"code": "OK"}}
     witnesses = [
@@ -68,6 +70,47 @@ def test_exact_subtree_sharing_preserves_validation_and_existing_definitions():
     assert all(before.is_valid(value) == after.is_valid(value) for value in witnesses)
 
 
+def test_short_definition_names_preserve_escaped_targets_collisions_and_literal_references():
+    target = "#/$defs/Long~1Record~0Name"
+    literal = {"$ref": target, "$defs": {"Long/Record~Name": "Literal data"}}
+    schema = {
+        "$defs": {
+            "Long/Record~Name": repeated_schema(),
+            "d0": {"type": "integer", "minimum": 1, "maximum": 5},
+            "LongOptionalRecord": {"anyOf": [{"$ref": target}, {"type": "null"}]},
+        },
+        "type": "object",
+        "properties": {
+            "record": {"$ref": target},
+            "optional": {"$ref": "#/$defs/LongOptionalRecord"},
+            "count": {"$ref": "#/$defs/d0"},
+            "literal": {"const": literal, "default": literal},
+        },
+        "required": ["record", "optional", "count", "literal"],
+        "additionalProperties": False,
+    }
+    original = deepcopy(schema)
+    compacted = share_schema(schema, short_names=True)
+    Draft202012Validator.check_schema(compacted)
+    assert len(json.dumps(compacted)) < len(json.dumps(schema))
+    assert compacted["properties"]["literal"] == {"const": literal, "default": literal}
+    assert compacted["$defs"]["d0"] == repeated_schema()
+    assert schema == original
+    valid = {"record": {"code": "OK"}, "optional": None, "count": 1, "literal": literal}
+    witnesses = [
+        valid,
+        {**valid, "optional": {"code": "VALID", "count": 5}},
+        {**valid, "record": {"code": "x"}},
+        {**valid, "optional": {"code": "OK", "unknown": True}},
+        {**valid, "count": 0},
+        {**valid, "literal": {"$ref": "rewritten"}},
+        {key: value for key, value in valid.items() if key != "record"},
+        {**valid, "unknown": True},
+    ]
+    before, after = Draft202012Validator(schema), Draft202012Validator(compacted)
+    assert all(before.is_valid(value) == after.is_valid(value) for value in witnesses)
+
+
 @pytest.mark.parametrize("keyword", ["oneOf", "anyOf", "allOf"])
 def test_sharing_preserves_combinator_and_nullable_branch_semantics(keyword):
     rule = {keyword: [repeated_schema(), {"type": "null"}]}
@@ -80,6 +123,7 @@ def test_sharing_preserves_combinator_and_nullable_branch_semantics(keyword):
             assert before.is_valid(value) == after.is_valid(value)
 
 
+@pytest.mark.parametrize("short_names", [False, True])
 @pytest.mark.parametrize(
     "keyword",
     [
@@ -94,13 +138,14 @@ def test_sharing_preserves_combinator_and_nullable_branch_semantics(keyword):
         "unevaluatedItems",
     ],
 )
-def test_scope_sensitive_schemas_are_kept_unchanged(keyword):
+def test_scope_sensitive_schemas_are_kept_unchanged(keyword, short_names):
     repeated = repeated_schema()
     schema = {"properties": {"first": repeated, "second": repeated, "scoped": {keyword: "scope"}}}
     assert not safe_to_share(schema)
-    assert share_schema(schema) == schema
+    assert share_schema(schema, short_names=short_names) == schema
 
 
+@pytest.mark.parametrize("short_names", [False, True])
 @pytest.mark.parametrize(
     "reference",
     [
@@ -116,36 +161,40 @@ def test_scope_sensitive_schemas_are_kept_unchanged(keyword):
         [],
     ],
 )
-def test_unsupported_or_unresolved_references_are_kept_unchanged(reference):
+def test_unsupported_or_unresolved_references_are_kept_unchanged(reference, short_names):
     schema = {"$defs": {"Foo": repeated_schema()}, "properties": {"x": {"$ref": reference}}}
     assert not safe_to_share(schema)
-    assert share_schema(schema) == schema
+    assert share_schema(schema, short_names=short_names) == schema
 
 
-def test_static_reference_cycles_are_kept_unchanged():
+@pytest.mark.parametrize("short_names", [False, True])
+def test_static_reference_cycles_are_kept_unchanged(short_names):
     schema = {
         "$defs": {"First": {"$ref": "#/$defs/Second"}, "Second": {"$ref": "#/$defs/First"}},
         "properties": {"x": {"$ref": "#/$defs/First"}},
     }
     assert not safe_to_share(schema)
-    assert share_schema(schema) == schema
+    assert share_schema(schema, short_names=short_names) == schema
 
 
-def test_mutable_container_cycles_bail_without_recursing_forever():
+@pytest.mark.parametrize("short_names", [False, True])
+def test_mutable_container_cycles_bail_without_recursing_forever(short_names):
     schema = {"properties": {}}
     schema["properties"]["self"] = schema
     assert not safe_to_share(schema)
-    copied = share_schema(schema)
+    copied = share_schema(schema, short_names=short_names)
     assert copied is copied["properties"]["self"]
     assert copied is not schema
 
 
-def test_literal_json_and_schema_property_names_are_opaque_to_both_compactors():
+@pytest.mark.parametrize("short_names", [False, True])
+def test_literal_json_and_schema_property_names_are_opaque_to_both_compactors(short_names):
     literal = {
         "title": "Literal title must remain.",
         "$id": "literal identity",
         "$ref": "not a schema reference",
         "type": "object",
+        "_s0": {"__shared_0": "Literal keys must not be renamed."},
         "properties": {"title": {"title": "Nested literal title."}},
     }
     schema = {
@@ -159,7 +208,7 @@ def test_literal_json_and_schema_property_names_are_opaque_to_both_compactors():
         },
     }
     compacted = compact_json_schema(schema)
-    shared = share_schema(schema)
+    shared = share_schema(schema, short_names=short_names)
     assert "title" not in compacted
     assert "title" in compacted["properties"]
     assert compacted["properties"]["title"] == {"const": literal, "default": literal}
@@ -180,7 +229,8 @@ def test_literal_json_and_schema_property_names_are_opaque_to_both_compactors():
     }
 
 
-def test_references_into_definition_subpaths_keep_their_original_targets():
+@pytest.mark.parametrize("short_names", [False, True])
+def test_references_into_definition_subpaths_keep_their_original_targets(short_names):
     repeated = {
         "type": "object",
         "properties": {
@@ -197,7 +247,7 @@ def test_references_into_definition_subpaths_keep_their_original_targets():
     }
     witness = {"a": "abc", "b": {"x": "abc"}}
     assert Draft202012Validator(schema).is_valid(witness)
-    compacted = share_schema(schema)
+    compacted = share_schema(schema, short_names=short_names)
     assert compacted == schema
     assert Draft202012Validator(compacted).is_valid(witness)
 

@@ -18,6 +18,13 @@ class NativeToolsUnsupportedError(RuntimeError):
 class InvalidToolTurnError(ValueError):
     """A completed response does not contain an unambiguous native assistant message."""
 
+    def __init__(
+        self, message: str, *, code: str = "invalid_structure", call_ids: tuple[str, ...] = ()
+    ) -> None:
+        super().__init__(message)
+        self.code = code
+        self.call_ids = call_ids
+
 
 @dataclass(frozen=True)
 class ToolCall:
@@ -34,7 +41,9 @@ class ToolTurn:
     usage: dict[str, Any] | None = None
 
 
-def ensure_tools_supported(router: Any, model: str | None = None) -> None:
+def ensure_tools_supported(
+    router: Any, model: str | None = None, *, require_tools: bool = False
+) -> None:
     """Reject a known local parameter drop before reserving or sending inference."""
     selected = model or router.model
     options: dict[str, Any] = {}
@@ -50,6 +59,15 @@ def ensure_tools_supported(router: Any, model: str | None = None) -> None:
         raise NativeToolsUnsupportedError(
             "The configured provider adapter does not support native tools and tool_choice."
         )
+    if require_tools and provider == "anthropic":
+        from litellm.llms.anthropic.common_utils import AnthropicModelInfo
+
+        # This adapter can downgrade required to auto under LiteLLM's global drop policy,
+        # even when the individual request sets drop_params=False.
+        if AnthropicModelInfo.forced_tool_use_unsupported(resolved):
+            raise NativeToolsUnsupportedError(
+                "The configured Anthropic model does not support required native tool choice."
+            )
 
 
 def _request_kwargs(
@@ -122,7 +140,7 @@ def _choice_finish_reason(choice: dict[str, Any]) -> str | None:
     try:
         return classify_tool_finish(choice)
     except ValueError as exc:
-        raise InvalidToolTurnError(str(exc)) from None
+        raise InvalidToolTurnError(str(exc), code="unsupported_finish") from None
 
 
 def _turn(payload: dict[str, Any]) -> ToolTurn:
@@ -130,6 +148,7 @@ def _turn(payload: dict[str, Any]) -> ToolTurn:
     if not isinstance(choices, list) or len(choices) != 1:
         raise InvalidToolTurnError("A native tool response requires exactly one choice.")
     choice = _mapping(choices[0])
+    reason = _choice_finish_reason(choice)
     message = _mapping(choice.get("message"))
     raw_calls = message.get("tool_calls")
     calls = [] if raw_calls is None else raw_calls
@@ -143,7 +162,7 @@ def _turn(payload: dict[str, Any]) -> ToolTurn:
     return ToolTurn(
         message,
         tuple(_call(call) for call in calls),
-        _choice_finish_reason(choice),
+        reason,
         usage if isinstance(usage, dict) else None,
     )
 
@@ -162,7 +181,7 @@ async def execute(
     metadata: dict[str, Any] | None = None,
 ) -> ToolTurn:
     """Keep assistant calls and arguments intact; callers validate and execute capabilities."""
-    ensure_tools_supported(router, model)
+    ensure_tools_supported(router, model, require_tools=tool_choice == "required")
     kwargs = _request_kwargs(router, messages, tools, model, tool_choice)
     context: dict[str, Any] = {
         "adventure_id": adventure_id,

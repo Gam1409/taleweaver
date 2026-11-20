@@ -7,6 +7,7 @@ from types import SimpleNamespace
 import pytest
 from sqlalchemy import select
 
+from backend.engine import turn_controls
 from backend.engine.chpm import (
     agent,
     host_adapter,
@@ -120,6 +121,10 @@ async def test_lookup_and_memory_query_receive_the_verified_scene_without_extra_
 
         monkeypatch.setattr(inference, "request", request)
         decision = load(manager.state).actors["LINA"]
+        # The original completed turn is closed; this read is a new explicit request.
+        turn_controls.begin(manager)
+        source = await db.get(ChatMessage, decision.observation.message_id)
+        turn_controls.bind_input(manager, source)
         await agent.investigate(
             manager,
             Settings(mode="live", actor_ids=["LINA"], agent_steps=1),
@@ -137,6 +142,7 @@ async def test_lookup_and_memory_query_receive_the_verified_scene_without_extra_
         )
         query = semantic_recall._query(turn, "LINA", "START")
         assert ACTION in query and "not automatically ongoing" in query and len(query) <= 3000
+        turn_controls.close(manager)
 
 
 async def test_export_import_keeps_nested_scene_sources_reconcilable(monkeypatch):

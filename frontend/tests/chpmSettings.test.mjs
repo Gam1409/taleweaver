@@ -19,6 +19,60 @@ const state = (revision = 0) => ({
   characters: [{ id: 'NPC', name: 'Lina' }], usage: { calls: 0, input_chars: 0, output_chars: 0, repairs: 0, status: 'idle', detail: '' }, trace: [],
 })
 
+test('legacy missing tool profile loads as Auto without making settings dirty or saving', async t => {
+  const methods = []
+  const saved = state()
+  const f = fixture(t, async (_url, options) => {
+    methods.push(options.method)
+    return Response.json(saved)
+  })
+  await tick()
+  assert.equal(f.draft.value.tool_profile, 'auto')
+  assert.equal(f.status.value.settings.tool_profile, 'auto')
+  assert.equal(saved.settings.tool_profile, undefined)
+  assert.equal(f.dirty.value, false)
+  assert.equal(await f.save(), true)
+  assert.deepEqual(methods, ['GET'])
+})
+
+for (const profile of ['auto', 'anthropic', 'openai', 'mistral', 'gemma', 'deepseek', 'qwen']) {
+  test(`tool profile ${profile} persists independently of saved protocol and dormant preferences`, async t => {
+    const saved = state(7)
+    Object.assign(saved.settings, {
+      tool_profile: 'openai', tool_protocol: 'json', workflow: 'integrated',
+      notebook_enabled: true, semantic_memory: true, agent_steps: 3,
+      max_calls_per_turn: 25, max_input_chars: 64000, future_preference: 'retained',
+    })
+    const f = fixture(t, async (_url, options) => {
+      if (options.method === 'GET') return Response.json(saved)
+      const body = JSON.parse(options.body)
+      assert.equal(body.expected_revision, 7)
+      assert.deepEqual(body.settings, { ...saved.settings, tool_profile: profile })
+      return Response.json({ ...saved, revision: 8, settings: body.settings })
+    })
+    await tick()
+    assert.equal(f.draft.value.tool_profile, 'openai')
+    const budget = f.minimumCalls.value
+    f.setToolProfile(profile)
+    assert.equal(f.minimumCalls.value, budget)
+    assert.equal(f.status.value.settings.tool_profile, 'openai')
+    assert.equal(await f.save(), true)
+    assert.equal(f.draft.value.tool_profile, profile)
+    assert.equal(f.dirty.value, false)
+  })
+}
+
+test('unrecognized saved profile preferences are retained without a silent rewrite or save loop', async t => {
+  const saved = state(), methods = []
+  saved.settings.tool_profile = 'future-profile'
+  const f = fixture(t, async (_url, options) => { methods.push(options.method); return Response.json(saved) })
+  await tick()
+  assert.equal(f.draft.value.tool_profile, 'future-profile')
+  assert.equal(f.dirty.value, false)
+  assert.equal(await f.save(), true)
+  assert.deepEqual(methods, ['GET'])
+})
+
 test('twenty-person roster budgets active participants and explicitly supports all present', async t => {
   const f = fixture(t, async () => new Response(JSON.stringify(state())))
   await tick()
@@ -78,6 +132,54 @@ test('selecting either workflow preserves an already larger input budget', async
   f.setWorkflow('staged')
   assert.equal(f.draft.value.max_input_chars, 64000)
   assert.equal(saved.settings.max_input_chars, 64000)
+})
+
+test('world actions opt in locally with an integrated round and are saved explicitly', async t => {
+  const saved = state(3)
+  Object.assign(saved.settings, { mode: 'live', actor_ids: ['NPC'], max_active_npcs: 1, max_calls_per_turn: 8 })
+  const f = fixture(t, async (_url, options) => {
+    if (options.method === 'GET') return Response.json(saved)
+    const body = JSON.parse(options.body)
+    assert.equal(body.settings.action_tools, true)
+    assert.equal(body.settings.workflow, 'integrated')
+    assert.equal(body.settings.agent_steps, 1)
+    assert.equal(body.settings.max_input_chars, 48000)
+    assert.equal(body.settings.max_calls_per_turn, 8)
+    return Response.json({ ...saved, revision: 4, settings: body.settings })
+  })
+  await tick()
+  assert.equal(f.draft.value.action_tools ?? false, false)
+  f.setActionToolsEnabled(true)
+  assert.equal(f.draft.value.action_tools, true)
+  assert.equal(f.status.value.settings.action_tools, undefined)
+  assert.equal(await f.save(), true)
+  assert.equal(f.status.value.settings.action_tools, true)
+})
+
+test('disabling world actions preserves notebook choice, selected rounds and larger input limits', async t => {
+  const saved = state()
+  Object.assign(saved.settings, { workflow: 'integrated', action_tools: true, notebook_enabled: true, agent_steps: 3, max_input_chars: 64000 })
+  const f = fixture(t, async () => Response.json(saved))
+  await tick()
+  f.setActionToolsEnabled(false)
+  assert.equal(f.draft.value.action_tools, false)
+  assert.equal(f.draft.value.workflow, 'integrated')
+  assert.equal(f.draft.value.notebook_enabled, true)
+  assert.equal(f.draft.value.agent_steps, 3)
+  assert.equal(f.draft.value.max_input_chars, 64000)
+})
+
+test('returning to staged decisions disables incompatible world actions without disabling notes', async t => {
+  const saved = state()
+  Object.assign(saved.settings, { workflow: 'integrated', action_tools: true, notebook_enabled: true, agent_steps: 2 })
+  const f = fixture(t, async () => Response.json(saved))
+  await tick()
+  f.setWorkflow('staged')
+  assert.equal(f.draft.value.action_tools, false)
+  assert.equal(f.draft.value.workflow, 'staged')
+  assert.equal(f.draft.value.notebook_enabled, true)
+  assert.equal(f.draft.value.agent_steps, 2)
+  assert.equal(saved.settings.action_tools, true)
 })
 
 test('semantic memory is opt-in, session-scoped, and does not increase generative calls', async t => {
@@ -276,4 +378,94 @@ test('agent rounds reserve calls per active NPC and stay off in observe mode', a
   assert.equal(await f.save(), false)
   f.draft.value.mode = 'shadow'
   assert.equal(f.minimumCalls.value, 4)
+})
+
+test('RPG saves require compatible explicit action control and preserve the server-derived scope', async t => {
+  const saved = { ...state(4), host_mode: 'rpg' }
+  Object.assign(saved.settings, { control_scope: 'combat_actions', actor_ids: ['NPC'], max_calls_per_turn: 8 })
+  const methods = []
+  const f = fixture(t, async (_url, options) => {
+    methods.push(options.method)
+    if (options.method === 'GET') return Response.json(saved)
+    const body = JSON.parse(options.body)
+    assert.equal(body.settings.control_scope, 'combat_actions')
+    assert.equal(body.settings.workflow, 'integrated')
+    assert.equal(body.settings.action_tools, true)
+    return Response.json({ ...saved, revision: 5, settings: body.settings })
+  })
+  await tick()
+  f.draft.value.mode = 'live'
+  assert.equal(await f.save(), false)
+  assert.match(f.error.value, /Enable combat action control/)
+  assert.deepEqual(methods, ['GET'])
+  f.setActionToolsEnabled(true)
+  assert.equal(await f.save(), true)
+  f.selectStandard()
+  assert.equal(await f.save(), true)
+})
+
+test('combat tool budgets track active selection and rounds without dialogue reserves or history warnings', async t => {
+  const saved = { ...state(), host_mode: 'rpg', history_capacity: { NPC: { status: 'pause_required' } } }
+  Object.assign(saved.settings, { mode: 'live', actor_ids: ['NPC', 'B', 'C'], max_active_npcs: 2,
+    control_scope: 'combat_actions', workflow: 'integrated', action_tools: true, agent_steps: 3, max_calls_per_turn: 5 })
+  const f = fixture(t, async () => Response.json(saved))
+  await tick()
+  assert.equal(f.minimumCalls.value, 18)
+  assert.equal(f.budgetWarning.value, true)
+  assert.deepEqual(f.historyWarnings.value, [])
+  assert.equal(await f.save(), false)
+  assert.match(f.error.value, /combat tool rounds/)
+  assert.doesNotMatch(f.error.value, /perception|review|narration/)
+  f.draft.value.agent_steps = 1
+  assert.equal(f.minimumCalls.value, 6)
+  f.draft.value.max_active_npcs = 3
+  assert.equal(f.minimumCalls.value, 9)
+  f.selectStandard()
+  assert.equal(f.minimumCalls.value, 0)
+})
+
+test('combat budget reserves crossing initiative turns within the 25-call cap', async t => {
+  const saved = { ...state(), host_mode: 'rpg' }
+  Object.assign(saved.settings, { mode: 'live', actor_ids: Array.from({ length: 9 }, (_, index) => `NPC-${index}`),
+    max_active_npcs: 8, workflow: 'integrated', action_tools: true, agent_steps: 1, max_calls_per_turn: 25 })
+  const f = fixture(t, async () => Response.json(saved))
+  await tick()
+  assert.equal(f.minimumCalls.value, 24)
+  assert.equal(f.budgetWarning.value, false)
+  f.draft.value.max_active_npcs = 9
+  assert.equal(f.minimumCalls.value, 27)
+  assert.equal(await f.save(), false)
+  f.draft.value.max_active_npcs = 4
+  f.draft.value.agent_steps = 2
+  assert.equal(f.minimumCalls.value, 24)
+  assert.equal(f.budgetWarning.value, false)
+  f.draft.value.max_active_npcs = 2
+  f.draft.value.agent_steps = 3
+  assert.equal(f.minimumCalls.value, 18)
+  assert.equal(f.draft.value.max_calls_per_turn, 25)
+})
+
+test('session switching away from two-phase decisions retains the command budget and clears the opt-in', async t => {
+  const saved = state(5)
+  Object.assign(saved.settings, { mode: 'live', actor_ids: ['NPC'], workflow: 'integrated', action_tools: true,
+    agent_steps: 1, npc_decision_mode: 'two_phase', max_calls_per_turn: 8 })
+  let written
+  const f = fixture(t, async (_url, options) => {
+    if (options.method === 'GET') return Response.json(saved)
+    written = JSON.parse(options.body).settings
+    return Response.json({ ...saved, revision: 6, settings: written })
+  })
+  await tick()
+  assert.equal(f.minimumCalls.value, 7)
+  f.setWorkflow('staged')
+  assert.equal(f.draft.value.action_tools, false)
+  assert.equal(f.draft.value.npc_decision_mode, undefined)
+  f.setActionToolsEnabled(true)
+  f.draft.value.npc_decision_mode = 'two_phase'
+  f.setMode('shadow')
+  assert.equal(f.draft.value.npc_decision_mode, undefined)
+  assert.equal(await f.save(), true)
+  assert.equal(written.mode, 'shadow')
+  assert.equal(written.max_calls_per_turn, 8)
+  assert.equal(written.npc_decision_mode, undefined)
 })

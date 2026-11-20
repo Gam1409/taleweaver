@@ -10,8 +10,8 @@ from backend.engine.character_identity import identity_profile
 from backend.engine.clothing.context import resolved_inventory
 from backend.engine.clothing.profiles import (
     garment_for_item,
-    load_profile,
     owned_items,
+    placement_profile,
     validate_profile,
 )
 from backend.engine.clothing.schema import VisualProfile, WornItem
@@ -118,10 +118,7 @@ async def apply(db: Any, state: Any, avatar: Any, request: WardrobeAction) -> st
     owned = owned_items(resolved)
     scene = override.get("current_scene_id", npc.current_scene_id)
     raw = identity_profile(npc, override.get("visual_profile", npc.visual_profile))
-    profile = load_profile(raw)
-    if profile is None and raw:
-        raise ValueError("Repair the existing invalid visual profile before changing wear.")
-    profile = profile or VisualProfile()
+    profile = placement_profile(raw, resolved, request.item_id)
     if request.operation == "place":
         return await _place(
             db, state, avatar, request, npc, states, override, inventory, owned, profile, scene

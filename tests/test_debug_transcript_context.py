@@ -195,6 +195,7 @@ def test_persisted_debug_sources_cannot_be_recalled_as_valid_character_memory():
     from types import SimpleNamespace
 
     from backend.engine.chpm import causal_memory, memory, recent_scene, reports, semantic_sources
+    from backend.engine.chpm.host_state import Source
     from backend.engine.chpm.kernel import digest
 
     source = ChatMessage(
@@ -207,6 +208,15 @@ def test_persisted_debug_sources_cannot_be_recalled_as_valid_character_memory():
         is_debug=True,
     )
     entry = memory.from_source(source, "NPC", "NPC", source.content, "own_speech")
+    semantic_source = Source(
+        message_id=source.id,
+        revision_id=source.revision_id,
+        content_hash=digest(source.content),
+        role="assistant",
+        speaker_id="NPC",
+        kind="speech",
+        text=source.content,
+    )
     anchor = SimpleNamespace(
         session_id="session",
         revision_id="revision",
@@ -227,7 +237,7 @@ def test_persisted_debug_sources_cannot_be_recalled_as_valid_character_memory():
         lambda: causal_memory._valid(anchor, source, "session"),
         lambda: reports._matches(anchor, source, "session"),
         lambda: semantic_sources._valid(
-            anchor, source, {source.id: digest(source.content)}, "session"
+            semantic_source, source, {source.id: digest(source.content)}, "session"
         ),
         lambda: recent_scene.matches(moment, source, "session"),
     ]

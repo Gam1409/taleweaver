@@ -205,3 +205,17 @@ def test_unsupported_conditional_predicates_remain_explicit_local_checks(constra
         condition["maxProperties"] = 0
     with pytest.raises(SchemaProjectionError, match="local schema validation"):
         project(canonical)
+
+
+def test_one_conditional_keeps_a_single_alternative_for_all_other_enum_values():
+    other = [f"other_{index}" for index in range(20)]
+    schema = conditional({"enum": ["item_state", *other]})
+    generated = project(schema).schema
+    assert len(generated["anyOf"]) == 2
+    host = Draft202012Validator(schema)
+    decoder = Draft202012Validator(generated)
+    for kind in ["item_state", *other, None, "out_of_scope"]:
+        for detail in ["x", "long enough"]:
+            data = {"kind": kind, "detail": detail}
+            assert decoder.is_valid(data) == host.is_valid(data)
+    assert decoder.is_valid({}) and host.is_valid({})

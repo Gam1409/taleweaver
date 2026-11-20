@@ -1,13 +1,23 @@
 """Evidence-backed, scene-local visual deltas; never mechanical permissions."""
 
-from typing import Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import (
+    BaseModel,
+    BeforeValidator,
+    ConfigDict,
+    Field,
+    SerializerFunctionWrapHandler,
+    field_validator,
+    model_serializer,
+)
 
 from backend.core.text_evidence import WithEvidenceSpan
 from backend.engine.scene_staging.props import PropDelta
 
-Posture = Literal["standing", "sitting", "lying", "kneeling", "crouching", "unknown"]
+Posture = Literal[
+    "standing", "sitting", "lying", "kneeling", "crouching", "on_all_fours", "unknown"
+]
 Relation = Literal["in_front_of", "behind", "beside", "near", "on", "under", "unknown"]
 ActCategory = Literal[
     "kissing",
@@ -29,6 +39,23 @@ class Placement(BaseModel):
     target: str = Field(max_length=120)
 
 
+class StagingCause(BaseModel):
+    """A proposed external consequence, distinct from the target's voluntary action."""
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    kind: Literal["current_player_action", "actor_operation"]
+    basis: Literal["resolved_external_effect", "attempt", "intention", "uncertain"] = "uncertain"
+    passage_id: str | None = Field(default=None, min_length=1, max_length=40)
+    operation_id: str | None = Field(default=None, min_length=1, max_length=100)
+
+
+def _cause(value: Any) -> StagingCause | None:
+    try:
+        return StagingCause.model_validate(value) if value is not None else None
+    except ValueError:
+        return None  # An unusable source is unknown, never self-action authority.
+
+
 class SceneDelta(WithEvidenceSpan):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     entity_id: str = Field(min_length=1, max_length=100)
@@ -36,6 +63,16 @@ class SceneDelta(WithEvidenceSpan):
     posture: Posture | None = None
     placement: Placement | None = None
     clear: bool = False
+    performer_id: str | None = Field(default=None, min_length=1, max_length=100)
+    cause: Annotated[StagingCause | None, BeforeValidator(_cause)] = None
+
+    @model_serializer(mode="wrap")
+    def preserve_legacy_shape(self, handler: SerializerFunctionWrapHandler) -> dict:
+        result = super().preserve_legacy_shape(handler)
+        for name in ("performer_id", "cause"):
+            if getattr(self, name) is None:
+                result.pop(name, None)
+        return result
 
 
 class ExplicitDelta(WithEvidenceSpan):
@@ -57,6 +94,16 @@ class SceneExtraction(BaseModel):
     props: list[PropDelta] = Field(default_factory=list, max_length=24)
     explicit: list[ExplicitDelta] = Field(default_factory=list, max_length=8)
 
+    @field_validator("changes")
+    @classmethod
+    def actionable_changes(cls, changes: list[SceneDelta]) -> list[SceneDelta]:
+        # A model may describe a second aspect in a row that changes no staging field.
+        return [
+            row
+            for row in changes
+            if row.clear or row.posture is not None or row.placement is not None
+        ]
+
 
 INSTRUCTIONS = """Extract supported final visual changes and explicit states from current_narration.
 current_narration is an ordered map of source passages. Every evidence field selects
@@ -72,10 +119,11 @@ the actor and completed action. Resolve pronouns only when unambiguous. Reject
 intentions, requests, dialogue claims, negations, hypotheticals, memories and dreams.
 A request or intention to sit is not sitting. Silence does not change a pose.
 Use one change per character at the FINAL instant, not intermediate poses.
-Posture is standing/sitting/lying/kneeling/crouching; unknown explicitly clears it.
+Posture is standing/sitting/lying/kneeling/crouching/on_all_fours; unknown explicitly clears it.
 Placement is a spatial relation to a present character ID or to a scene object.
-For scene_object, target must be a literal phrase from the evidence, in its original
-language. Do not infer an object from a role or invent distances, left/right, or body
+For a registered scene object, target is its ID from scene_objects. This ID need
+not appear in the passage. For unregistered scenery use a literal phrase from the evidence.
+Do not infer an object from a role or invent distances, left/right, or body
 part positions. A person standing in front of a seated person is not standing on the
 bench. Use null for unchanged fields; clear=true if an explicit movement invalidates
 prior staging but does not establish a new pose/placement. Do not guess a replacement.
@@ -119,6 +167,9 @@ do not establish an empty explicit list: follow the final-state rules below.
 All following changes/props/explicit fields belong inside staging, never at the root.
 Use __player__ consistently for the player; the host binds it to the saved actor ID.
 scene_staging.owned_items lists ownership before the item actions; read names from items.
+When scene_staging.command_owned_fields is supplied, those listed pose/placement
+fields have already been applied by host commands in this turn. Leave them unchanged
+instead of reconstructing or clearing them. Other fields and actors remain eligible.
 You may propose placement after an explicitly narrated removal/transfer in the same
 response, but the host permits it only after accepting that item action. Give the
 resulting owner_id. Never assume taking something off puts it anywhere in particular.

@@ -8,6 +8,7 @@ export interface NpcVisibleGarment {
   image_url: string | null
   layer: number
   visible_regions: string[]
+  partially_removed?: boolean
   uncovered_regions: string[]
   slots?: string[]
   current_state?: ItemStateValue[]

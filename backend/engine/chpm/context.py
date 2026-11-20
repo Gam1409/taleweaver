@@ -3,6 +3,7 @@
 from datetime import timezone
 from typing import Any
 
+from backend.engine.chpm import authored_capabilities
 from backend.engine.chpm.errors import RecoverableChpmError
 from backend.engine.chpm.kernel import ChpmError, digest
 from backend.engine.chpm.schema import MAX_OBSERVED_CHARS, Decision, MemoryEntry, Observation
@@ -78,12 +79,18 @@ async def actor_context(
         ):
             speech = previous.spoken_evidence
     physical = own_conditions(getattr(manager, "state", None), actor.id)
+    abilities = (
+        {authored_capabilities.KEY: actor.own_authored_capabilities}
+        if hasattr(actor, "own_authored_capabilities")
+        else {authored_capabilities.KEY: authored_capabilities.project(actor)}
+    )
     return {
         "actor_id": actor.id,
         "name": str(actor.name),
         "authored_character": str(getattr(actor, "character", "") or ""),
         "authored_goal": str(getattr(actor, "goal", "") or ""),
         "personality": personality_context(actor),
+        **authored_capabilities.context_fields(abilities, actor.id),
         **(
             {"own_physical_conditions": physical}
             if physical.get("active") or physical["status"] == "unavailable"

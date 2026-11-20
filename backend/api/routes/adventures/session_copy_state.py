@@ -5,6 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.engine.living_world.state import fork as fork_simulation
+from backend.engine.scene_staging.provenance import remap_actor
 from backend.models.avatar import Avatar
 from backend.models.game_session import GameSession
 from backend.models.session_state import SessionState
@@ -30,7 +31,9 @@ async def clone_saved_session_state(
     original_state = state_res.scalars().first()
     cloned_state = None
     if original_state:
-        entity_states = deepcopy(original_state.entity_states)
+        entity_states = remap_actor(
+            original_state.entity_states or {}, original_session.avatar_id, cloned_avatar.id
+        )
         if isinstance(entity_states, dict):
             raw_snapshot = entity_states.get("__asset_snapshot__")
             if isinstance(raw_snapshot, dict):

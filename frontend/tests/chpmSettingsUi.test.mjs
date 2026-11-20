@@ -6,6 +6,7 @@ import { createSSRApp, h, ref } from 'vue'
 import { renderToString } from '@vue/server-renderer'
 import { parse, compileScript } from '@vue/compiler-sfc'
 import ts from 'typescript'
+import { npcToolProfilesModuleUrl } from './npcToolProfilesModule.mjs'
 
 const source = readFileSync(new URL('../src/components/game/ChpmSettings.vue', import.meta.url), 'utf8')
 const { descriptor } = parse(source)
@@ -13,6 +14,7 @@ const script = compileScript(descriptor, { id: 'chpm-settings', inlineTemplate: 
 const compiled = ts.transpileModule(script, {
   compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext },
 }).outputText.replace(/from ['"]vue['"]/g, `from '${import.meta.resolve('vue')}'`)
+  .replace(/from ['"]@\/utils\/npcToolProfiles['"]/g, `from '${npcToolProfilesModuleUrl}'`)
   .replace(/import .* from ['"]@\/composables\/useChpmSettings['"];?/, 'const useChpmSettings = () => globalThis.__chpmSettingsFixture;')
 const component = (await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`)).default
 
@@ -61,11 +63,70 @@ test('notebook compatibility is selectable without changing the tool round limit
   assert.doesNotMatch(await render(1, [], {}, { notebook_enabled: false }), /Memory tool compatibility/)
 })
 
+test('session tool profile catalog is separate from protocol and explains compatibility requirements', async () => {
+  const html = await render(1, [], {}, { workflow: 'integrated', tool_protocol: 'json', tool_profile: 'qwen' })
+  assert.match(html, /Tool-calling profile/)
+  const profile = html.match(/<select name="npc-tool-profile"[\s\S]*?<\/select>/)?.[0] ?? ''
+  assert.match(profile, /value="qwen"/)
+  assert.deepEqual([...profile.matchAll(/<option value="([^"]+)"/g)].map(match => match[1]),
+    ['auto', 'anthropic', 'openai', 'mistral', 'gemma', 'deepseek', 'qwen'])
+  assert.match(html, /name="npc-memory-tool-protocol" value="json"/)
+  assert.match(html, /Automatic protocol, prefers JSON compatibility/)
+  assert.match(html, /Automatic considers the selected profile and provider support/)
+  assert.match(html, /compatible model and server/)
+  assert.match(html, /Native tools also require a compatible tool-aware chat template/)
+  assert.match(html, /Support varies by model version/)
+  assert.doesNotMatch(await render(1, [], {}, { mode: 'off', tool_profile: 'qwen' }), /npc-tool-profile/)
+})
+
 test('session tools offer a third recovery round and explain its cast budget', async () => {
   const html = await render(3, [], {}, { notebook_enabled: true, agent_steps: 3 })
   assert.match(html, /<select name="npc-agent-tool-rounds"[^>]*>[\s\S]*?<option value="3">Up to 3 rounds/)
   assert.match(html, /correct an error and check the result/)
   assert.match(html, /5 for three rounds/)
+})
+
+test('world actions are off by default and expose compatible controls only in enabled mode', async () => {
+  const initial = await render(1, [], {}, { workflow: 'staged', notebook_enabled: false })
+  const unchecked = initial.match(/<input[^>]*name="npc-world-actions"[^>]*>/)?.[0]
+  assert.ok(unchecked)
+  assert.doesNotMatch(unchecked, /checked/)
+  const enabled = await render(1, [], {}, { action_tools: true, workflow: 'integrated', notebook_enabled: false, agent_steps: 1 })
+  assert.match(enabled.match(/<input[^>]*name="npc-world-actions"[^>]*>/)?.[0] ?? '', /checked/)
+  assert.match(enabled, /NPC world actions \(experimental\)/)
+  assert.match(enabled, /engine validates changes to the world/)
+  assert.match(enabled, /player.*choices stay theirs/)
+  assert.match(enabled, /Agent tool compatibility/)
+  assert.match(enabled, /<option value="0" disabled>/)
+  assert.doesNotMatch(await render(1, [], {}, { mode: 'shadow', action_tools: true }), /npc-world-actions/)
+})
+
+test('RPG settings offer combat actions without implying VN dialogue or private memory support', async () => {
+  const html = await render(2, [], { host_mode: 'rpg', agenda_counts: { active: 2, closed: 1 }, agenda: [{}], trace: [{}] }, {
+    mode: 'live', control_scope: 'combat_actions', action_tools: true, workflow: 'integrated', agent_steps: 2,
+    notebook_enabled: true, semantic_memory: true,
+  })
+  assert.match(html, /NPC combat actions/)
+  assert.match(html, /authored abilities on their own combat turn/)
+  assert.match(html, /player.*choices stay theirs/)
+  assert.match(html, /Combat action control \(experimental\)/)
+  assert.match(html, /name="npc-world-actions"[^>]*checked/)
+  assert.match(html, /name="npc-agent-tool-rounds"/)
+  assert.match(html, /name="npc-memory-tool-protocol"/)
+  assert.match(html, /Complex model/)
+  assert.match(html, /Requests per turn/)
+  assert.match(html, /<option value="staged" disabled>/)
+  assert.match(html, /psychological memory are available only in VN sessions/)
+  assert.doesNotMatch(html, /value="shadow"|control-scope|Private NPC notebooks|Semantic NPC memory|Remembered observations|Recorded agenda|Administrator decision trace|Concurrent NPC analyses|validate dialogue|narration repair/)
+})
+
+test('RPG off mode keeps a standard option and enabled action opt-in is explicit', async () => {
+  const disabled = await render(1, [], { host_mode: 'rpg' }, { mode: 'off' })
+  assert.match(disabled, /value="off"/)
+  assert.doesNotMatch(disabled, /name="npc-world-actions"|value="shadow"/)
+  const pending = await render(1, [], { host_mode: 'rpg' }, { workflow: 'staged', action_tools: false })
+  assert.match(pending, /Enable combat action control before saving/)
+  assert.doesNotMatch(pending.match(/<input[^>]*name="npc-world-actions"[^>]*>/)?.[0] ?? '', /checked/)
 })
 
 test('a localized proposal failure names only the paused NPC and escapes its detail', async () => {
@@ -163,4 +224,22 @@ test('capacity warning exposes the explicit standard-mode choice and preserved h
   assert.match(html, /total storage is finite/)
   assert.match(html, /Select Standard \(save to apply\)/)
   assert.match(html, /Original identity and psychological history stay saved/)
+})
+
+test('session action decision mode appears only for active VN commands', async () => {
+  const active = { action_tools: true, workflow: 'integrated', agent_steps: 1 }
+  const vn = await render(1, [], { host_mode: 'vn' }, { ...active, npc_decision_mode: 'two_phase' })
+  assert.match(vn, /name="npc-decision-mode" value="two_phase"/)
+  for (const [host_mode, draft] of [['rpg', active], ['vn', { ...active, mode: 'shadow' }], ['vn', { ...active, action_tools: false }]]) {
+    assert.doesNotMatch(await render(1, [], { host_mode }, draft), /name="npc-decision-mode"/)
+  }
+})
+
+test('item admission is an opt-in VN session control available in Standard mode', async () => {
+  const renderMode = (host_mode, changes = {}) =>
+    render(0, [], { host_mode }, { mode: 'off', ...changes })
+  const control = /<input[^>]*name="reject-impossible-player-items"[^>]*>/
+  assert.doesNotMatch((await renderMode('vn')).match(control)[0], /checked/)
+  assert.match((await renderMode('vn', { reject_impossible_player_items: true })).match(control)[0], /checked/)
+  assert.doesNotMatch(await renderMode('rpg'), control)
 })

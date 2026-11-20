@@ -1,6 +1,6 @@
 # Keep playing when NPC analysis fails
 
-**NPC Personality 1.2.0** (technical module name: CHPM) adds an optional character and memory layer to Visual Novel
+**NPC Personality 1.3.0** (technical module name: CHPM) adds an optional character and memory layer to Visual Novel
 sessions. It helps NPCs respond from their own traits, values, goals and witnessed
 history. The narrator still writes the story. CHPM remains **off by default**.
 
@@ -72,6 +72,11 @@ bounded repair/review path, followed by the ordinary replacement when needed.
 That known violation cannot be released as an unavailable-review fallback.
 An invalid attribution or a quote absent from the candidate remains an
 unconfirmed review; it is not proof that the narration violated the contract.
+
+A completed review with invalid agenda evidence uses the existing bounded
+narration repair and repeat review. The same exact owner-speech evidence checks
+still apply; another invalid result cannot update the agenda. This does not add
+requests to the configured reserve or retry an uncertain transport failure.
 
 If no usable decision survives, the existing whole-turn recovery policy applies.
 Shared perception, transport, cancellation, exhausted shared budgets and persistence failures are

@@ -1,6 +1,8 @@
 # NPC Personality — optional CHPM intentions module
 
-Module release **1.2.0**: start with [the player and recovery guide](chpm-continuation.md).
+For module release **1.3.0**, start with the [player and recovery guide](chpm-continuation.md).
+For quoted player action refusals and read-only Debug inspection, see
+[turn evidence and player item checks](engineering/prose-evidence.md).
 
 See [NPC decision workflows](npc-decision-workflows.md) for the optional integrated
 tool-or-decision path, input budgets and timing comparisons. Staged remains the default.
@@ -28,7 +30,10 @@ organized current JSON document, up to 16,000,000 UTF-8 bytes. They default to
 off and reuse existing agent tool rounds. Notes are subjective and may be wrong;
 Undo and Chronicles keep the latest notebook without storing notebook history.
 
-CHPM is an opt-in Visual Novel session feature. Existing sessions default to
+Full CHPM psychology is an opt-in Visual Novel session feature. The separate
+[action-tools interface](npc-action-tools.md) also offers authored ability choices
+in RPG combat, through that mode's existing initiative and resource owners.
+It does not activate VN psychology in RPG. Existing sessions default to
 **Standard** and make no CHPM model requests. No separate inference server or
 Concordia installation is required. The pilot uses the configured Small or Complex
 role through the existing router and shared admission queue.
@@ -67,6 +72,12 @@ inventory or published story.
 Changing only request limits preserves current memory. Checkpoint restore restores
 the saved mode and memory along with other session state.
 
+The separate [tool-calling profile](npc-tool-profiles.md) selects compatibility
+policy for the existing native/JSON ports. Auto preserves existing selection;
+Gemma and Qwen conservatively use JSON when compatibility is Automatic. Profile
+changes preserve psychological state and request limits. A profile does not
+change the model/provider or enable actions by itself.
+
 ## Current scope
 
 This is a bounded intentions experiment, not the complete CHPM research model.
@@ -79,6 +90,10 @@ may include feasible physical actions, resolved by the existing world-state owne
 Speech and actions are reviewed separately; a performed action needs no invented
 dialogue or per-action player approval. Selected dialogue may explicitly
 create or close declared goals and commitments through the ledger below.
+An action-only review may omit speech. The host also tolerates an empty speech
+placeholder when the same NPC has independently validated exact action evidence.
+Original actor coverage and duplicate checks still apply; an empty placeholder
+creates no spoken memory and cannot support an agenda change or heard speech.
 
 The cognitive input contains the selected NPC's authored character/goal/profile,
 projected observable excerpts from the player request, and a bounded window of
@@ -186,19 +201,43 @@ their established access to the complete session state.
 
 ## Declared goals and commitments (stage three)
 
-A candidate may optionally propose one `agenda_change`: declare a personal `goal`
-or `commitment`, explicitly `withdraw` an active entry, or `report_done`. The
-selected change becomes part of the narrator contract. The existing live reviewer
+Each generated reference-wire candidate must explicitly include `agenda_change`:
+`null` for no change, or one `goal`, `commitment`, `withdraw`, or `report_done`
+operation. Continuing personal aims or undertakings declared in the NPC's own
+speech use `goal` or `commitment`; immediate acts and silent/private intent use
+`null`. Legacy canonical and saved proposals still default an omitted field to
+`null`. Requiring the field does not prove the semantic choice is correct.
+The selected change becomes part of the narrator contract. The existing live reviewer
 must provide an exact quotation within that NPC's attributed speech expressing
 that specific change. A missing, extra, foreign, or non-spoken evidence entry
 fails visibly before publication. Goals and promises are never created directly
 from a player claim, another character's words, or an unselected candidate.
 
-The host assigns IDs, validates ownership and active target IDs, requires closure
-to copy the target's text, and writes the ledger with the completed reply. Each
-creation and closure has its own message/revision/hash/quotation provenance.
+The host assigns IDs, validates ownership and active target IDs, derives closure
+text from the selected active owned `entry_id`, and writes the ledger with the
+completed reply. Each creation and closure has its own
+message/revision/hash/quotation provenance.
 Semantic agreement, promise attribution, and paraphrased duplicates still depend
 on the model reviewer: exact quotations do not prove their interpretation.
+
+The decision producer, narrator, narration repair and reviewer receive one shared
+glossary from `agenda_semantics.py`. The generated proposal schema includes a
+concise reminder to make the spoken-agenda choice explicit:
+
+| `agenda_change.action` | Meaning | Required expression |
+| --- | --- | --- |
+| `goal` | Declare an ongoing personal aim. | The NPC states its aim in its own speech. |
+| `commitment` | Undertake future or continuing personal business. | The NPC states its undertaking; no fixed promise phrase is required. |
+| `withdraw` | Cancel an active owned entry. | The NPC states the withdrawal; the reference-wire proposal selects its active owned `entry_id`. |
+| `report_done` | Claim an active owned entry is complete. | The NPC states the claim; the reference-wire proposal selects its active owned `entry_id`. This does not establish world completion. |
+| `agenda_change: null` | No change to the declared agenda. | Ordinary speech, immediate actions, ordered action steps or silent resolve need no new entry. |
+
+These codes describe the declared agenda, not action execution or emotion. A
+silent action may retain its emotional expression and complete through the normal
+world owners without an agenda entry or invented dialogue. Private notes and
+intentions retain their existing owners; narrator descriptions and performed
+actions cannot stand in for spoken agenda evidence. The glossary changes no
+stored keys, enum values, source validation, request limits or rollback behavior.
 
 The proposal sees only its owner's source-checked active entries, including the
 original quotation. This permits returning to unfinished business beyond the
@@ -386,6 +425,33 @@ Old `interpretations` model responses are rejected and can use the existing sing
 proposal repair. Supporting/challenging the statement is distinct from approving
 a person or complying with a request. Semantic correctness still requires model
 evaluation; schema validity alone cannot prove sound psychological inference.
+
+Current generated proposals use a separate reference wire over those same split
+arrays. Source prose remains readable once, in labeled fragments of at most 300
+characters; citations and intention-change grounds select `fragment_id` under
+the supplied `reference_scope`. Development selects dated `episode_id` values.
+The host materializes existing canonical source/quote records and still checks
+visibility, ownership, current triggers, identity and source provenance. Motives
+select their existing catalogue IDs; goal quotations are host-derived. Observe
+mode selects `goal_ref` instead of reproducing authored goal text. Goals up to
+300 characters keep the `authored_goal` handle. Longer goals are supplied once in
+`authored_goal_fragments`, with exact excerpts of at most 300 characters; the host
+materializes the selected excerpt while retaining the complete original goal for
+scope binding and decision caching. Saved goal quotations keep their existing
+300-character limit. An agenda
+closure returns only its action and active owned `entry_id`; the owner supplies
+the existing entry text. Generated quotes, unknown/padded/foreign IDs and stale
+scope bindings reject; no fuzzy matching or legacy-quote conversion occurs in
+the production response boundary. Saved schemas and canonical IDs are unchanged.
+
+The narration reviewer returns one spoken passage anchor per actor. For an actor
+with a selected agenda change, that same anchor must express the change; the
+host constructs both canonical evidence entries from it. Separate action and
+hearing permissions remain intact. Structured rejection codes become host-owned
+diagnostic text. A `review_scope` binds the narration, selected contract and host
+control records to its current review operation. Legacy reviews supplying
+conflicting explicit speech/agenda anchors remain rejected. Neither schema
+validity nor exact evidence establishes correct semantic attribution.
 
 The new reader migrates pilot snapshots 1/2 with `evidence-ledger-v1` and snapshot 3
 with `evidence-ledger-v2` without

@@ -52,6 +52,48 @@ decisions and reviewer replies default to no action evidence. No persisted schem
 version change, new inference request, approval dialog or independent state store
 is introduced.
 
+### Movement result feedback
+
+The movement owner now emits bounded receipts for source-valid proposals. Each
+receipt binds the exact assistant message, revision, hash and text occurrence;
+it contains only an actor ID, cited movement and `applied`, `blocked` or
+`unconfirmed`. It does not expose private rule reasons or prescribe a next action.
+An access, capability or command-authority denial is `blocked`. Invalid, ambiguous
+or stale proposals are `unconfirmed`, not fictional failed attempts. Command
+reconciliation preserves source-valid excluded occurrences through this same
+owner before filtering them from physical application. A later history reference
+cannot turn that retained denial into a new successful action.
+
+The reviewer preserves the selected passage's offsets, including repeated words.
+The original action quote remains unchanged. Its qualification travels with short
+memory, the retained narration source, previous-intention context, appraisal and
+agent memory reads. Tool and semantic pin producers charge the qualification to
+the same evidence budget. Fallback recovery retains the receipts on its existing
+source-bound audit so later catch-up does not lose them after another turn replaces
+the current diagnostics. Copy and retraction follow the original source.
+
+Optional causal updates and completed-frame observations cannot certify a cited
+blocked or unconfirmed movement. If a causal passage combines independent effects
+with that movement, the optional update is conservatively deferred; existing
+threads, valid world mutations and speech remain. Separating those effects more
+finely requires better evidence. No extra model request or late prose rewrite is
+introduced, so an inconsistent original narration may still be visible beside the
+existing state-review notice.
+
+Legacy turn success means processing completed; it does not certify every claim
+in already generated prose. The locked-route regression checks the source-bound
+blocked receipt and visible review notice separately from successful turn
+delivery. Command-owned narration additionally uses the shared current execution
+frame and retains source-time command ownership for later recovery.
+
+Receipts cover movement proposals with usable source evidence. An omitted section,
+whole extraction failure, oversized batch, invalid citation or absent receipt does
+not certify completion. This change does not repair semantic omissions or extend
+authoritative receipts to every item, condition and staging operation. Current
+host state remains authoritative. Choice policy is unchanged: waiting, refusal,
+an alternative or action can all be reasonable when grounded in the NPC's motives
+and available evidence.
+
 ## Scope and verification
 
 The foreground VN turn supports the existing state domains in Personality off,

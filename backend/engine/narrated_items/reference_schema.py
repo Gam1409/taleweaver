@@ -31,18 +31,16 @@ def build(model: type[BaseModel], catalog: Catalog, *, complete: bool = False) -
     ]
     if "staging" in schema["properties"]:
         tags.append("staging")
+    definitions["CoverageTags"] = {
+        "type": "array",
+        "items": {"enum": tags},
+        "minItems": 1,
+        "maxItems": 5 if "staging" in schema["properties"] else 4,
+        "uniqueItems": True,
+    }
     schema["properties"]["coverage"] = {
         "type": "object",
-        "properties": {
-            key: {
-                "type": "array",
-                "items": {"enum": tags},
-                "minItems": 1,
-                "maxItems": 5 if "staging" in schema["properties"] else 4,
-                "uniqueItems": True,
-            }
-            for key in keys
-        },
+        "properties": {key: {"$ref": "#/$defs/CoverageTags"} for key in keys},
         "required": list(keys),
         "additionalProperties": False,
     }
@@ -66,11 +64,14 @@ def citation_schema(model: type[BaseModel], catalog: Catalog) -> dict:
         "enum": catalog.references(minimum=3, include_ranges=True),
         "description": RANGE_DESCRIPTION,
     }
-    definitions["SceneEvidenceReference"] = {
-        "type": "string",
-        "enum": catalog.references(allow_room=True, include_ranges=True),
-        "description": RANGE_DESCRIPTION,
-    }
+    # Scene updates may also cite the authored room. Reuse the complete
+    # narration ID list instead of transmitting it again with one room added.
+    references = catalog.references(allow_room=True, include_ranges=True)
+    room = [ref for ref in references if ref.startswith("room:")]
+    narration = {"$ref": "#/$defs/NarrationEvidenceReference"}
+    definitions["SceneEvidenceReference"] = (
+        {"anyOf": [narration, {"type": "string", "enum": room}]} if room else narration
+    )
     for name in (
         "ExistingItemAction",
         "NewItemAction",

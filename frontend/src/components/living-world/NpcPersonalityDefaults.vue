@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { ChpmSettings } from '@/composables/useChpmSettings'
+import { NPC_TOOL_PROFILES, NPC_TOOL_PROFILE_REQUIREMENTS, NPC_TOOL_PROTOCOL_HELP, findNpcToolProfile } from '@/utils/npcToolProfiles'
+import type { NpcToolProfile } from '@/utils/npcToolProfiles'
 
 const props = defineProps<{
   modelValue?: ChpmSettings | null
   characters: { id: string; name: string }[]
+  hostMode?: 'vn' | 'rpg' | 'story' | 'chat'
 }>()
 const emit = defineEmits<{ 'update:modelValue': [value: ChpmSettings] }>()
 const defaults: ChpmSettings = {
@@ -18,15 +21,21 @@ const defaults: ChpmSettings = {
   memory_limit: 12,
   agent_steps: 0,
   notebook_enabled: false,
+  action_tools: false,
   tool_protocol: 'auto',
+  tool_profile: 'auto',
   workflow: 'staged',
   semantic_memory: false,
   failure_policy: 'continue'
 }
-const draft = computed(() => props.modelValue ?? defaults)
+const draft = computed(() => props.modelValue ? { ...props.modelValue, tool_profile: props.modelValue.tool_profile ?? 'auto' } : defaults)
+const selectedToolProfile = computed(() => findNpcToolProfile(draft.value.tool_profile))
+const isCombatControl = computed(() => props.hostMode === 'rpg')
 const minimum = computed(() =>
   draft.value.mode === 'off'
     ? 0
+    : isCombatControl.value
+      ? 3 * Math.min(draft.value.actor_ids.length, draft.value.max_active_npcs) * (draft.value.agent_steps ?? 0)
     : Math.min(draft.value.actor_ids.length, draft.value.max_active_npcs) *
         (1 + (draft.value.mode === 'live' ? (draft.value.agent_steps ?? 0) : 0)) +
       (draft.value.mode === 'live' ? 5 : 1)
@@ -38,14 +47,24 @@ const limits = [
   { key: 'max_input_chars', label: 'Input characters per request', min: 8000, max: 192000 },
   { key: 'memory_limit', label: 'Remembered quotations per NPC', min: 0, max: 24 }
 ] as const
+const visibleLimits = computed(() => isCombatControl.value ? limits.filter(field => field.key !== 'memory_limit') : limits)
 function update<K extends keyof ChpmSettings>(key: K, value: ChpmSettings[K], extra: Partial<ChpmSettings> = {}) {
-  emit('update:modelValue', { ...draft.value, actor_ids: [...draft.value.actor_ids], [key]: value, ...extra })
+  const next = { ...draft.value, actor_ids: [...draft.value.actor_ids], [key]: value, ...extra }
+  if (next.mode !== 'live' || !next.action_tools || isCombatControl.value) delete next.npc_decision_mode
+  emit('update:modelValue', next)
 }
 function setNotebookEnabled(enabled: boolean) {
   update('notebook_enabled', enabled, enabled ? { agent_steps: Math.max(1, draft.value.agent_steps ?? 0) } : {})
 }
 function setWorkflow(workflow: 'staged' | 'integrated') {
-  update('workflow', workflow, workflow === 'integrated' ? { max_input_chars: Math.max(48000, draft.value.max_input_chars) } : {})
+  update('workflow', workflow, workflow === 'integrated' ? { max_input_chars: Math.max(48000, draft.value.max_input_chars) } : draft.value.action_tools ? { action_tools: false } : {})
+}
+function setActionToolsEnabled(enabled: boolean) {
+  update('action_tools', enabled, enabled ? {
+    workflow: 'integrated',
+    agent_steps: Math.max(1, draft.value.agent_steps ?? 0),
+    max_input_chars: Math.max(48000, draft.value.max_input_chars)
+  } : {})
 }
 function selectActor(id: string, selected: boolean) {
   update(
@@ -58,22 +77,23 @@ function selectActor(id: string, selected: boolean) {
 <template>
   <section class="space-y-5 rounded-2xl border border-cyan-400/20 bg-slate-950/40 p-5">
     <div>
-      <h3 class="text-lg font-bold text-cyan-200">NPC Personality</h3>
-      <p class="mt-2 text-sm text-slate-400">
+      <h3 class="text-lg font-bold text-cyan-200">{{ isCombatControl ? 'NPC combat actions' : 'NPC Personality' }}</h3>
+      <p v-if="isCombatControl" class="mt-2 text-sm text-slate-400">Selected NPCs choose authored abilities on their own combat turn. The engine validates costs, targets and results. The player's choices stay theirs.</p>
+      <p v-else class="mt-2 text-sm text-slate-400">
         Character decisions, witnessed memory and gradual changes grounded in each NPC's own values.
         Optional; extra analysis adds requests and waiting.
       </p>
     </div>
     <label class="block text-sm text-slate-200"
-      >Default mode for new VN sessions
+      >{{ isCombatControl ? 'Default combat action control for new RPG sessions' : 'Default mode for new VN sessions' }}
       <select
         :value="draft.mode"
         class="mt-2 w-full rounded-lg bg-slate-800 p-2"
         @change="update('mode', ($event.target as HTMLSelectElement).value as ChpmSettings['mode'])"
       >
         <option value="off">Standard — no extra requests</option>
-        <option value="shadow">Observe — inspect decisions without changing replies</option>
-        <option value="live">Enabled — guide and review NPC dialogue</option>
+        <option v-if="!isCombatControl || draft.mode === 'shadow'" value="shadow" :disabled="isCombatControl">Observe — inspect decisions without changing replies</option>
+        <option value="live">{{ isCombatControl ? 'Enabled — choose combat abilities' : 'Enabled — guide and review NPC dialogue' }}</option>
       </select>
     </label>
     <template v-if="draft.mode !== 'off'">
@@ -116,7 +136,7 @@ function selectActor(id: string, selected: boolean) {
             <option value="small">Small model</option>
           </select>
         </label>
-        <label v-if="draft.mode === 'live'" class="text-sm text-slate-200"
+        <label v-if="!isCombatControl && draft.mode === 'live'" class="text-sm text-slate-200"
           >On analysis failure
           <select
             :value="draft.failure_policy ?? 'continue'"
@@ -133,7 +153,8 @@ function selectActor(id: string, selected: boolean) {
           </select>
         </label>
       </div>
-      <p class="text-xs text-slate-400">
+      <p v-if="isCombatControl" class="text-xs text-slate-400">Combat control uses existing authored abilities. Dialogue personality, private notebooks and psychological memory are available only in VN sessions. Their saved preferences are retained.</p>
+      <p v-else class="text-xs text-slate-400">
         Deeply process active interlocutors; other selected characters retain their state. Enabled
         dialogue waits for review before display. Living World private decisions must be disabled.
       </p>
@@ -141,18 +162,18 @@ function selectActor(id: string, selected: boolean) {
         <summary class="cursor-pointer text-sm text-slate-200">
           Request limits & agent lookups
         </summary>
-        <label v-if="draft.mode === 'live'" class="mb-3 mt-4 block text-xs text-slate-300">
+        <label v-if="!isCombatControl && draft.mode === 'live'" class="mb-3 mt-4 block text-xs text-slate-300">
           <input type="checkbox" :checked="draft.semantic_memory ?? false" class="mr-2 accent-cyan-400" @change="update('semantic_memory', ($event.target as HTMLInputElement).checked)" />
           Semantic NPC memory (experimental)
           <span class="mt-2 block text-slate-400">Uses the administrator's embeddings with observer-scoped history and lexical fallback. No additional generative model request; disabled by default.</span>
         </label>
-        <label v-if="draft.mode === 'live'" class="mb-3 block text-xs text-slate-300">
+        <label v-if="!isCombatControl && draft.mode === 'live'" class="mb-3 block text-xs text-slate-300">
           <input name="npc-private-notebooks" type="checkbox" :checked="draft.notebook_enabled ?? false" class="mr-2 accent-cyan-400" @change="setNotebookEnabled(($event.target as HTMLInputElement).checked)" />
           Private NPC notebooks
           <span class="mt-2 block text-slate-400">One freely organized JSON notebook per NPC, up to 16,000,000 UTF-8 bytes each. Notes are subjective and may be mistaken. The latest notes stay after Undo or Chronicles restore; no notebook history is kept. Disabled by default. Enabling selects at least one agent tool round and uses the existing request budget.</span>
         </label>
         <div class="mt-4 grid gap-4 sm:grid-cols-2">
-          <label v-for="field in limits" :key="field.key" class="text-xs text-slate-300"
+          <label v-for="field in visibleLimits" :key="field.key" class="text-xs text-slate-300"
             >{{ field.label
             }}<input
               type="number"
@@ -169,7 +190,7 @@ function selectActor(id: string, selected: boolean) {
               class="mt-2 w-full rounded-lg bg-slate-800 p-2"
               @change="update('agent_steps', Number(($event.target as HTMLSelectElement).value))"
             >
-              <option :value="0" :disabled="draft.notebook_enabled">Off</option>
+              <option :value="0" :disabled="draft.notebook_enabled || draft.action_tools">Off</option>
               <option :value="1">Up to one round</option>
               <option :value="2">Up to two rounds</option>
               <option :value="3">Up to three rounds — can correct and check</option>
@@ -178,37 +199,66 @@ function selectActor(id: string, selected: boolean) {
         </div>
         <label v-if="draft.mode === 'live'" class="mt-4 block text-xs text-slate-300">NPC decision workflow
           <select name="npc-decision-workflow" :value="draft.workflow ?? 'staged'" class="mt-2 w-full rounded-lg bg-slate-800 p-2" @change="setWorkflow(($event.target as HTMLSelectElement).value as 'staged' | 'integrated')">
-            <option value="staged">Staged — memory tools, then decision (default)</option>
+            <option value="staged" :disabled="isCombatControl">Staged — memory tools, then decision (default)</option>
             <option value="integrated">Integrated — tools or decision (experimental)</option>
           </select>
-          <span class="mt-2 block text-slate-400">With enabled tool rounds, Integrated can submit the validated decision without a separate readiness call. Selecting it sets the input budget to at least 48,000 characters and keeps larger limits. Existing sessions keep their saved workflow.</span>
+          <span v-if="isCombatControl" class="mt-2 block text-slate-400">Combat action control requires Integrated and at least one tool round. Selecting Integrated sets the input budget to at least 48,000 characters and keeps larger limits.</span>
+          <span v-else class="mt-2 block text-slate-400">With enabled tool rounds, Integrated can submit the validated decision without a separate readiness call. Selecting it sets the input budget to at least 48,000 characters and keeps larger limits. Existing sessions keep their saved workflow.</span>
         </label>
-        <label v-if="draft.mode === 'live' && (draft.notebook_enabled || draft.workflow === 'integrated')" class="mt-4 block text-xs text-slate-300">Memory tool compatibility
-          <select name="npc-memory-tool-protocol" :value="draft.tool_protocol ?? 'auto'" class="mt-2 w-full rounded-lg bg-slate-800 p-2" @change="update('tool_protocol', ($event.target as HTMLSelectElement).value as 'auto' | 'native' | 'json')">
-            <option value="auto">Automatic</option>
-            <option value="native">Native function calls</option>
-            <option value="json">JSON compatibility</option>
+        <label v-if="draft.mode === 'live'" class="mt-4 block text-xs text-slate-300">
+          <input name="npc-world-actions" type="checkbox" :checked="draft.action_tools ?? false" class="mr-2 accent-cyan-400" @change="setActionToolsEnabled(($event.target as HTMLInputElement).checked)" />
+          {{ isCombatControl ? 'Combat action control (experimental)' : 'NPC world actions (experimental)' }}
+          <span v-if="isCombatControl" class="mt-2 block text-slate-400">NPCs choose existing authored abilities; the combat engine applies valid results. Enabling selects Integrated and at least one tool round.</span>
+          <span v-else class="mt-2 block text-slate-400">NPCs choose their own actions; the engine validates changes to the world. The player's choices stay theirs. Enabling selects Integrated and at least one tool round.</span>
+        </label>
+        <label v-if="hostMode === 'vn' && draft.mode === 'live' && draft.action_tools && draft.workflow === 'integrated' && draft.agent_steps" class="mt-4 block text-xs text-slate-300">
+          Action decision mode
+          <select name="npc-decision-mode" :value="draft.npc_decision_mode ?? 'legacy'" class="mt-2 w-full rounded-lg bg-slate-800 p-2" @change="update('npc_decision_mode', ($event.target as HTMLSelectElement).value as ChpmSettings['npc_decision_mode'])">
+            <option value="legacy">Standard</option>
+            <option value="two_phase">Two-phase (experimental)</option>
           </select>
-          <span class="mt-2 block text-slate-400">Choose JSON compatibility for a server without native tools. Both modes keep the same private notebook and request limits; uncertain requests are never automatically repeated.</span>
+          <span class="mt-2 block text-slate-400">Two-phase reserves a tool round to carry out the NPC's chosen action.</span>
         </label>
-        <p v-if="draft.mode === 'live'" class="mt-3 text-xs text-slate-400">
+        <p v-if="isCombatControl && (!draft.action_tools || draft.workflow !== 'integrated' || !draft.agent_steps)" role="alert" class="mt-3 text-xs text-amber-200">Enable combat action control before saving, or select Standard.</p>
+        <div v-if="draft.mode === 'live' && ((draft.agent_steps ?? 0) > 0 || draft.notebook_enabled || draft.workflow === 'integrated')" class="mt-4 grid gap-4 sm:grid-cols-2">
+          <label class="block text-xs text-slate-300">{{ draft.action_tools ? 'Agent tool compatibility' : 'Memory tool compatibility' }}
+            <select name="npc-memory-tool-protocol" :value="draft.tool_protocol ?? 'auto'" class="mt-2 w-full rounded-lg bg-slate-800 p-2" @change="update('tool_protocol', ($event.target as HTMLSelectElement).value as 'auto' | 'native' | 'json')">
+              <option value="auto">Automatic</option>
+              <option value="native">Native function calls</option>
+              <option value="json">JSON compatibility</option>
+            </select>
+            <span v-if="isCombatControl" class="mt-2 block text-slate-400">{{ NPC_TOOL_PROTOCOL_HELP }} Both modes keep the same ability catalog and request limits.</span>
+            <span v-else class="mt-2 block text-slate-400">{{ NPC_TOOL_PROTOCOL_HELP }} Both modes keep the same private notebook and request limits; uncertain requests are never automatically repeated.</span>
+          </label>
+          <label class="block text-xs text-slate-300">Tool-calling profile
+            <select name="npc-tool-profile" :value="draft.tool_profile ?? 'auto'" aria-describedby="npc-template-tool-profile-help" class="mt-2 w-full rounded-lg bg-slate-800 p-2" @change="update('tool_profile', ($event.target as HTMLSelectElement).value as NpcToolProfile)">
+              <option v-if="draft.tool_profile && !selectedToolProfile" :value="draft.tool_profile" disabled>Saved unsupported profile: {{ draft.tool_profile }}</option>
+              <option v-for="profile in NPC_TOOL_PROFILES" :key="profile.id" :value="profile.id">{{ profile.label }}</option>
+            </select>
+            <span id="npc-template-tool-profile-help" class="mt-2 block text-slate-400">{{ selectedToolProfile?.help ?? 'Choose a supported profile before saving.' }} {{ NPC_TOOL_PROFILE_REQUIREMENTS }}</span>
+          </label>
+        </div>
+        <p v-if="isCombatControl && draft.mode === 'live'" class="mt-3 text-xs text-slate-400">Each tool round allows one request per NPC combat turn to choose an available ability or keep standard combat AI. Invalid choices can be corrected within remaining rounds; the model can finish early.</p>
+        <p v-else-if="draft.mode === 'live'" class="mt-3 text-xs text-slate-400">
           Each round adds one model request per active NPC and up to two local tool operations.
           Tools read this NPC's witnessed history and host observations; enabled notebooks also allow
-          edits to its own private notes. They cannot change world state or read other NPCs' notes.
-          Disabling notebooks keeps the selected rounds; set rounds to Off to stop these extra requests.
+          edits to its own private notes. Other NPCs' notes remain private.
+          <span v-if="draft.action_tools">World actions use these rounds too and remain subject to engine checks.</span>
+          <span v-else>Memory tools cannot change world state.</span>
+          Disabling optional tools keeps the selected rounds; set rounds to Off to stop these extra requests.
         </p>
         <p
           class="mt-4 text-xs"
           :class="draft.max_calls_per_turn < minimum ? 'text-amber-200' : 'text-slate-400'"
         >
-          Minimum request budget: {{ minimum }}, including repair reserve. Ordinary narration is
+          Minimum request budget: {{ minimum }}<span v-if="isCombatControl">, reserving up to three combat turns per selected active NPC per player command, multiplied by tool rounds. Unused turns and rounds are not spent.</span><span v-else>, including repair reserve.</span> Ordinary narration is
           additional. Several active NPCs can take minutes on local models.
         </p>
       </details>
     </template>
     <p class="text-xs text-amber-200">
       Save the adventure to apply defaults to new sessions only. Existing sessions keep their own
-      settings and psychological history.
+      {{ isCombatControl ? 'combat settings.' : 'settings and psychological history.' }}
     </p>
   </section>
 </template>

@@ -7,9 +7,9 @@ import pytest
 
 from backend.engine.chpm import context, inference, memory, perception, rendering, runtime
 from backend.engine.chpm.kernel import ChpmError, digest
-from backend.engine.chpm.proposal_draft import Draft
 from backend.engine.chpm.schema import HeardSpeech, KernelState, Perception, Projection, Settings
 from backend.engine.chpm.state import KEY, load, retract
+from tests.chpm_reference_fixture import proposal as reference_proposal
 from tests.test_chpm_kernel import observation, wire_proposal
 from tests.test_chpm_runtime import accepted, manager, prepared
 
@@ -49,18 +49,23 @@ def test_projection_rejects_foreign_observers_fabricated_and_repeated_quotes():
 
 
 async def test_private_player_text_never_reaches_individual_cognition(monkeypatch):
-    host, actor = manager()
     private = "Hello. (Privately: SECRET_DOOR_CODE is 417.)"
+    observed = observation(player_request=private, content_hash=digest(private))
+    host, actor = manager(observed=observed)
     monkeypatch.setattr(
         context,
         "observation",
-        AsyncMock(return_value=observation(player_request=private, content_hash=digest(private))),
+        AsyncMock(return_value=observed),
     )
     monkeypatch.setattr(context, "available", lambda *_: True)
     monkeypatch.setattr(runtime, "release_for_model", AsyncMock())
     projector = AsyncMock(return_value={"npc": Perception(actor_id="npc", quotes=["Hello."])})
     monkeypatch.setattr(perception, "project", projector)
-    proposal_call = AsyncMock(return_value=Draft.model_validate(wire_proposal()))
+    proposal_call = AsyncMock(
+        side_effect=lambda *args, **_kwargs: args[5].model_validate(
+            reference_proposal(wire_proposal(), args[4])
+        )
+    )
     monkeypatch.setattr(inference, "request", proposal_call)
     await runtime.prepare(host, private, [actor])
     payload = proposal_call.call_args.args[4]
@@ -78,7 +83,11 @@ async def test_new_scene_npcs_do_not_receive_the_old_scene_request(monkeypatch):
     monkeypatch.setattr(runtime, "release_for_model", AsyncMock())
     projector = AsyncMock(side_effect=AssertionError("Must not project across scenes"))
     monkeypatch.setattr(perception, "project", projector)
-    called = AsyncMock(return_value=Draft.model_validate(wire_proposal()))
+    called = AsyncMock(
+        side_effect=lambda *args, **_kwargs: args[5].model_validate(
+            reference_proposal(wire_proposal(), args[4])
+        )
+    )
     monkeypatch.setattr(inference, "request", called)
     await runtime.prepare(host, "Private conversation before leaving", [actor])
     payload = called.call_args.args[4]

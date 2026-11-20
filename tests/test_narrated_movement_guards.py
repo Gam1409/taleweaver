@@ -73,9 +73,10 @@ def test_one_rejected_actor_does_not_cancel_an_independent_allowed_departure(rea
     assert [row.entity_id for row in event.moved_entities] == ["MIKI"]
 
 
-def test_conflicting_final_destinations_are_not_resolved_by_arbitrary_list_order():
+@pytest.mark.parametrize("actor_id", ["RIN", " RIN "])
+def test_conflicting_final_destinations_are_not_resolved_by_arbitrary_list_order(actor_id):
     event, accepted, errors = _event(
-        pending([move(), move(destination_scene_id=None, presence="absent")])
+        pending([move(), move(actor_id=actor_id, destination_scene_id=None, presence="absent")])
     )
     assert len(errors) == 2 and not accepted and not event.moved_entities
 

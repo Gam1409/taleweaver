@@ -14,6 +14,7 @@ from backend.engine.chpm.notebook_requests import (
     NotebookRequest,
     NotebookWrite,
 )
+from backend.engine.npc_actions.contracts import Request as ActionRequest
 
 
 @dataclass
@@ -70,13 +71,36 @@ class NotebookDraft:
 
     def remember_feedback(self, tool: str, result: dict) -> None:
         """Carry final operation outcomes privately into the existing decision call."""
-        item = {"tool": tool[:80], **result_summary(result)}
+        summary = result_summary(result)
+        repeated = {
+            "tool",
+            "phase",
+            "input_id",
+            "input_revision",
+            "input_hash",
+            "state_revision",
+            "command_id",
+            "actor_id",
+            "tool_call_id",
+        }
+        item = {
+            "tool": tool[:80],
+            **{
+                key: value
+                for key, value in summary.items()
+                if key not in repeated and not key.startswith("diagnostic_")
+            },
+        }
         if isinstance(result.get("message"), str):
             item["message"] = result["message"][:240]
         self.tool_feedback = [*self.tool_feedback, item][-2:]
 
 
-def request_summary(request: Lookup | NotebookRequest) -> dict:
+def request_summary(request: Lookup | NotebookRequest | ActionRequest) -> dict:
+    from backend.engine.npc_actions.feedback import summarize
+
+    if isinstance(request, ActionRequest):
+        return summarize(request)
     field = "argument" if isinstance(request, Lookup) else "path"
     value = getattr(request, field, "")
     result: dict = {"tool": request.tool, f"{field}_hash": sha256(value.encode()).hexdigest()}
@@ -89,7 +113,29 @@ def result_summary(result: dict) -> dict:
     return {
         key: value
         for key, value in result.items()
-        if key in {"status", "revision", "byte_size", "used_bytes", "remaining_bytes", "changed"}
+        if key
+        in {
+            "status",
+            "revision",
+            "byte_size",
+            "used_bytes",
+            "remaining_bytes",
+            "changed",
+            "attempt_id",
+            "operation_id",
+            "tool_call_id",
+            "phase",
+            "input_id",
+            "input_revision",
+            "input_hash",
+            "state_revision",
+            "command_id",
+            "actor_id",
+            "tool",
+            "reason_code",
+            "diagnostic_detail",
+            "diagnostic_error_type",
+        }
     }
 
 

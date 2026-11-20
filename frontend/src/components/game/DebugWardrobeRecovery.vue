@@ -31,6 +31,7 @@ export interface WardrobeRecoveryPreview {
     evidence: string
     source_message_id: string
     uncovered_regions?: string[]
+    partially_removed?: boolean
     placement_evidence?: string
     restore_coverage?: boolean
     attachment_slot?: BodyPlacementSlot
@@ -246,6 +247,7 @@ function requestSources() {
           Layer {{ entry.item.clothing.layer }} · {{ entry.item.clothing.coverage.join(', ')
           }}{{ entry.item.clothing.underwear ? ' · Underwear' : '' }}
         </p>
+        <p v-if="entry.partially_removed">Partially removed</p>
         <p v-if="entry.uncovered_regions?.length">
           Partially displaced — exposed: {{ entry.uncovered_regions.join(', ') }}
         </p>

@@ -9,13 +9,14 @@ from backend.engine.chpm import cognition
 from backend.engine.chpm.notebook import NotebookWorkspace
 from backend.engine.chpm.notebook_tools import NotebookDraft
 from backend.engine.chpm.schema import KernelState, Settings, Usage
+from tests.chpm_repair_fixture import corrections
 from tests.test_chpm_agent_tools import current
 from tests.test_chpm_kernel import observation, wire_proposal
 from tests.test_chpm_native_notebook_loop import NativeModel, call, turn
 from tests.test_chpm_semantic_choice import fixture
 
 
-async def deliberate(model, *, steps=2, notebook=None, protocol="native"):
+async def deliberate(model, *, steps=2, notebook=None, protocol="native", max_calls=8):
     value, _, _, _ = fixture()
     value = current(value)
     settings = Settings(
@@ -24,6 +25,7 @@ async def deliberate(model, *, steps=2, notebook=None, protocol="native"):
         agent_steps=steps,
         workflow="integrated",
         tool_protocol=protocol,
+        max_calls_per_turn=max_calls,
     )
     usage = Usage()
     host = SimpleNamespace(game_id="session", _chpm_model_factory=lambda _role: model)
@@ -77,6 +79,9 @@ async def test_tool_results_rebuild_bound_sources_before_final_decision():
     context = json.loads(model.requests[1][0][1]["content"])
     assert context["remaining_rounds"] == 0
     assert context["agent_lookup_status"] == [{"tool": "inspect_self", "status": "ok"}]
+    feedback = next(row for row in model.requests[1][0] if row["role"] == "tool")
+    assert feedback["tool_call_id"] == "inspect" and feedback["name"] == "inspect_self"
+    assert json.loads(feedback["content"])["status"] == "ok"
 
 
 async def test_mixed_decision_and_memory_write_never_executes_the_write():
@@ -129,7 +134,7 @@ async def test_semantic_rejection_uses_the_existing_shared_repair_once(parallel)
     class RepairModel(NativeModel):
         async def aexecute_simple_task(self, system, content, model, **kwargs):
             self.json_requests.append((system, content, kwargs))
-            return json.dumps(wire_proposal())
+            return corrections(("/choice/motive_ids", ["goal1"]))
 
     model = RepairModel([turn(call("decision", "submit_decision", original))])
     token = performance.actor_id.set("npc")

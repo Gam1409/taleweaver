@@ -25,6 +25,7 @@ from backend.engine.memory_rag.store import LanceMemoryStore
 from backend.engine.memory_rag.worker import Claim
 from backend.models.chat import ChatMessage
 from backend.models.memory_rag import MemoryIndexState
+from tests.chpm_reference_fixture import evidence_text
 from tests.conftest import TestSessionLocal
 from tests.test_chpm_host_turn import run
 from tests.test_chpm_notebook_turn import (
@@ -298,7 +299,8 @@ async def test_hybrid_semantic_evidence_and_private_note_remain_distinct_in_a_li
         proposal = roles.proposal_inputs[-1]
         assert "retrieved_episode_context" in proposal
         assert any(
-            "7319" in item["text"] for item in proposal["appraisal_context"]["visible_evidence"]
+            "7319" in evidence_text(item)
+            for item in proposal["appraisal_context"]["visible_evidence"]
         )
         assert NOTE in json.dumps(proposal["private_notebook_not_world_facts"])
         assert any("7319" in item.text for item in saved.actors["LINA"].agent_evidence)

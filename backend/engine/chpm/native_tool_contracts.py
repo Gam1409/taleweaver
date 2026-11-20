@@ -18,6 +18,8 @@ from backend.engine.chpm.notebook_requests import (
     NotebookRequest,
     NotebookWrite,
 )
+from backend.engine.npc_actions.contracts import ACTION_MODELS
+from backend.engine.npc_actions.contracts import Request as ActionRequest
 
 MAX_VALUE_CHARS = 8192
 MAX_OPERATIONS = 16
@@ -38,7 +40,9 @@ _LOOKUPS = {
     "read_memory": "Read an ID returned by search_memory in this turn.",
     "inspect_self": "Inspect current host facts about this NPC's own location and possessions.",
     "inspect_entity": "Read current recorded conditions, ownership and wear/placement of an accessible exact entity ID. Omitted facts are unknown; this never performs an action.",
-    "visible_clothing": "Read visible clothing of an accessible actor ID, using argument.",
+    "find_entity": "Find accessible actors/items by name or ID, including omitted index entries. Returns exact IDs; a miss proves nothing.",
+    "inspect_scene": "Read the current room's public facts, actors and known routes. No arguments or movement.",
+    "visible_clothing": "Read a listed visible_clothing_actors NPC's clothing. For the player use inspect_entity(argument='@player').",
     "inspect_beliefs": "Inspect this NPC's own subjective beliefs about the subject in argument.",
     "read_belief_basis": "Read grounds for an ID returned by inspect_beliefs.",
 }
@@ -60,7 +64,8 @@ _POINTER = "RFC 6901 JSON Pointer. '' selects the root; '/' selects an empty-nam
 _VALUE = {
     "description": "Any strict JSON value: null, boolean, number, string, array or object with freely chosen keys. No fixed notebook layout. Each value's canonical JSON must fit 8192 characters."
 }
-_KNOWN_TOOL_NAMES = frozenset((*_LOOKUPS, *_NOTEBOOKS))
+_KNOWN_TOOL_NAMES = frozenset((*_LOOKUPS, *_NOTEBOOKS, *ACTION_MODELS))
+_METADATA_TOOL_NAMES = _KNOWN_TOOL_NAMES | {"use_ability", "keep_default"}
 
 
 def known_tool_names() -> frozenset[str]:
@@ -70,7 +75,7 @@ def known_tool_names() -> frozenset[str]:
 
 def canonical_tool_name(name: object) -> str:
     """Keep only declared names in audit and feedback metadata."""
-    return name if type(name) is str and name in _KNOWN_TOOL_NAMES else "unknown_tool"
+    return name if type(name) is str and name in _METADATA_TOOL_NAMES else "unknown_tool"
 
 
 class NativeToolArgumentError(ValueError):
@@ -110,10 +115,19 @@ def _parameters(name: str) -> dict:
 
 
 def _lookup_parameters(name: str, parameters: dict) -> dict:
-    if name == "inspect_self":
+    if name in {"inspect_self", "inspect_scene"}:
         parameters.update(properties={}, required=[])
         return parameters
     parameters["properties"]["argument"]["minLength"] = 1
+    descriptions = {
+        "find_entity": "Name fragment or existing ID. Use returned IDs unchanged.",
+        "inspect_entity": "Exact observable_entities/find_entity ID, observer_id for yourself, or @player. Never invent IDs.",
+        "visible_clothing": "NPC ID from visible_clothing_actors; never @player.",
+    }
+    if name in descriptions:
+        parameters["properties"]["argument"]["description"] = descriptions[name]
+    parameters["properties"]["argument"].pop("title", None)
+    parameters["properties"]["argument"].pop("default", None)
     parameters["required"] = ["argument"]
     return parameters
 
@@ -139,9 +153,14 @@ def _operation_schema(original: dict) -> dict:
     return {"anyOf": [valued, removed]}
 
 
-def tool_definitions(notebook_enabled: bool = True) -> list[dict]:
+def tool_definitions(
+    notebook_enabled: bool = True, *, available_lookups: set[str] | None = None
+) -> list[dict]:
     """Return distinct native functions; only argument envelopes have closed schemas."""
-    names = [*_LOOKUPS, *(_NOTEBOOKS if notebook_enabled else {})]
+    names = [
+        *(name for name in _LOOKUPS if available_lookups is None or name in available_lookups),
+        *(_NOTEBOOKS if notebook_enabled else {}),
+    ]
     return [
         {
             "type": "function",
@@ -308,6 +327,8 @@ def _field(location: tuple, default: str) -> str:
 
 
 def _validation_issues(error: ValidationError, name: str) -> list[_Issue]:
+    if name in ACTION_MODELS:
+        return _action_validation_issues(error, ACTION_MODELS[name].model_json_schema())
     result = []
     for entry in error.errors(include_input=False, include_url=False, include_context=False):
         field = _field(entry["loc"], "argument" if name in _LOOKUPS else "arguments")
@@ -315,6 +336,60 @@ def _validation_issues(error: ValidationError, name: str) -> list[_Issue]:
         hint = _HINTS.get(leaf, "operation object with op, path and value")
         result.append((field, "invalid_arguments", hint))
     return result
+
+
+def _action_schema_node(schema: dict, node: dict) -> dict:
+    reference = node.get("$ref", "")
+    if reference.startswith("#/$defs/"):
+        node = schema.get("$defs", {}).get(reference.rsplit("/", 1)[-1], node)
+    alternatives = [entry for entry in node.get("anyOf", []) if entry.get("type") != "null"]
+    return alternatives[0] if len(alternatives) == 1 else node
+
+
+def _action_constraint(schema: dict, raw: dict) -> str:
+    node = _action_schema_node(schema, raw)
+    if "enum" in node:
+        return "one of " + ", ".join(str(value) for value in node["enum"])
+    kind = node.get("type", "declared value")
+    constraints = [str(kind)]
+    if kind == "array":
+        constraints.append("items: " + _action_constraint(schema, node.get("items", {})))
+    bounds = {
+        "minLength": "minimum length",
+        "maxLength": "maximum length",
+        "maxItems": "maximum items",
+        "minimum": "minimum",
+        "maximum": "maximum",
+        "pattern": "pattern",
+    }
+    constraints.extend(f"{label} {node[key]}" for key, label in bounds.items() if key in node)
+    return "; ".join(constraints)
+
+
+def _action_validation_issues(error: ValidationError, schema: dict) -> list[_Issue]:
+    issues = []
+    for entry in error.errors(include_input=False, include_url=False, include_context=False):
+        node, field = schema, ""
+        for part in entry["loc"]:
+            node = _action_schema_node(schema, node)
+            if type(part) is int and node.get("type") == "array" and field:
+                field += f"[{part}]"
+                node = node.get("items", {})
+            elif type(part) is str and part in node.get("properties", {}):
+                field += ("." if field else "") + part
+                node = node["properties"][part]
+            else:
+                field = "arguments"
+                break
+        hint = _action_constraint(schema, node)
+        if field == "arguments":
+            hint = "only declared fields: " + ", ".join(
+                key for key in schema["properties"] if key != "tool"
+            )
+        if field == "uncovered_regions" and entry["type"] == "value_error":
+            hint += "; supply each final region once"
+        issues.append((field or "arguments", "invalid_arguments", hint))
+    return issues
 
 
 def _issue_order(item: tuple[str, tuple[str, str]]) -> tuple[int, str]:
@@ -355,12 +430,16 @@ def _validate_paths(request: Lookup | NotebookRequest) -> None:
         ) from None
 
 
-def parse_call(name: str, arguments_raw: str) -> Lookup | NotebookRequest:
+def parse_call(name: str, arguments_raw: str) -> Lookup | NotebookRequest | ActionRequest:
     """Strictly decode one pure request; callers validate the full batch before execution."""
     if type(name) is not str or name not in _KNOWN_TOOL_NAMES:
         raise NativeToolArgumentError(
-            "invalid_tool", "Unknown tool. Allowed: " + ", ".join([*_LOOKUPS, *_NOTEBOOKS])
+            "invalid_tool",
+            "Unknown tool. Use an offered name. Known: "
+            + ", ".join([*_LOOKUPS, *_NOTEBOOKS, *ACTION_MODELS]),
         )
+    if name in ACTION_MODELS:
+        return _action_request(name, arguments_raw)
     issues: list[_Issue] = []
     prepared = _prepare(name, _arguments(arguments_raw), issues)
     model = Lookup if name in _LOOKUPS else _NOTEBOOKS[name]
@@ -373,3 +452,17 @@ def parse_call(name: str, arguments_raw: str) -> Lookup | NotebookRequest:
         _reject(issues)
     _validate_paths(request)
     return request
+
+
+def _action_request(name: str, raw: str) -> ActionRequest:
+    arguments = _arguments(raw)
+    if "tool" in arguments:
+        raise NativeToolArgumentError(
+            "invalid_arguments",
+            "Pass only declared function arguments; the host binds the tool name.",
+        )
+    try:
+        return ACTION_MODELS[name].model_validate({"tool": name, **arguments})
+    except ValidationError as exc:
+        issues = _validation_issues(exc, name)
+        _reject(issues)

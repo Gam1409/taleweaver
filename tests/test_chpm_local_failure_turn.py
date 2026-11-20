@@ -51,6 +51,10 @@ class LocalFailureRoles(ChpmRoles):
                 fragment["engaged"] = fragment["observers"]
             return json.dumps(result)
         if phase in {"proposal", "proposal_repair"}:
+            if supplied.get("proposal_feedback", {}).get("repair_mode") == "field_edits":
+                field = "/candidates" if self.failure_kind == "schema" else "/choice/continuity"
+                value = {} if self.failure_kind == "schema" else "new"
+                return json.dumps({"edits": [{"op": "replace", "path": field, "value": value}]})
             return self.propose(supplied)
         if phase == "validation":
             return self.review(supplied)

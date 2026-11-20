@@ -147,8 +147,15 @@ async def restore_session_bundle(
             discovered_scenes=old_state.get("discovered_scenes", []),
         )
         db.add(restored_state)
-        restore_details(db, restored_state, old_state, data.get("chat_history") or [])
-        await restore_world(db, restored_state, new_template.id, data)
+        message_ids = restore_details(
+            db,
+            restored_state,
+            old_state,
+            data.get("chat_history") or [],
+            avatar=new_avatar,
+            previous_avatar_id=old_avatar.get("id"),
+        )
+        await restore_world(db, restored_state, new_template.id, data, message_ids=message_ids)
 
     await db.flush()
     # Ensure thumbnails are generated for imported assets

@@ -16,25 +16,46 @@ const status = ref('')
 const evidence = ref(props.entry.evidence)
 const placement = ref(props.entry.placement_evidence)
 const uncovered = ref([...props.entry.uncovered_regions])
+const partiallyRemoved = ref(!!props.entry.partially_removed)
 const restoreCoverage = ref(!!props.entry.restore_coverage)
 watch(
   restoreCoverage,
   value => {
-    if (value) uncovered.value = []
+    if (value) {
+      uncovered.value = []
+      partiallyRemoved.value = false
+    }
   },
   { flush: 'sync' }
 )
 watch(
   () => uncovered.value.length,
   value => {
-    if (value) restoreCoverage.value = false
+    if (value) {
+      restoreCoverage.value = false
+      partiallyRemoved.value = false
+    }
   },
   { flush: 'sync' }
+)
+watch(
+  partiallyRemoved,
+  value => {
+    if (value) {
+      uncovered.value = []
+      restoreCoverage.value = false
+    }
+  },
+  { flush: 'sync' }
+)
+const placementRequested = computed(() =>
+  !!(partiallyRemoved.value || restoreCoverage.value || uncovered.value.length)
 )
 watch(status, value => {
   if (value === 'carried') {
     uncovered.value = []
     placement.value = ''
+    partiallyRemoved.value = false
     restoreCoverage.value = false
   }
 })
@@ -45,14 +66,18 @@ const statusError = computed(() =>
 )
 const itemError = computed(() => quoteError(props.source, evidence.value))
 const placementError = computed(() =>
-  uncovered.value.length || restoreCoverage.value
+  placementRequested.value
     ? quoteError(props.source, placement.value)
     : placement.value
-      ? 'Clear the placement quote, select exposed regions, or explicitly confirm restored coverage.'
+      ? 'Select a placement change or clear the placement quote.'
       : ''
 )
 const regionChoices = computed(() => [...new Set([...props.entry.coverage, ...uncovered.value])])
 const regionError = computed(() => {
+  if ((partiallyRemoved.value && restoreCoverage.value) ||
+      (uncovered.value.length && (partiallyRemoved.value || restoreCoverage.value))) {
+    return 'Choose one of partly removed, specific exposed regions, or normal coverage.'
+  }
   const invalid = uncovered.value.filter(region => !props.entry.coverage.includes(region))
   if (invalid.length)
     return `Outside garment coverage: ${invalid.join(', ')}. Uncheck these regions or reset the selection.`
@@ -99,6 +124,7 @@ function submit() {
     ...(props.sourceMessageId ? { source_message_id: props.sourceMessageId } : {}),
     uncovered_regions: uncovered.value,
     placement_evidence: placement.value.trim(),
+    ...(partiallyRemoved.value ? { partially_removed: true } : {}),
     ...(restoreCoverage.value ? { restore_coverage: true } : {})
   })
   emit('command', `/debug wardrobe_correct ${props.token} ${props.entry.index} ${payload}`)
@@ -128,7 +154,7 @@ function submit() {
           Use selection as item quote
         </button>
         <button
-          v-if="status === 'worn' && (uncovered.length || restoreCoverage)"
+          v-if="status === 'worn' && placementRequested"
           type="button"
           :disabled="!canUseSelection"
           class="rounded-full border border-cyan-800 px-3 py-1 text-xs disabled:opacity-40"
@@ -178,6 +204,9 @@ function submit() {
             Select only regions the displaced garment no longer covers.
           </p>
           <label class="flex items-center gap-2">
+            <input v-model="partiallyRemoved" type="checkbox" /> Partially removed, with no change to recorded regions
+          </label>
+          <label class="flex items-center gap-2">
             <input v-model="restoreCoverage" type="checkbox" /> Restore normal coverage
           </label>
           <p class="text-xs text-slate-400">
@@ -213,7 +242,7 @@ function submit() {
             {{ placementError }}
           </p>
           <button
-            v-if="(uncovered.length || restoreCoverage) && !itemError"
+            v-if="placementRequested && !itemError"
             type="button"
             class="text-xs text-cyan-200 underline"
             @click="placement = evidence"

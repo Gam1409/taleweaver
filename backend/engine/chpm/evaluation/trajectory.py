@@ -10,6 +10,7 @@ from collections.abc import Callable
 from types import SimpleNamespace
 from typing import Any
 
+from backend.engine import turn_controls
 from backend.engine.chpm import agenda, cognition, context, memory, perception, rendering, runtime
 from backend.engine.chpm.evaluation.character_stress import CARD, GOAL, PROFILE
 from backend.engine.chpm.evaluation.port import MeasuredFactory
@@ -49,6 +50,12 @@ class Trajectory:
         }
 
     async def step(self, number: int, step: Step) -> dict:
+        # A reused synthetic host still needs one distinct attempt per logical turn.
+        attempt = turn_controls.begin(self.host)
+        self.host._vn_player_message_id = f"player-{number}"
+        turn_controls.bind_input(
+            self.host, self._source(self.host._vn_player_message_id, "user", step.message)
+        )
         initial = load(self.host.state)
         before_identity = fingerprint(self.identity())
         measured = MeasuredFactory(
@@ -97,6 +104,7 @@ class Trajectory:
                 calls=[call.model_dump() for call in measured.calls],
             )
             self.host._chpm_turn = None
+            turn_controls.close(self.host, attempt=attempt)
         return result
 
     async def _prepare(self, turn: runtime.Turn, number: int, step: Step) -> None:

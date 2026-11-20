@@ -15,11 +15,13 @@ from backend.core.auth import get_current_user
 from backend.core.database import get_db
 from backend.engine.chpm import capacity, control_settings, failure_report
 from backend.engine.chpm.continuation import public_status
-from backend.engine.chpm.schema import Contract, Settings, Usage
+from backend.engine.chpm.schema import Contract, Settings, SettingsFields, Usage
 from backend.engine.chpm.state import KEY, load
+from backend.engine.chpm.template_settings import settings_for_mode
 from backend.engine.chpm.version import VERSION
 from backend.engine.living_world.state import load as load_simulation
-from backend.engine.visual_novel.presentation import known_character, session_is_vn
+from backend.engine.npc_actions.settings import configure as configure_actions
+from backend.engine.visual_novel.presentation import known_character, session_mode
 from backend.models.session_state import SessionState
 from backend.models.turn_replay import TurnReplay
 from backend.models.user import User
@@ -30,7 +32,7 @@ logger = logging.getLogger(__name__)
 
 
 class Change(Contract):
-    settings: Settings
+    settings: SettingsFields
     expected_revision: int = Field(ge=0, strict=True)
 
 
@@ -45,13 +47,15 @@ async def _characters(db: AsyncSession, state: SessionState) -> list[dict[str, s
 
 async def _view(db: AsyncSession, state: SessionState, user: User) -> dict[str, Any]:
     current = load(state)
+    mode = await session_mode(db, state)
     last_failure = await failure_report.latest(db, state, current)
     return {
         "module_version": VERSION,
         "continuation": public_status(current),
         "settings": current.settings.model_dump(),
         "revision": current.revision,
-        "available": await session_is_vn(db, state),
+        "available": mode in {"vn", "rpg"},
+        "host_mode": mode,
         "characters": await _characters(db, state),
         "usage": current.usage.model_dump(),
         "last_analysis_failure": last_failure,
@@ -109,22 +113,34 @@ async def patch(
     user: User = Depends(get_current_user),
 ) -> dict[str, Any]:
     state, before = await _owned(db, game_id, user)
+    mode = await session_mode(db, state)
+    _validate_mode(mode, payload.settings)
+    try:
+        settings = settings_for_mode(payload.settings.model_dump(), mode)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
     current = load(state)
     if current.revision != payload.expected_revision:
         raise HTTPException(409, "CHPM settings or state changed. Reload before saving.")
-    if current.settings == payload.settings:
+    await _validate_change(db, state, settings)
+    if current.settings == settings:
         return await _view(db, state, user)
-    await _validate_change(db, state, payload.settings)
     replay = await db.get(TurnReplay, game_id)
     if replay is not None and replay.status in {"executing", "replaying"}:
         raise HTTPException(409, "Recover the unfinished turn before changing CHPM settings.")
-    roster_changed = (current.settings.mode, current.settings.actor_ids) != (
-        payload.settings.mode,
-        payload.settings.actor_ids,
+    roster_changed = (
+        current.settings.control_scope,
+        current.settings.mode,
+        current.settings.actor_ids,
+    ) != (
+        settings.control_scope,
+        settings.mode,
+        settings.actor_ids,
     )
     warm_semantic = (
-        payload.settings.semantic_memory
-        and payload.settings.mode == "live"
+        settings.control_scope == "dialogue"
+        and settings.semantic_memory
+        and settings.mode == "live"
         and (not current.settings.semantic_memory or roster_changed)
     )
     if roster_changed:
@@ -136,13 +152,20 @@ async def patch(
     current.recovery.cooldown_remaining = 0
     current.recovery.consecutive_failures = 0
     previous_input_limit = current.settings.max_input_chars
-    current.settings = payload.settings
+    current.settings = settings
     current.revision += 1
     value = current.model_dump(mode="json")
     changed = await db.execute(
         update(SessionState)
         .where(SessionState.id == state.id, cast(SessionState.entity_states, Text) == before)
-        .values(entity_states={**(state.entity_states or {}), KEY: value})
+        .values(
+            entity_states=configure_actions(
+                {**(state.entity_states or {}), KEY: value},
+                enabled=settings.control_scope == "dialogue"
+                and settings.action_tools
+                and settings.mode == "live",
+            )
+        )
         .returning(SessionState.id)
         .execution_options(synchronize_session=False)
     )
@@ -154,12 +177,12 @@ async def patch(
 
         await mark_dirty(db, game_id, user.id, state.template_id)
     await db.commit()
-    if payload.settings.max_input_chars > previous_input_limit:
+    if settings.max_input_chars > previous_input_limit:
         logger.warning(
             "CHPM input budget increased: %d -> %d characters; workflow=%s",
             previous_input_limit,
-            payload.settings.max_input_chars,
-            payload.settings.workflow,
+            settings.max_input_chars,
+            settings.workflow,
         )
     if warm_semantic:
         from backend.engine.memory_rag.worker import schedule
@@ -172,13 +195,16 @@ async def patch(
 async def _validate_change(db: AsyncSession, state: SessionState, settings: Settings) -> None:
     if settings.mode == "off":
         return
-    if not await session_is_vn(db, state):
-        raise HTTPException(409, "The CHPM dialogue pilot supports Visual Novel sessions only.")
+    mode = await session_mode(db, state)
+    _validate_mode(mode, settings)
     required = capacity.required_calls(settings)
     if settings.max_calls_per_turn < required:
         raise HTTPException(
             422,
-            f"The request budget must be at least {required}: perception, selected NPCs, "
+            f"The request budget must be at least {required} to cover selected NPC combat turns "
+            "and their tool rounds."
+            if settings.control_scope == "combat_actions"
+            else f"The request budget must be at least {required}: perception, selected NPCs, "
             "and in live mode agent rounds, proposal retry, review, narration repair and repeat review.",
         )
     ids = {row["id"] for row in await _characters(db, state)}
@@ -191,10 +217,25 @@ async def _validate_change(db: AsyncSession, state: SessionState, settings: Sett
             + ", ".join(sorted(unknown)),
         )
     simulation = load_simulation(state)
-    if settings.mode == "live" and simulation.settings.private_decisions_active:
+    if (
+        settings.mode == "live"
+        and settings.control_scope == "dialogue"
+        and simulation.settings.private_decisions_active
+    ):
         raise HTTPException(
             409, "Disable Living World private decisions before enabling live CHPM."
         )
+
+
+def _validate_mode(mode: str, settings: SettingsFields) -> None:
+    if settings.mode == "off" or mode == "vn":
+        return
+    if mode == "rpg" and settings.mode == "live" and settings.action_tools:
+        return
+    raise HTTPException(
+        409,
+        "Enable integrated action tools for RPG combat, or use a Visual Novel session for dialogue analysis.",
+    )
 
 
 def _update_replay(replay: TurnReplay | None, value: dict) -> None:
@@ -208,11 +249,14 @@ def _update_replay(replay: TurnReplay | None, value: dict) -> None:
     # switches deliberately reinitialize the pilot, including the replay baseline.
     prior = (state.get("entity_states") or {}).get(KEY, {})
     same_mode = prior.get("settings", {}).get("mode", "off") == value["settings"]["mode"]
+    same_scope = prior.get("settings", {}).get("control_scope", "dialogue") == value[
+        "settings"
+    ].get("control_scope", "dialogue")
     same_actors = prior.get("settings", {}).get("actor_ids", []) == value["settings"]["actor_ids"]
     restored = {
         **value,
-        "actors": prior.get("actors", {}) if same_mode and same_actors else {},
-        "memories": prior.get("memories", {}) if same_mode and same_actors else {},
+        "actors": prior.get("actors", {}) if same_mode and same_scope and same_actors else {},
+        "memories": prior.get("memories", {}) if same_mode and same_scope and same_actors else {},
         "last_active": prior.get("last_active", {}),
         # Never copy promises made in the completed turn into its retry baseline.
         "agenda": prior.get("agenda", []),
@@ -227,5 +271,10 @@ def _update_replay(replay: TurnReplay | None, value: dict) -> None:
         },
         "usage": Usage().model_dump(),
     }
-    state["entity_states"] = {**(state.get("entity_states") or {}), KEY: restored}
+    state["entity_states"] = configure_actions(
+        {**(state.get("entity_states") or {}), KEY: restored},
+        enabled=value["settings"].get("control_scope", "dialogue") == "dialogue"
+        and value["settings"].get("action_tools", False)
+        and value["settings"]["mode"] == "live",
+    )
     replay.before = before

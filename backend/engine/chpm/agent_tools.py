@@ -5,7 +5,7 @@ import re
 from copy import deepcopy
 from dataclasses import dataclass, field
 
-from backend.engine.chpm import agent_beliefs, agent_observable, host_observations
+from backend.engine.chpm import agent_beliefs, agent_discovery, agent_observable, host_observations
 from backend.engine.chpm.agent_contracts import Lookup
 from backend.engine.chpm.agent_limits import MAX_PINNED_CHARS, MAX_PINNED_SOURCES
 from backend.engine.chpm.core.contracts import Belief
@@ -17,6 +17,9 @@ from backend.engine.chpm.observable_state import View
 from backend.engine.chpm.schema import EpisodeContext, Observation
 from backend.engine.memory_rag.documents import MemoryDocument
 from backend.engine.memory_rag.ranking import rank_documents, tokens
+from backend.engine.narrated_movement.outcomes import descriptor, evidence_size
+from backend.engine.npc_actions.contracts import Request as ActionRequest
+from backend.engine.npc_actions.preview import Draft as ActionDraft
 
 
 def covering_excerpt(whole: str, previous: str, current: str) -> str:
@@ -43,12 +46,16 @@ class Tools:
     episode_contexts: dict[str, EpisodeContext] = field(default_factory=dict)
     notebook: NotebookDraft | None = None
     observable: View | None = None
+    actions: ActionDraft | None = None
 
     def __post_init__(self) -> None:
         if self.mind.genesis.scope.world_id != self.observation.session_id:
             raise ChpmError("CHPM tools belong to another session.")
 
-    def execute(self, lookup: Lookup | NotebookRequest) -> dict:
+    def execute(self, lookup: Lookup | NotebookRequest | ActionRequest) -> dict:
+        if isinstance(lookup, ActionRequest):
+            actions = self.current_actions()
+            return actions.execute(lookup) if actions else {"status": "unavailable_actions"}
         if not isinstance(lookup, Lookup):
             return (
                 self.notebook.execute(lookup)
@@ -56,6 +63,31 @@ class Tools:
                 else {"status": "unavailable_notebook"}
             )
         return self._lookup(lookup)
+
+    def current_actions(self) -> ActionDraft | None:
+        if self.actions is None or agent_observable.current(self) is None:
+            return None
+        scope = self.actions.scope
+        expected = (
+            self.mind.genesis.scope.world_id,
+            self.mind.genesis.scope.observer_id,
+            self.observation.message_id,
+            self.observation.scene_id,
+            self.observation.revision_id,
+        )
+        return (
+            self.actions
+            if (
+                scope.session_id,
+                scope.actor_id,
+                scope.input_id,
+                scope.scene_id,
+                scope.input_revision,
+            )
+            == expected
+            and (not scope.input_hash or scope.input_hash == self.observation.content_hash)
+            else None
+        )
 
     def _lookup(self, lookup: Lookup) -> dict:
         if lookup.tool == "read_memory":
@@ -65,6 +97,8 @@ class Tools:
             "search_memory": self.search,
             "inspect_self": lambda _argument: self.inspect_self(),
             "inspect_entity": lambda argument: agent_observable.inspect(self, argument),
+            "find_entity": lambda argument: agent_discovery.find(self, argument),
+            "inspect_scene": lambda _argument: agent_discovery.scene(self),
             "inspect_beliefs": lambda argument: agent_beliefs.inspect(self, argument),
             "read_belief_basis": lambda argument: agent_beliefs.basis(self, argument),
             "visible_clothing": self.visible_clothing,
@@ -145,8 +179,8 @@ class Tools:
         if alias in self.pins:
             previous = self.pins[alias][2]
             text = covering_excerpt(source.text, previous, text)
-        used = sum(len(item[2]) for a, item in self.pins.items() if a != alias)
-        if used + len(text) > MAX_PINNED_CHARS:
+        used = sum(evidence_size(item[2], item[1]) for a, item in self.pins.items() if a != alias)
+        if used + evidence_size(text, source) > MAX_PINNED_CHARS:
             return {"status": "evidence_budget_exhausted"}
         self.pins[alias] = (key, source, text)
         self.exposed[key] = (key, source)
@@ -159,6 +193,7 @@ class Tools:
             "kind": "reported" if source.reported else "witnessed",
             "current_turn": source.message_id == self.observation.message_id,
             "text": text,
+            **descriptor(source),
             "excerpted": text != source.text,
             **(
                 {"context": self.episode_contexts[key].model_dump(exclude_none=True)}

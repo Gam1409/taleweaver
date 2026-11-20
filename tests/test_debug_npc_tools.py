@@ -59,7 +59,8 @@ async def test_invalid_move_preserves_state(command):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("canonical", [False, True])
-async def test_edit_clothing_round_trips_without_changing_unrelated_inventory(canonical):
+@pytest.mark.parametrize("displaced", [False, True])
+async def test_edit_clothing_round_trips_without_changing_unrelated_inventory(canonical, displaced):
     async with TestSessionLocal() as db:
         _, _, state, _ = await seed_vn(db)
         state.is_debug_enabled = True
@@ -73,7 +74,15 @@ async def test_edit_clothing_round_trips_without_changing_unrelated_inventory(ca
             "item_origin": {"source": "kept"},
         }
         npc.inventory = [*npc.inventory, shirt]
-        npc.visual_profile = {"appearance": {"hair": "black"}, "worn": []}
+        source = {
+            "source_message_id": "story",
+            "content_hash": "1" * 64,
+            "evidence": "One sleeve hangs loose.",
+        }
+        worn = (
+            [{"item_id": "SHIRT", "partially_removed": True, "source": source}] if displaced else []
+        )
+        npc.visual_profile = {"appearance": {"hair": "black"}, "worn": worn}
         if canonical:
             db.add(
                 WorldEntity(
@@ -113,6 +122,10 @@ async def test_edit_clothing_round_trips_without_changing_unrelated_inventory(ca
         assert info["items"][0]["name"] == "Blue shirt"
         assert info["items"][0]["clothing"]["layer"] == 2
         assert info["items"][0]["worn"] is True
+        assert bool(info["items"][0].get("partially_removed")) is displaced
+        assert info["items"][0]["uncovered_regions"] == []
+        if displaced:
+            assert saved["visual_profile"]["worn"][0]["source"]["source_message_id"] == "story"
         assert npc.inventory[1]["name"] == "Old shirt"
         edit["worn"] = False
         result = await DebugEngine.handle_debug_command(

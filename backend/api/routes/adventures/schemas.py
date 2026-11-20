@@ -5,8 +5,11 @@ from pydantic import AliasChoices, AliasPath, BaseModel, Field, field_validator,
 
 from backend.core.content_language import normalize_language
 from backend.engine.blueprint.brief import WorldBrief
+from backend.engine.chpm.schema import Settings as NpcPersonalitySettings
+from backend.engine.chpm.schema import SettingsFields as NpcPersonalityInput
 from backend.engine.chpm.template_settings import Defaults as NpcPersonalityDefaults
 from backend.engine.chpm.template_settings import ensure_compatible
+from backend.engine.chpm.template_settings import stored_defaults as personality_defaults
 from backend.engine.living_world.schema import Settings as LivingWorldSettings
 from backend.engine.narration_correction import NarrationCorrection
 from backend.schemas.adventure import AdventureTemplateDebugResponse
@@ -88,6 +91,23 @@ class CreateAdventureTemplatePayload(BaseModel):
     skip_generation: Optional[bool] = False
     # Run a full validation after generation and auto-apply the top AI fix per finding.
     auto_validate_and_fix: bool = True
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_personality_scope(cls, raw: Any) -> Any:
+        if not isinstance(raw, dict) or raw.get("npc_personality_settings") is None:
+            return raw
+        world = raw.get("living_world_settings")
+        return {
+            **raw,
+            "npc_personality_settings": personality_defaults(
+                raw["npc_personality_settings"],
+                mode=raw.get("rule_enforcement_mode", "rpg"),
+                living_world=world.model_dump()
+                if isinstance(world, LivingWorldSettings)
+                else world,
+            ),
+        }
 
     @field_validator("title")
     @classmethod
@@ -314,7 +334,7 @@ class AdventureTemplateResponse(BaseModel):
     """Full adventure details returned to the client."""
 
     living_world_settings: Optional[LivingWorldSettings] = None
-    npc_personality_settings: Optional[NpcPersonalityDefaults] = None
+    npc_personality_settings: Optional[NpcPersonalitySettings] = None
 
     id: str
     title: str
@@ -655,7 +675,7 @@ class AdventureTemplateUpdate(BaseModel):
     """Payload for partial updates to an adventure template."""
 
     living_world_settings: Optional[LivingWorldSettings] = None
-    npc_personality_settings: Optional[NpcPersonalityDefaults] = None
+    npc_personality_settings: Optional[NpcPersonalityInput] = None
 
     detailed_clothing: Optional[bool] = None
     nsfw_enabled: Optional[bool] = None

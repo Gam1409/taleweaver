@@ -67,7 +67,7 @@ async def _conditions(
         if row.status != "resolved"
         and (row.visibility == "public" or narrated_private and row.latest.kind == "narration")
         and row.target_id in {actor["id"], *names}
-        and row.latest.kind in {"narration", "manual"}
+        and row.latest.kind in {"narration", "manual", "command"}
     ]
     message_ids = {row.latest.message_id for row in candidates if row.latest.kind == "narration"}
     messages = (
@@ -87,7 +87,9 @@ async def _conditions(
     sources = {message.id: message.content for message in messages}
     confirmed_ids = set()
     for row in candidates:
-        quote = row.detail if row.latest.kind == "manual" else _source_quote(row, sources)
+        quote = (
+            row.detail if row.latest.kind in {"manual", "command"} else _source_quote(row, sources)
+        )
         if not quote:
             continue
         confirmed_ids.add(row.id)

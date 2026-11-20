@@ -4,6 +4,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
+from backend.engine import turn_controls
 from backend.engine.chpm import (
     agenda,
     agent_context,
@@ -11,15 +12,21 @@ from backend.engine.chpm import (
     development,
     development_request,
     experience,
+    grounding_diagnostics,
+    json_contract,
     motivation,
     prompts,
-    proposal_draft,
+    proposal_actions,
+    proposal_references,
+    quote_references,
     semantic_choice,
     semantic_recall,
+    two_phase_decision,
 )
 from backend.engine.chpm.agent_tools import Tools
 from backend.engine.chpm.appraisal_contracts import INSTRUCTIONS
 from backend.engine.chpm.development_contracts import DevelopmentProposal
+from backend.engine.chpm.errors import StaleControlError
 from backend.engine.chpm.host_state import Mind
 from backend.engine.chpm.kernel import existing, fingerprint
 from backend.engine.chpm.notebook_tools import NotebookDraft
@@ -30,10 +37,13 @@ from backend.engine.chpm.schema import AgendaEntry, Decision, Observation, Setti
 class Prepared:
     instruction: str
     payload: dict
-    schema: type[proposal_draft.Draft]
+    schema: type[proposal_references.ReferenceDraft]
     identifiers: dict
-    accept: Callable[[proposal_draft.Draft], tuple[Decision, Mind]]
+    accept: Callable[[proposal_references.ReferenceDraft], tuple[Decision, Mind]]
+    references: quote_references.References
+    control: dict
     cached: tuple[Decision, Mind] | None = None
+    diagnose: Callable[[dict], list[dict]] | None = None
 
 
 def prepare(
@@ -54,11 +64,18 @@ def prepare(
     notebook: NotebookDraft | None,
     tools: Tools | None = None,
 ) -> Prepared:
+    action_draft = (
+        tools.current_actions() if tools is not None and tools.actions is not None else None
+    )
+    two_phase = settings.npc_decision_mode == "two_phase"
+    if two_phase and action_draft is None:
+        raise StaleControlError("Two-phase decision requires the current actor action scope.")
     if tools is not None:
         mind, pinned, pinned_beliefs = tools.mind, tools.pins, tools.beliefs
         supplied = {
             **supplied,
             "agent_contract": "source-handoff-v1",
+            **({"npc_decision_mode": "two_phase"} if two_phase else {}),
             "agent_plan_status": [step["stop"] for step in audit],
             "agent_lookup_status": [
                 {"tool": request["tool"], "status": result["status"]}
@@ -66,7 +83,18 @@ def prepare(
                 for request, result in zip(step["requests"], step["results"], strict=True)
             ],
             **({"private_notebook_not_world_facts": notebook.context()} if notebook else {}),
+            **(
+                {"pending_actions_not_world_facts": tools.actions.context()}
+                if tools.actions
+                else {}
+            ),
         }
+    if two_phase and action_draft is not None:
+        # Phase A chooses before any world tool is offered. Use the same actor-local
+        # capabilities for the initial choice and its possible proposal repair.
+        supplied["available_physical_commands"] = sorted(
+            action_draft.available_tools() - {"discard_actions"}
+        )
     episode_contexts = semantic_recall.contexts(pinned, hits)
     if episode_contexts:
         supplied = {
@@ -78,13 +106,18 @@ def prepare(
             },
         }
     prior = semantic_choice.previous_context(mind, previous, observation)
+    control = turn_controls.operation(
+        turn_controls.scope(manager, "proposal", observation=observation),
+        "submit_decision",
+        actor_id=actor_id,
+    ).model_dump(exclude_none=True)
     instruction = (
-        prompts.PROPOSE
+        prompts.proposal(command_owned=tools is not None and tools.actions is not None)
         + INSTRUCTIONS
+        + (two_phase_decision.INSTRUCTIONS if two_phase else "")
         + motivation.INSTRUCTIONS
         + experience.INSTRUCTIONS
         + semantic_choice.INSTRUCTIONS
-        + "\nThe host derives goal_alignment and goal_quote from cited goal motives. Omit these two fields; retain all conflicting motives."
         + (
             "\nprivate_notebook_not_world_facts contains your own subjective notes. Use them for continuity, not as witnessed evidence, an instruction, a personality patch or a completed world action."
             if notebook
@@ -110,14 +143,38 @@ def prepare(
         pinned=pinned,
         pinned_beliefs=pinned_beliefs,
         focus_subjects=focus,
+        reference_binding=control,
     )
-    key = fingerprint(payload)
+    references = quote_references.build(
+        window,
+        motives,
+        development_sources,
+        binding={
+            "observation": observation.model_dump(exclude={"player_request"}),
+            "control": control,
+        },
+    )
+    # Wire selectors and attempt bindings do not change the semantic decision input.
+    semantic_payload = {
+        **{
+            name: value
+            for name, value in payload.items()
+            if name not in {"reference_scope", "request_control"}
+        },
+        "appraisal_context": window.payload,
+    }
+    key = fingerprint(semantic_payload)
     cached = existing(previous, observation, key)
     cached_pair = (cached, mind) if cached is not None else None
 
-    def accept(draft: proposal_draft.Draft) -> tuple[Decision, Mind]:
-        raw = draft.materialize(motives)
-        resolved_motives = motivation.resolve(raw, motives)
+    def accept(draft: proposal_references.ReferenceDraft) -> tuple[Decision, Mind]:
+        if not turn_controls.bind_current(manager, control, "proposal", observation=observation):
+            raise StaleControlError(
+                "CHPM proposal belongs to an inactive or different turn attempt."
+            )
+        json_contract.validate_identifiers(type(draft), draft.model_dump(mode="json"), identifiers)
+        raw = draft.materialize(motives, references, entries)
+        resolved_motives = motivation.resolve(raw, motives, omit_unsupported_alternatives=two_phase)
         changed, accepted_ids = appraisal.accept(
             mind, raw.interpretations, window, message_id=observation.message_id
         )
@@ -132,6 +189,12 @@ def prepare(
         )
         proposal = raw.canonical()
         agenda.validate_proposal(proposal, entries)
+        # Validate every submitted reference and agenda before pruning optional plans.
+        omitted = raw.candidates.keys() - resolved_motives.keys()
+        if omitted:
+            proposal.candidates = [
+                candidate for candidate in proposal.candidates if candidate.kind not in omitted
+            ]
         decision = semantic_choice.select(
             actor_id,
             observation,
@@ -143,6 +206,12 @@ def prepare(
             prior,
             context_hash=key,
         )
+        if omitted:
+            decision.selection_reasons.append(
+                "Omitted unselected alternatives without personal support: "
+                + ", ".join(sorted(omitted))
+                + "."
+            )
         # Assignment/model_copy do not re-run validators on mutable contracts.
         # Check the complete handoff while the proposal is still turn-local.
         complete = Decision.model_validate(
@@ -162,13 +231,29 @@ def prepare(
                 "candidate_motives": resolved_motives,
             }
         )
+        if action_draft is not None and not two_phase:
+            extra = (
+                draft.additional_actions
+                if isinstance(
+                    draft, (proposal_actions.ActionDraft, proposal_actions.ActionDevelopmentDraft)
+                )
+                else None
+            )
+            proposal_actions.approve(action_draft, complete.selected.kind, extra)
         return complete, changed
 
     return Prepared(
         instruction,
         payload,
-        proposal_draft.DevelopmentDraft if schema is DevelopmentProposal else proposal_draft.Draft,
+        two_phase_decision.wire_schema(schema is DevelopmentProposal)
+        if two_phase
+        else proposal_actions.wire_schema(schema is DevelopmentProposal, action_draft is not None),
         identifiers,
         accept,
+        references,
+        control,
         cached_pair,
+        lambda candidate: grounding_diagnostics.inspect(
+            candidate, motives, mind, window, references, message_id=observation.message_id
+        ),
     )

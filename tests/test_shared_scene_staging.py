@@ -258,7 +258,7 @@ async def test_shared_timeout_does_not_send_a_fallback_staging_request(monkeypat
         assert not any(call[0] == "SceneExtraction" for call in roles.calls)
 
 
-async def test_host_rejection_keeps_independent_pose_without_applying_item_changes(monkeypatch):
+async def test_local_player_rejection_keeps_independent_pose_and_owned_wardrobe(monkeypatch):
     class BlockedRoles(SharedRoles):
         async def structured(self, *args, **kwargs):
             result = await super().structured(*args, **kwargs)
@@ -267,7 +267,8 @@ async def test_host_rejection_keeps_independent_pose_without_applying_item_chang
             return result
 
     async with TestSessionLocal() as db:
-        roles, user, _, state = await seed(monkeypatch, db, roles=BlockedRoles())
+        roles, user, avatar, state = await seed(monkeypatch, db, roles=BlockedRoles())
+        player_before = deepcopy(avatar.inventory)
         events = [
             chunk
             async for chunk in GameTurnManager(db, state.session_id, user).process_turn("Continue.")
@@ -279,7 +280,9 @@ async def test_host_rejection_keeps_independent_pose_without_applying_item_chang
         npc = await db.scalar(select(WorldEntity).where(WorldEntity.id == "LINA"))
         assert (state.entity_states.get("LINA") or {}).get("visual_profile", npc.visual_profile)[
             "worn"
-        ] == [{"item_id": "COAT", "uncovered_regions": []}]
+        ] == []
+        assert avatar.inventory == player_before
+        assert state.entity_states["__narrated_items__"]["accepted"][0]["item"]["id"] == "COAT"
 
 
 async def test_new_prop_reference_uses_original_action_index_after_a_rejected_action(monkeypatch):

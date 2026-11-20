@@ -174,11 +174,15 @@ async def test_review_failure_publishes_no_ledger_change(monkeypatch):
     host._chpm_turn.decisions = selected()
     verdict = review()
     verdict.agenda_evidence = []
-    monkeypatch.setattr(rendering.inference, "request", AsyncMock(return_value=verdict))
+    reviewer = AsyncMock(return_value=verdict)
+    repair = AsyncMock(return_value="I will repair the bridge.")
+    monkeypatch.setattr(rendering.inference, "request", reviewer)
+    monkeypatch.setattr(rendering, "_repair", repair)
     with pytest.raises(ChpmError, match="exactly"):
         await rendering.validate(
             host, "I will repair the bridge.", completed=True, resolution="", system_prompt="Policy"
         )
+    assert reviewer.await_count == 2 and repair.await_count == 1
     assert load(host.state).agenda == []
     with pytest.raises(ChpmError):
         runtime.finish(host, source(content="I will repair the bridge."), completed=True)

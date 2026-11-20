@@ -1,6 +1,17 @@
 """Static recovery hints for unavailable observer-local handles; no capability lookup."""
 
 _HINTS = {
+    ("visible_clothing", "unavailable_actor"): (
+        "Use visible_clothing only for a listed visible_clothing_actors NPC. "
+        "For the player use inspect_entity(argument='@player'); for yourself use "
+        "inspect_self or inspect_entity with observer_id. Unavailable does not mean undressed."
+    ),
+    ("find_entity", "unavailable_view"): (
+        "The current observer view is unavailable or stale. Do not infer absence or create a replacement."
+    ),
+    ("inspect_scene", "unavailable_view"): (
+        "The current scene view is unavailable or stale. Do not infer an empty room or an open route."
+    ),
     ("inspect_entity", "unavailable_entity"): (
         "Use an exact accessible ID from observable_entities or the current host context. "
         "The view may be unavailable or stale. This does not prove absence and does not "

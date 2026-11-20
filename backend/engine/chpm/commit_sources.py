@@ -3,6 +3,7 @@
 from typing import Any
 
 from backend.engine.chpm import recovery_queue, reports
+from backend.engine.npc_actions import acknowledgment
 
 
 async def prepare(manager: Any, turn: Any) -> None:
@@ -28,3 +29,6 @@ async def prepare(manager: Any, turn: Any) -> None:
             await persist_workspace(
                 manager.db, turn.minds[actor], draft.workspace, owner_id=manager.user.id
             )
+    # Extraction and pending writes can await after narration review. Recheck the
+    # consumed feedback last, inside this transaction, before synchronous delivery.
+    await acknowledgment.validate_current(manager, turn)

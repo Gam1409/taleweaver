@@ -8,13 +8,16 @@ from sqlalchemy import select
 
 from backend.engine.chpm import inference, rendering
 from backend.engine.chpm.schema import KernelState, Settings
+from backend.engine.chpm.semantic_choice import previous_context
 from backend.engine.chpm.state import KEY, load
 from backend.engine.gameplay.manager import GameTurnManager
+from backend.engine.narrated_items.runtime import KEY as ITEMS_KEY
 from backend.engine.narrated_items.schema import ItemExtraction
 from backend.engine.scene_staging import props
 from backend.models.chat import ChatMessage
 from backend.models.world_entity import WorldEntity, WorldExit, WorldScene
 from tests.chpm_projection_fixture import public_projection
+from tests.chpm_reference_fixture import response as reference_response
 from tests.conftest import TestSessionLocal
 from tests.test_chpm_kernel import motivated_candidates, preferred_choice
 from tests.test_shared_scene_staging import ACTION, TEXT, SharedRoles, seed
@@ -32,8 +35,13 @@ class AutonomousRoles(SharedRoles):
         model = super().for_role(user, role, **kwargs)
         model.max_tokens = 4096
         model.request_timeout = 10
-        model.aexecute_simple_task = self.simple
+        model.aexecute_simple_task = self.reference_simple
         return model
+
+    async def reference_simple(self, system, payload, model, **kwargs):
+        return reference_response(
+            await self.simple(system, payload, model, **kwargs), json.loads(payload)
+        )
 
     async def structured(self, *args, **kwargs):
         result = await super().structured(*args, **kwargs)
@@ -214,3 +222,40 @@ async def test_autonomous_departure_uses_access_rules_and_never_takes_player_alo
         assert destination == (origin if locked else "ANNEX")
         assert state.current_scene_id == origin and avatar.inventory == inventory
         assert len(roles.calls) == (2 if mode == "live" else 3)
+        reply = await db.scalar(
+            select(ChatMessage).where(
+                ChatMessage.session_id == state.session_id,
+                ChatMessage.role == "assistant",
+                ChatMessage.content == text,
+            )
+        )
+        assert reply is not None
+        movement = state.entity_states[ITEMS_KEY]["movement_check"]
+        assert (movement["message_id"], movement["revision_id"]) == (reply.id, reply.revision_id)
+        assert [(row["actor_id"], row["status"]) for row in movement["outcomes"]] == [
+            ("LINA", "blocked" if locked else "applied")
+        ]
+        # Legacy turn success reports processing, not certification of every prose claim.
+        # The existing fail-safe must expose a rejected move and retain its qualification.
+        warnings = [
+            event
+            for event in events
+            if event.startswith("event: system") and "narrated movements need review" in event
+        ]
+        assert bool(warnings) is locked
+        assert bool(movement["rejected"]) is locked
+        assert bool(movement["accepted"]) is not locked
+        if mode == "live":
+            saved = load(state)
+            decision = saved.actors["LINA"]
+            mind = saved.minds["LINA"]
+            action = next(source for source in mind.sources.values() if source.kind == "narration")
+            # The original transcript survives even when the canonical move is blocked.
+            assert action.text == text
+            assert [entry.status for entry in action.movement_outcomes] == [
+                "blocked" if locked else "applied"
+            ]
+            following = decision.observation.model_copy(update={"message_id": "next-input"})
+            prior = previous_context(mind, decision, following)
+            assert prior is not None and prior.action_evidence == text
+            assert prior.movement_outcomes == action.movement_outcomes

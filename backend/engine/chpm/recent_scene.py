@@ -7,6 +7,7 @@ from sqlalchemy import and_, or_, select
 
 from backend.core.system_diagnostics import service
 from backend.core.text_evidence import EvidenceSpan
+from backend.engine.chpm import movement_feedback
 from backend.engine.chpm.host_observation_contracts import (
     MAX_SCENE_CHARS,
     ObservedScene,
@@ -49,7 +50,15 @@ async def capture(manager: Any, actors: set[str], targets: set[str]) -> dict[str
     minute = minute if type(minute) is int and minute >= 0 else None
     if minute is not None and minute > int(manager.state.in_game_time or 0):
         return _unavailable("future_game_minute")
-    actions = [action for row in ledger.frame_actions if (action := _action(row, message, targets))]
+    outcomes = movement_feedback.read(manager.state, message)
+    actions = [
+        action
+        for row in ledger.frame_actions
+        if (action := _action(row, message, targets))
+        and not movement_feedback.conflicts(
+            outcomes, set(row.actor_ids), action.evidence_span.start, action.evidence_span.end
+        )
+    ]
     metadata = {
         "source_message_id": message.id,
         "source_revision_id": message.revision_id,

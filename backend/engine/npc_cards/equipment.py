@@ -14,7 +14,7 @@ from backend.engine.clothing.profiles import (
     owned_items,
 )
 from backend.engine.clothing.visuals import detailed_for_state
-from backend.engine.clothing.wear_provenance import source_matches
+from backend.engine.clothing.wear_provenance import command_matches, source_matches
 from backend.engine.debug_transcript import not_debug_sql
 from backend.engine.physical_conditions.item_state import project as item_states
 from backend.models.chat import ChatMessage
@@ -78,7 +78,7 @@ async def equipment_rows(
         for row in profile.worn
         if row.item_id in items
         and row.item_id not in result
-        and (row.attachment_slot or row.uncovered_regions)
+        and (row.attachment_slot or row.uncovered_regions or row.partially_removed)
         and row.source is not None
     ]
     ids = {
@@ -105,8 +105,12 @@ async def equipment_rows(
         if (
             source is None
             or message is None
-            or message.role != source.source_role
-            or not source_matches(source.model_dump(), message.content)
+            or not (
+                command_matches(source, message, actor_id=actor["id"], item_id=row.item_id)
+                if source.source_role == "command"
+                else message.role == source.source_role
+                and source_matches(source.model_dump(), message.content)
+            )
         ):
             continue
         age = profile.appearance.age_years
@@ -131,6 +135,7 @@ async def equipment_rows(
             objects,
             state.entity_states or {},
             uncovered_regions=row.uncovered_regions,
+            **({"partially_removed": True} if row.partially_removed else {}),
             description=garment.description if garment and detailed_for_state(state) else "",
             **({"slots": [BODY_SLOT_KEYS[row.attachment_slot]]} if row.attachment_slot else {}),
         )

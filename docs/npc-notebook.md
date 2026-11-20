@@ -21,13 +21,14 @@ Enabling notebooks preserves an existing choice of two or three rounds. Disablin
 notebooks keeps the selected agent rounds; choose **Off** for those rounds to stop their
 additional requests. Standard and Observe modes do not run notebook tools.
 
-**Memory tool compatibility** selects the model-facing protocol. **Automatic**
-uses native function calls when the provider adapter supports them. **Native
-function calls** requires that support; **JSON compatibility** represents the same
-operations as a portable JSON plan for a text-only server. Both use the same
-scoped executor, current document and request limits. If an otherwise compatible
-server rejects native tools, select JSON compatibility explicitly. An uncertain
-request is never resent automatically using a different protocol.
+**Memory tool compatibility** selects the model-facing protocol. The separate
+**Tool-calling profile** applies family compatibility policy: Auto preserves the
+existing adapter-based choice, while Gemma and Qwen conservatively select JSON
+when compatibility is Automatic. **Native function calls** requires a supported
+adapter and declarations; **JSON compatibility** represents the same operations
+as a portable JSON plan. Both use the same scoped executor, current document and
+request limits. An uncertain request is never resent automatically using a
+different protocol. See [profiles and runtime requirements](npc-tool-profiles.md).
 
 The existing live request reserve is `active NPCs × (1 + agent_steps) + 5`.
 For three active NPCs, that means 8 requests with rounds off, 11 with one round,
@@ -127,8 +128,8 @@ none of its pending edits.
 JSON compatibility feeds the same bounded loop and argument checks, using text
 instead of native assistant/tool messages on the provider wire. It preserves
 correlated feedback and ordinary JSON values. Structured-output settings used by
-other game phases do not establish native tool support. Local servers also need
-the model's appropriate tool-capable chat template.
+other game phases do not establish native tool support. Native calls on local
+servers also need the model's appropriate tool-capable chat template and parser.
 
 The native exchange follows the [function calling flow](https://developers.openai.com/api/docs/guides/function-calling).
 Tool failures remain visible for correction, consistent with the

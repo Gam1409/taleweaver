@@ -175,8 +175,27 @@ def _replace(node: dict, *, signature: str, reference: dict) -> dict:
     return reference if _signature(node) == signature else node
 
 
-def share_schema(schema: dict) -> dict:
-    """Hoist profitable exact repetitions into collision-safe, supported local $defs."""
+def _short_reference(node: dict, *, references: dict[str, str]) -> dict:
+    if "$ref" in node:
+        node["$ref"] = references[node["$ref"]]
+    return node
+
+
+def _short_definitions(schema: dict) -> dict:
+    names = {name: f"d{index:x}" for index, name in enumerate(schema.get("$defs", {}))}
+    if not names:
+        return schema
+    references = {
+        "#/$defs/" + name.replace("~", "~0").replace("/", "~1"): f"#/$defs/{alias}"
+        for name, alias in names.items()
+    }
+    result = map_schema(schema, partial(_short_reference, references=references))
+    result["$defs"] = {names[name]: value for name, value in result["$defs"].items()}
+    return result if len(_signature(result)) < len(_signature(schema)) else schema
+
+
+def share_schema(schema: dict, *, short_names: bool = False) -> dict:
+    """Share exact subtrees, optionally shortening safe local definition handles."""
     result = deepcopy(schema)
     if not safe_to_share(schema):
         return result
@@ -186,7 +205,7 @@ def share_schema(schema: dict) -> dict:
             key = _signature(node)
             _, count = counts.get(key, (node, 0))
             counts[key] = node, count + 1
-        name = f"__shared_{index}"
+        name = f"_s{index:x}"
         while name in result.get("$defs", {}):
             name += "_"
         reference = {"$ref": f"#/$defs/{name}"}
@@ -206,4 +225,4 @@ def share_schema(schema: dict) -> dict:
             partial(_replace, reference=reference, signature=signature),
         )
         result.setdefault("$defs", {})[name] = original
-    return result
+    return _short_definitions(result) if short_names else result

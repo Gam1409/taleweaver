@@ -1,9 +1,13 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { useChpmSettings } from '@/composables/useChpmSettings'
+import { useChpmSettings, type ChpmSettings } from '@/composables/useChpmSettings'
+import { NPC_TOOL_PROFILES, NPC_TOOL_PROFILE_REQUIREMENTS, NPC_TOOL_PROTOCOL_HELP, findNpcToolProfile } from '@/utils/npcToolProfiles'
+import type { NpcToolProfile } from '@/utils/npcToolProfiles'
 
 const props = defineProps<{ sessionId: string }>()
-const { status, draft, busy, error, minimumCalls, budgetWarning, historyWarnings, selectStandard, setNotebookEnabled, setWorkflow, load, save } = useChpmSettings(() => props.sessionId)
+const { status, draft, busy, error, minimumCalls, budgetWarning, historyWarnings, selectStandard, setMode, setNotebookEnabled, setToolProfile, setActionToolsEnabled, setWorkflow, load, save } = useChpmSettings(() => props.sessionId)
+const selectedToolProfile = computed(() => findNpcToolProfile(draft.value?.tool_profile))
+const isCombatControl = computed(() => status.value?.host_mode === 'rpg')
 const lastFailure = computed(() => status.value?.last_analysis_failure ?? status.value?.last_proposal_failure)
 const unlistedActors = computed(() => draft.value?.actor_ids.filter(id => !status.value?.characters.some(actor => actor.id === id)) ?? [])
 const elapsed = (value: number | null | undefined): string => value == null ? 'Unavailable' : `${(value / 1000).toFixed(3)} s`
@@ -12,41 +16,49 @@ defineExpose({ save })
 
 <template>
   <details class="rounded-2xl border border-cyan-500/20 bg-slate-950/40 p-4">
-    <summary class="cursor-pointer text-sm font-semibold text-cyan-200">NPC Personality <span v-if="status?.module_version">v{{ status.module_version }}</span> <span v-if="historyWarnings.length || budgetWarning" class="text-amber-300">· Needs attention</span></summary>
-    <p class="mt-3 text-xs text-slate-400">Optional dialogue decisions for selected NPCs. Standard behavior remains the default.</p>
+    <summary class="cursor-pointer text-sm font-semibold text-cyan-200">{{ isCombatControl ? 'NPC combat actions' : 'NPC Personality' }} <span v-if="status?.module_version">v{{ status.module_version }}</span> <span v-if="historyWarnings.length || budgetWarning" class="text-amber-300">· Needs attention</span></summary>
+    <p v-if="isCombatControl" class="mt-3 text-xs text-slate-400">Selected NPCs choose authored abilities on their own combat turn. The engine validates costs, targets and results. The player's choices stay theirs. Standard combat AI remains the default.</p>
+    <p v-else class="mt-3 text-xs text-slate-400">Optional dialogue decisions for selected NPCs. Standard behavior remains the default.</p>
     <p v-if="error" role="alert" class="mt-3 text-sm text-red-300">{{ error }}</p>
     <button v-if="!status" type="button" :disabled="busy" class="mt-3 text-cyan-300" @click="load">{{ busy ? 'Loading…' : 'Retry loading' }}</button>
     <fieldset v-if="draft && status" :disabled="busy || !status.available" class="mt-4 space-y-4 disabled:opacity-60">
       <label class="block text-xs text-slate-300">Mode
-        <select name="npc-mode" v-model="draft.mode" class="mt-1 w-full rounded-lg border border-slate-600 bg-slate-800 p-2">
-          <option value="off">Standard — no extra requests</option>
-          <option value="shadow">Observe — calculate decisions without changing replies</option>
-          <option value="live">Enabled — validate dialogue before showing it</option>
+        <select name="npc-mode" :value="draft.mode" @change="setMode(($event.target as HTMLSelectElement).value as ChpmSettings['mode'])" class="mt-1 w-full rounded-lg border border-slate-600 bg-slate-800 p-2">
+          <option value="off">{{ isCombatControl ? 'Standard combat AI' : 'Standard — narrator handles NPCs' }}</option>
+          <option v-if="!isCombatControl || draft.mode === 'shadow'" value="shadow" :disabled="isCombatControl">Observe — calculate decisions without changing replies</option>
+          <option value="live">{{ isCombatControl ? 'Enabled — choose combat abilities' : 'Enabled — validate dialogue before showing it' }}</option>
         </select>
+      </label>
+      <label v-if="status.host_mode === 'vn'" class="block text-xs text-slate-300">
+        <input v-model="draft.reject_impossible_player_items" name="reject-impossible-player-items" type="checkbox" class="mr-2 accent-cyan-400" />
+        Reject player actions that contradict known item or clothing state
+        <span class="mt-1 block text-slate-400">Checks named items before narration. A blocked action shows the reason and your original words. Relevant turns may use one extra model request.</span>
       </label>
       <template v-if="draft.mode !== 'off'">
         <label v-if="draft.mode === 'live'" class="block text-xs text-slate-300">NPC decision workflow
           <select name="npc-decision-workflow" :value="draft.workflow ?? 'staged'" class="mt-1 w-full rounded-lg border border-slate-600 bg-slate-800 p-2" @change="setWorkflow(($event.target as HTMLSelectElement).value as 'staged' | 'integrated')">
-            <option value="staged">Staged — memory tools, then decision (default)</option>
+            <option value="staged" :disabled="isCombatControl">Staged — memory tools, then decision (default)</option>
             <option value="integrated">Integrated — tools or decision (experimental)</option>
           </select>
-          <span class="mt-2 block text-slate-400">Integrated can submit a decision immediately or use the configured memory rounds first. Selecting it sets the input budget to at least 48,000 characters; larger saved limits are kept. You can review the value under Request limits before saving. The server logs committed increases as WARNING without private content. With tool rounds Off both use the existing decision path. Compare recorded timings on equivalent turns; speed depends on the model.</span>
+          <span v-if="isCombatControl" class="mt-2 block text-slate-400">Combat action control requires Integrated and at least one tool round. Selecting Integrated sets the input budget to at least 48,000 characters and keeps larger limits.</span>
+          <span v-else class="mt-2 block text-slate-400">Integrated can submit a decision immediately or use the configured memory rounds first. Selecting it sets the input budget to at least 48,000 characters; larger saved limits are kept. You can review the value under Request limits before saving. The server logs committed increases as WARNING without private content. With tool rounds Off both use the existing decision path. Compare recorded timings on equivalent turns; speed depends on the model.</span>
         </label>
-        <label v-if="draft.mode === 'live'" class="block text-xs text-slate-300">If NPC analysis fails
+        <label v-if="!isCombatControl && draft.mode === 'live'" class="block text-xs text-slate-300">If NPC analysis fails
           <select v-model="draft.failure_policy" class="mt-1 w-full rounded-lg border border-slate-600 bg-slate-800 p-2">
             <option value="continue">Keep playing — temporarily use standard RP (recommended)</option>
             <option value="strict">Strict — stop the turn for inspection</option>
           </select>
           <span class="mt-2 block text-slate-400">Keep playing preserves the last confirmed personality and records unreviewed turns. A rejected reply gets at most one new narrator response; an unavailable reviewer can leave an explicitly unreviewed reply. Repeated analysis failures pause NPC Personality for three completed turns. Session and save errors still stop safely.</span>
         </label>
-        <p class="text-xs text-slate-400">This optional module chooses dialogue intentions, not world actions or a complete psychological simulation. Enabled mode waits for the full response and a model review, with the selected recovery policy if analysis fails. The reviewer can also make mistakes.</p>
-        <div v-if="historyWarnings.length" role="alert" class="space-y-2 rounded-lg border border-amber-500/40 bg-amber-950/20 p-3 text-xs text-amber-200">
+        <p v-if="isCombatControl" class="text-xs text-slate-400">Combat control uses existing authored abilities. Dialogue personality, private notebooks and psychological memory are available only in VN sessions. Their saved preferences are retained.</p>
+        <p v-else class="text-xs text-slate-400">This optional module chooses dialogue intentions, not world actions or a complete psychological simulation. Enabled mode waits for the full response and a model review, with the selected recovery policy if analysis fails. The reviewer can also make mistakes.</p>
+        <div v-if="!isCombatControl && historyWarnings.length" role="alert" class="space-y-2 rounded-lg border border-amber-500/40 bg-amber-950/20 p-3 text-xs text-amber-200">
           <p v-for="item in historyWarnings" :key="item.id">{{ item.name }}: {{ item.status === 'pause_required' ? 'NPC Personality needs a pause before the next turn' : 'Psychological history is approaching capacity' }} — {{ item.used.events }}/{{ item.limits.events }} events, {{ item.used.beliefs }}/{{ item.limits.beliefs }} beliefs. <span v-if="item.active_events !== undefined">{{ item.active_events }} active / {{ item.archived_events }} archived events.</span> <span v-if="item.used.experiences !== undefined">{{ item.used.experiences }}/{{ item.limits.experiences }} affect/need dimensions.</span></p>
           <p>Older events move to an exact archive; total storage is finite. When a complete turn cannot fit, Keep playing uses standard RP and Strict pauses before model requests. Nothing is discarded. You can also select Standard and save, or deselect affected NPCs. Original identity and psychological history stay saved; re-enabling does not clear the limit.</p>
           <button type="button" class="rounded border border-amber-300/50 px-3 py-2 font-semibold" @click="selectStandard">Select Standard (save to apply)</button>
         </div>
         <fieldset class="space-y-2">
-          <legend class="mb-2 text-xs text-slate-300">Character roster (up to 20; absent NPCs retain their saved psychology)</legend>
+          <legend class="mb-2 text-xs text-slate-300">{{ isCombatControl ? 'Combat character roster (up to 20)' : 'Character roster (up to 20; absent NPCs retain their saved psychology)' }}</legend>
           <p v-if="!status.characters.length" class="text-xs text-slate-400">Meet a character before selecting them here.</p>
           <label v-for="actor in status.characters" :key="actor.id" class="flex items-center gap-2 text-sm text-slate-200">
             <input v-model="draft.actor_ids" type="checkbox" :value="actor.id" :disabled="draft.actor_ids.length >= 20 && !draft.actor_ids.includes(actor.id)" class="accent-cyan-400" />
@@ -62,10 +74,11 @@ defineExpose({ save })
         <label class="block text-xs text-slate-300">Active NPCs per turn
           <input v-model.number="draft.max_active_npcs" type="number" min="1" max="20" class="mt-1 w-full rounded-lg border border-slate-600 bg-slate-800 p-2" />
         </label>
-        <p class="text-xs text-slate-400">Default: 3. In larger casts, process direct participants without filling spare places. With no direct participants, keep the current conversation; choose another group when its participants leave. Inactive characters keep their state and do not receive new dialogue or psychological updates. If direct participants exceed this limit, Keep playing uses standard RP and Strict stops for inspection. Set 20 to process every present selected NPC, and raise the request budget accordingly. Attribution is model-based and can be mistaken.</p>
-        <p v-if="draft.actor_ids.length > 3" role="status" class="text-xs text-amber-200">Large casts need larger shared perception/review responses. Check input and output limits before live use. Twenty active NPCs require 25 NPC Personality requests with agent lookups off including the repair reserve, plus the narrator; this can take many minutes. Unused reserve is not spent.</p>
-        <p v-if="draft.mode === 'live' && draft.actor_ids.length >= 2" role="status" class="rounded-lg border border-amber-500/30 p-3 text-xs text-amber-200"><span v-if="(draft.npc_concurrency ?? 1) === 1">Selected NPCs are processed sequentially.</span><span v-else>Independent NPC analysis may overlap, up to {{ draft.npc_concurrency }} NPCs at once.</span> With several NPCs and a slow local model, a turn can take several minutes. Text appears only after the full narration is reviewed; it does not stream while being generated. A repair adds more waiting. Actual time depends on the model and context.</p>
-        <label class="block text-xs text-slate-300">Concurrent NPC analyses (experimental)
+        <p v-if="isCombatControl" class="text-xs text-slate-400">Only selected NPCs taking their own combat turn use these tools. Other combatants keep standard combat AI. The active limit and shared request budget bound extra model work.</p>
+        <p v-else class="text-xs text-slate-400">Default: 3. In larger casts, process direct participants without filling spare places. With no direct participants, keep the current conversation; choose another group when its participants leave. Inactive characters keep their state and do not receive new dialogue or psychological updates. If direct participants exceed this limit, Keep playing uses standard RP and Strict stops for inspection. Set 20 to process every present selected NPC, and raise the request budget accordingly. Attribution is model-based and can be mistaken.</p>
+        <p v-if="!isCombatControl && draft.actor_ids.length > 3" role="status" class="text-xs text-amber-200">Large casts need larger shared perception/review responses. Check input and output limits before live use. Twenty active NPCs require 25 NPC Personality requests with agent lookups off including the repair reserve, plus the narrator; this can take many minutes. Unused reserve is not spent.</p>
+        <p v-if="!isCombatControl && draft.mode === 'live' && draft.actor_ids.length >= 2" role="status" class="rounded-lg border border-amber-500/30 p-3 text-xs text-amber-200"><span v-if="(draft.npc_concurrency ?? 1) === 1">Selected NPCs are processed sequentially.</span><span v-else>Independent NPC analysis may overlap, up to {{ draft.npc_concurrency }} NPCs at once.</span> With several NPCs and a slow local model, a turn can take several minutes. Text appears only after the full narration is reviewed; it does not stream while being generated. A repair adds more waiting. Actual time depends on the model and context.</p>
+        <label v-if="!isCombatControl" class="block text-xs text-slate-300">Concurrent NPC analyses (experimental)
           <select v-model.number="draft.npc_concurrency" class="mt-1 w-full rounded-lg border border-slate-600 bg-slate-800 p-2">
             <option :value="1">1 — sequential baseline</option>
             <option :value="2">2 NPCs</option><option :value="3">3 NPCs</option><option :value="4">4 NPCs</option>
@@ -77,58 +90,90 @@ defineExpose({ save })
             <option value="complex">Complex model</option><option value="small">Small model</option>
           </select>
         </label>
-        <p class="text-xs text-slate-400">No separate server is required. Enabled mode replaces dialogue planning for selected NPCs. When Living World is enabled, its private decisions must be disabled.</p>
-        <label v-if="draft.mode === 'live'" class="block text-xs text-slate-300">
+        <p v-if="!isCombatControl" class="text-xs text-slate-400">No separate server is required. Enabled mode replaces dialogue planning for selected NPCs. When Living World is enabled, its private decisions must be disabled.</p>
+        <label v-if="!isCombatControl && draft.mode === 'live'" class="block text-xs text-slate-300">
           <input v-model="draft.semantic_memory" type="checkbox" class="mr-2 accent-cyan-400" />
           Semantic NPC memory (experimental)
           <span class="mt-2 block text-slate-400">Requires administrator Memory &amp; recall settings. Combines semantic and exact-word search within each NPC's witnessed sources. Uses one bounded embeddings batch for active NPCs; no extra generative model request. Falls back to lexical memory when unavailable. Disabled by default.</span>
         </label>
-        <label v-if="draft.mode === 'live'" class="block text-xs text-slate-300">
+        <label v-if="!isCombatControl && draft.mode === 'live'" class="block text-xs text-slate-300">
           <input name="npc-private-notebooks" type="checkbox" :checked="draft.notebook_enabled ?? false" class="mr-2 accent-cyan-400" @change="setNotebookEnabled(($event.target as HTMLInputElement).checked)" />
           Private NPC notebooks
           <span class="mt-2 block text-slate-400">One freely organized JSON notebook per NPC, up to 16,000,000 UTF-8 bytes each. NPCs choose what to read, write or delete. Notes may be mistaken and are not world facts. The latest notes stay after Undo or Chronicles restore; no notebook history is kept. Disabled by default. Enabling selects at least one agent tool round; check the request budget below.</span>
         </label>
         <label v-if="draft.mode === 'live'" class="block text-xs text-slate-300">Agent tool rounds per active NPC
           <select name="npc-agent-tool-rounds" v-model.number="draft.agent_steps" class="mt-1 w-full rounded-lg border border-slate-600 bg-slate-800 p-2">
-            <option :value="0" :disabled="draft.notebook_enabled">Off — existing decision flow</option>
+            <option :value="0" :disabled="draft.notebook_enabled || draft.action_tools">Off — existing decision flow</option>
             <option :value="1">Up to 1 lookup round</option>
             <option :value="2">Up to 2 rounds — can refine a search or read a result</option>
             <option :value="3">Up to 3 rounds — can correct an error and check the result</option>
           </select>
-          <span class="mt-2 block text-slate-400">Optional tools scoped to this session and NPC. Search witnessed history, check own possessions, and read visible clothing layers of present NPCs. When private notebooks are enabled, these rounds can also read or edit that NPC's own notes. Each round adds one model request with up to two local tool operations; the model can stop early. Hidden inventories are unavailable. Lexical memory search may miss paraphrases. Disabling notebooks keeps the selected rounds; set rounds to Off to stop these extra requests. Increase the request budget below when enabling. With the 25-call cap, use at most 10 active NPCs for one round, 6 for two rounds, or 5 for three rounds.</span>
+          <span v-if="isCombatControl" class="mt-2 block text-slate-400">Each tool round allows one request per NPC combat turn to choose an available ability or keep standard combat AI. Invalid choices can be corrected within remaining rounds; the model can finish early.</span>
+          <span v-else class="mt-2 block text-slate-400">Optional tools scoped to this session and NPC. Search witnessed history, check own possessions, and read visible clothing layers of present NPCs. When private notebooks are enabled, these rounds can also read or edit that NPC's own notes. Each round adds one model request with up to two local tool operations; the model can stop early. Hidden inventories are unavailable. Lexical memory search may miss paraphrases. Disabling notebooks keeps the selected rounds; set rounds to Off to stop these extra requests. Increase the request budget below when enabling. With the 25-call cap, use at most 10 active NPCs for one round, 6 for two rounds, or 5 for three rounds.</span>
         </label>
-        <label v-if="draft.mode === 'live' && (draft.notebook_enabled || draft.workflow === 'integrated')" class="block text-xs text-slate-300">Memory tool compatibility
-          <select name="npc-memory-tool-protocol" :value="draft.tool_protocol ?? 'auto'" class="mt-1 w-full rounded-lg border border-slate-600 bg-slate-800 p-2" @change="draft.tool_protocol = ($event.target as HTMLSelectElement).value as 'auto' | 'native' | 'json'">
-            <option value="auto">Automatic</option>
-            <option value="native">Native function calls</option>
-            <option value="json">JSON compatibility</option>
+        <label v-if="draft.mode === 'live'" class="block text-xs text-slate-300">
+          <input name="npc-world-actions" type="checkbox" :checked="draft.action_tools ?? false" class="mr-2 accent-cyan-400" @change="setActionToolsEnabled(($event.target as HTMLInputElement).checked)" />
+          {{ isCombatControl ? 'Combat action control (experimental)' : 'NPC world actions (experimental)' }}
+          <span v-if="isCombatControl" class="mt-2 block text-slate-400">NPCs choose existing authored abilities; the combat engine applies valid results. Enabling selects Integrated and at least one tool round.</span>
+          <span v-else class="mt-2 block text-slate-400">For VN sessions, NPCs choose their own actions; the engine validates changes to the world. The player's choices stay theirs. Enabling selects Integrated and at least one tool round.</span>
+        </label>
+        <label v-if="status.host_mode === 'vn' && draft.mode === 'live' && draft.action_tools && draft.workflow === 'integrated' && draft.agent_steps" class="block text-xs text-slate-300">
+          Action decision mode
+          <select name="npc-decision-mode" :value="draft.npc_decision_mode ?? 'legacy'" class="mt-1 w-full rounded-lg border border-slate-600 bg-slate-800 p-2" @change="draft.npc_decision_mode = ($event.target as HTMLSelectElement).value as ChpmSettings['npc_decision_mode']">
+            <option value="legacy">Standard</option>
+            <option value="two_phase">Two-phase (experimental)</option>
           </select>
-          <span class="mt-2 block text-slate-400">Automatic uses native functions when the provider adapter supports them. Choose JSON compatibility for a server without native tools. Both use the same private notebook, limits and request budget. An uncertain request is never automatically repeated.</span>
+          <span class="mt-2 block text-slate-400">Two-phase reserves a tool round to carry out the NPC's chosen action.</span>
         </label>
-        <p v-if="budgetWarning" role="alert" class="text-xs text-amber-200">Increase Requests per turn to at least {{ minimumCalls }} before saving. Enabled mode reserves agent rounds, one shared proposal retry plus two requests for narration repair and repeat review.</p>
+        <p v-if="isCombatControl && (!draft.action_tools || draft.workflow !== 'integrated' || !draft.agent_steps)" role="alert" class="text-xs text-amber-200">Enable combat action control before saving, or select Standard.</p>
+        <div v-if="draft.mode === 'live' && ((draft.agent_steps ?? 0) > 0 || draft.notebook_enabled || draft.workflow === 'integrated')" class="grid gap-4 sm:grid-cols-2">
+          <label class="block text-xs text-slate-300">{{ draft.action_tools ? 'Agent tool compatibility' : 'Memory tool compatibility' }}
+            <select name="npc-memory-tool-protocol" :value="draft.tool_protocol ?? 'auto'" class="mt-1 w-full rounded-lg border border-slate-600 bg-slate-800 p-2" @change="draft.tool_protocol = ($event.target as HTMLSelectElement).value as 'auto' | 'native' | 'json'">
+              <option value="auto">Automatic</option>
+              <option value="native">Native function calls</option>
+              <option value="json">JSON compatibility</option>
+            </select>
+            <span v-if="isCombatControl" class="mt-2 block text-slate-400">{{ NPC_TOOL_PROTOCOL_HELP }} Both use the same ability catalog, limits and request budget.</span>
+            <span v-else class="mt-2 block text-slate-400">{{ NPC_TOOL_PROTOCOL_HELP }} Both use the same private notebook, limits and request budget. An uncertain request is never automatically repeated.</span>
+          </label>
+          <label class="block text-xs text-slate-300">Tool-calling profile
+            <select name="npc-tool-profile" :value="draft.tool_profile ?? 'auto'" aria-describedby="npc-session-tool-profile-help" class="mt-1 w-full rounded-lg border border-slate-600 bg-slate-800 p-2" @change="setToolProfile(($event.target as HTMLSelectElement).value as NpcToolProfile)">
+              <option v-if="draft.tool_profile && !selectedToolProfile" :value="draft.tool_profile" disabled>Saved unsupported profile: {{ draft.tool_profile }}</option>
+              <option v-for="profile in NPC_TOOL_PROFILES" :key="profile.id" :value="profile.id">{{ profile.label }}</option>
+            </select>
+            <span id="npc-session-tool-profile-help" class="mt-2 block text-slate-400">{{ selectedToolProfile?.help ?? 'Choose a supported profile before saving.' }} {{ NPC_TOOL_PROFILE_REQUIREMENTS }}</span>
+          </label>
+        </div>
+        <p v-if="budgetWarning" role="alert" class="text-xs text-amber-200">Increase Requests per turn to at least {{ minimumCalls }} before saving. <span v-if="isCombatControl">This covers the selected NPCs and their combat tool rounds.</span><span v-else>Enabled mode reserves agent rounds, one shared proposal retry plus two requests for narration repair and repeat review.</span></p>
         <details class="rounded-lg border border-slate-700 p-3">
           <summary class="cursor-pointer text-xs text-slate-300">Request limits</summary>
           <div class="mt-3 grid grid-cols-2 gap-3 text-xs text-slate-300">
             <label>Requests per turn<input v-model.number="draft.max_calls_per_turn" type="number" :min="Math.max(1, minimumCalls)" max="25" class="mt-1 w-full rounded bg-slate-800 p-2" /></label>
-            <label>Decision/review output tokens<input v-model.number="draft.max_output_tokens" type="number" min="512" max="8192" step="128" class="mt-1 w-full rounded bg-slate-800 p-2" /></label>
+            <label>{{ isCombatControl ? 'Decision output tokens' : 'Decision/review output tokens' }}<input v-model.number="draft.max_output_tokens" type="number" min="512" max="8192" step="128" class="mt-1 w-full rounded bg-slate-800 p-2" /></label>
             <label class="col-span-2">Input size per request (characters, including instructions)<input v-model.number="draft.max_input_chars" type="number" min="8000" max="192000" step="1000" class="mt-1 w-full rounded bg-slate-800 p-2" /></label>
             <p class="col-span-2 text-slate-400">The input limit includes instructions, JSON schema and NPC context. It is separate from output tokens and the model's context window. Saving changed limits lets the next turn retry paused analysis.</p>
-            <label class="col-span-2">Remembered observations per NPC<input v-model.number="draft.memory_limit" type="number" min="0" max="24" class="mt-1 w-full rounded bg-slate-800 p-2" /></label>
+            <label v-if="!isCombatControl" class="col-span-2">Remembered observations per NPC<input v-model.number="draft.memory_limit" type="number" min="0" max="24" class="mt-1 w-full rounded bg-slate-800 p-2" /></label>
           </div>
-          <p class="mt-2 text-xs text-slate-400">One shared perception request, then one proposal per present selected NPC; enabled mode adds a review and reserves one shared proposal retry plus two calls for narration repair and another review. Minimum for this selection: {{ minimumCalls }}. Reserved calls are used only if needed. A repair uses the Complex model with up to 4,096 output tokens. The ordinary narrator request is separate from this NPC Personality budget. These are logical requests; provider retries may add cost.</p>
-          <p class="mt-2 text-xs text-slate-400">The dialogue window retains source-checked quotations. Set it to 0 to disable that window. Enabled NPC Personality separately retains exact psychological history: up to 256 active events and 8,192 total archived and active events per NPC. Its appraisal keeps current observed fragments, a bounded recent window and up to three short older fragments retrieved by matching perceived words. This is lexical recall, not guaranteed semantic recall. Edited or removed sources invalidate their dependent history.</p>
-          <p class="mt-2 text-xs text-slate-400">Declared goals and promises have a separate source-checked ledger: up to 8 active entries per NPC, 256 records per session. Enabled mode records selected changes only after speech review. Observe mode does not change this ledger. No additional model request is needed.</p>
-          <p class="mt-2 text-xs text-slate-400">Enabled mode can record qualitative affect and need appraisals with current evidence. These are tentative states, not diagnoses or personality edits. After 30 game minutes without reassessment, current intensity is marked unknown; time does not automatically heal feelings or restore trust.</p>
+          <p v-if="isCombatControl" class="mt-2 text-xs text-slate-400">Minimum for this selection: {{ minimumCalls }}. The budget reserves up to three combat turns per selected active NPC per player command, multiplied by tool rounds. Unused turns and rounds are not spent. With the 25-call cap, use at most 8 active NPCs for one tool round, 4 for two rounds, or 2 for three rounds. Ordinary narration is separate; provider retries may add cost.</p>
+          <template v-else>
+            <p class="mt-2 text-xs text-slate-400">One shared perception request, then one proposal per present selected NPC; enabled mode adds a review and reserves one shared proposal retry plus two calls for narration repair and another review. Minimum for this selection: {{ minimumCalls }}. Reserved calls are used only if needed. A repair uses the Complex model with up to 4,096 output tokens. The ordinary narrator request is separate from this NPC Personality budget. These are logical requests; provider retries may add cost.</p>
+            <p class="mt-2 text-xs text-slate-400">The dialogue window retains source-checked quotations. Set it to 0 to disable that window. Enabled NPC Personality separately retains exact psychological history: up to 256 active events and 8,192 total archived and active events per NPC. Its appraisal keeps current observed fragments, a bounded recent window and up to three short older fragments retrieved by matching perceived words. This is lexical recall, not guaranteed semantic recall. Edited or removed sources invalidate their dependent history.</p>
+            <p class="mt-2 text-xs text-slate-400">Declared goals and promises have a separate source-checked ledger: up to 8 active entries per NPC, 256 records per session. Enabled mode records selected changes only after speech review. Observe mode does not change this ledger. No additional model request is needed.</p>
+            <p class="mt-2 text-xs text-slate-400">Enabled mode can record qualitative affect and need appraisals with current evidence. These are tentative states, not diagnoses or personality edits. After 30 game minutes without reassessment, current intensity is marked unknown; time does not automatically heal feelings or restore trust.</p>
+          </template>
         </details>
       </template>
-      <p class="text-xs text-amber-200/80">Changing mode or character selection restarts the pilot's private decision memory. Recorded goals, promises and story events remain. Standard mode pauses ledger updates; sources are checked again when enabled. Save between turns.</p>
-      <p class="text-xs text-slate-400">The first successfully reviewed enabled turn pins the NPC's original character, traits and goal. Later card edits do not replace this psychological identity. Dated experiences can support tentative conversational habits, relationship expectations and gradual trait tendencies; counterevidence remains visible. These qualifications do not rewrite the card or erase its values. Consolidation is deferred if its optional context cannot fit. This is not a validated clinical simulation or numerical personality model.</p>
+      <p v-if="isCombatControl" class="text-xs text-slate-400">Save between turns. Standard mode restores the existing combat AI.</p>
+      <template v-else>
+        <p class="text-xs text-amber-200/80">Changing mode or character selection restarts the pilot's private decision memory. Recorded goals, promises and story events remain. Standard mode pauses ledger updates; sources are checked again when enabled. Save between turns.</p>
+        <p class="text-xs text-slate-400">The first successfully reviewed enabled turn pins the NPC's original character, traits and goal. Later card edits do not replace this psychological identity. Dated experiences can support tentative conversational habits, relationship expectations and gradual trait tendencies; counterevidence remains visible. These qualifications do not rewrite the card or erase its values. Consolidation is deferred if its optional context cannot fit. This is not a validated clinical simulation or numerical personality model.</p>
+      </template>
     </fieldset>
-    <p v-if="status?.agenda_counts" class="mt-3 text-xs text-slate-400">Recorded agenda: {{ status.agenda_counts.active }} active · {{ status.agenda_counts.closed }} closed (last saved state; completion reports are not verified world outcomes).</p>
+    <p v-if="!isCombatControl && status?.agenda_counts" class="mt-3 text-xs text-slate-400">Recorded agenda: {{ status.agenda_counts.active }} active · {{ status.agenda_counts.closed }} closed (last saved state; completion reports are not verified world outcomes).</p>
     <div v-if="status && status.usage.status !== 'idle'" class="mt-4 text-xs text-slate-400" aria-live="polite">
       Last completed turn: {{ status.usage.simplified ? 'Simplified RP' : status.usage.status }} · {{ status.usage.calls }} requests · {{ status.usage.repairs }} repairs.<br />
       <p v-if="status.usage.fallback_requests">Additional ordinary narrator requests: {{ status.usage.fallback_requests }} (at most one).</p>
-      <p v-if="status.continuation?.unreviewed_turns">{{ status.continuation.unreviewed_turns }} recent turns continued without confirmed psychological updates. Current host facts will be refreshed; unreviewed dialogue is not silently added to psychological memory.</p>
+      <p v-if="!isCombatControl && status.continuation?.unreviewed_turns">{{ status.continuation.unreviewed_turns }} recent turns continued without confirmed psychological updates. Current host facts will be refreshed; unreviewed dialogue is not silently added to psychological memory.</p>
       {{ status.usage.input_chars }} input / {{ status.usage.output_chars }} output characters (not token counts).
       <p v-if="status.usage.memory_evictions">{{ status.usage.memory_evictions }} older quotations left the memory window this turn.</p>
       <p v-if="status.usage.proposal_repairs">Proposal retries: {{ status.usage.proposal_repairs }}</p>
@@ -164,7 +209,7 @@ defineExpose({ save })
       <p v-for="(feedback, index) in lastFailure.proposal_feedback" :key="index" class="whitespace-pre-wrap break-words">{{ feedback }}</p>
       <p v-if="lastFailure.source === 'previous_turn_snapshot'" class="text-amber-200/70">Read from the previous turn snapshot; game state is unchanged.</p>
     </section>
-    <details v-if="status && (status.trace.length || status.agenda?.length)" class="mt-3 text-xs text-slate-400">
+    <details v-if="!isCombatControl && status && (status.trace.length || status.agenda?.length)" class="mt-3 text-xs text-slate-400">
       <summary class="cursor-pointer">Administrator decision trace</summary>
       <pre class="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words">{{ JSON.stringify(status.trace, null, 2) }}</pre>
       <pre class="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words">{{ JSON.stringify(status.memory, null, 2) }}</pre>

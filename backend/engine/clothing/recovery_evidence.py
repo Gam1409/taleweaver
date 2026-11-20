@@ -34,13 +34,20 @@ def _placement_issues(
     entry: RecoveryEntry, action: ItemAction, source: dict, garment: Garment | None
 ) -> list[str]:
     issues: list[str] = []
-    if not entry.uncovered_regions and not entry.placement_evidence and not entry.restore_coverage:
+    placement_requested = bool(
+        entry.partially_removed or entry.uncovered_regions or entry.restore_coverage
+    )
+    if not placement_requested and not entry.placement_evidence:
         return issues
     if action.disposition != "worn":
         issues.append("Partial placement requires a garment that is still worn.")
+    if entry.partially_removed and (entry.uncovered_regions or entry.restore_coverage):
+        issues.append(
+            "A partly removed garment preserves its previous coverage. Choose a single placement change."
+        )
     if entry.restore_coverage and entry.uncovered_regions:
         issues.append("Restored coverage cannot also expose regions.")
-    if entry.placement_evidence and not entry.uncovered_regions and not entry.restore_coverage:
+    if entry.placement_evidence and not placement_requested:
         issues.append("Confirm restore_coverage before resetting an existing placement.")
     coverage = garment.coverage if garment else []
     invalid = sorted(set(entry.uncovered_regions) - set(coverage))
@@ -48,8 +55,10 @@ def _placement_issues(
         issues.append(
             f"Exposed regions {', '.join(invalid)} are outside garment coverage {', '.join(coverage)}."
         )
-    if (entry.uncovered_regions or entry.restore_coverage) and not entry.placement_evidence:
+    if placement_requested and not entry.placement_evidence:
         issues.append("Partial placement has no evidence quote.")
+    elif placement_requested and len(entry.placement_evidence.strip()) < 4:
+        issues.append("Placement evidence must quote at least four characters.")
     elif entry.placement_evidence not in source["content"]:
         issues.append(
             "Placement quote is not an exact contiguous substring of the same cited assistant message."
@@ -76,5 +85,6 @@ def rejected_entry(
             if entry.action.attachment_slot
             else {}
         ),
+        **({"partially_removed": True} if entry.partially_removed else {}),
         **({"restore_coverage": True} if entry.restore_coverage else {}),
     }

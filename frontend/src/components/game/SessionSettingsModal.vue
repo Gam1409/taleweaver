@@ -123,6 +123,7 @@ onMounted(() => {
   <SessionSettingsFrame
     ref="frame"
     v-model:section="section"
+    :mode="mode"
     :saving="props.isSaving || savingExploration"
     @close="emit('close')"
     @save="saveAll"
@@ -191,13 +192,14 @@ onMounted(() => {
     </template>
     <template #npc_personality>
       <ChpmSettings
-        v-if="sessionId && mode === 'vn'"
+        v-if="sessionId && (mode === 'vn' || mode === 'rpg')"
         ref="chpm"
         :session-id="sessionId"
         class="settings-widget"
       />
       <p v-else class="text-xs leading-relaxed text-slate-400">
-        NPC Personality is available in Visual Novel sessions.
+        NPC dialogue personality is available in Visual Novel sessions. NPC combat action control
+        is available in RPG sessions.
       </p>
     </template>
   </SessionSettingsFrame>
