@@ -309,3 +309,28 @@ def test_empty_wardrobe_regions_never_authorize_another_attribute(
         "effect_omitted": hidden,
     }
     assert receipt_review._effect_reason(review_claim, row) == reason
+
+
+@pytest.mark.parametrize("coarse", [False, True])
+async def test_partial_placement_claim_must_match_the_published_adjustment(monkeypatch, coarse):
+    async with TestSessionLocal() as db:
+        manager, turn = await published(
+            db,
+            requests=[
+                Adjust(
+                    tool="adjust_clothing",
+                    item_id="COAT",
+                    uncovered_regions=[],
+                    partially_removed=coarse,
+                )
+            ],
+        )
+        receipt = turn.action_outcomes["LINA"][0]["effect"]
+        assert receipt["uncovered_regions"] == (["arms"] if coarse else [])
+        proposed = {**claim(turn), "uncovered_regions": receipt["uncovered_regions"]}
+        for marker in (None, False, True):
+            reviewer(monkeypatch, [{**proposed, "partially_removed": marker}])
+            verdict = await rendering._review(
+                manager, turn, 'Lina: "My coat."\nLina adjusts the coat.', ""
+            )
+            assert verdict.matches is (bool(marker) == coarse), turn.review_change_feedback

@@ -35,7 +35,9 @@ def _known_placements(actor: dict, detailed: bool) -> list[dict]:
     adult = age is not None and age >= 18
     result = []
     for worn in profile.worn:
-        if worn.item_id not in items or not (worn.uncovered_regions or worn.attachment_slot):
+        if worn.item_id not in items or not (
+            worn.uncovered_regions or worn.attachment_slot or worn.partially_removed
+        ):
             continue
         if worn.source is None and actor["id"] != PLAYER:
             continue
@@ -55,6 +57,7 @@ def _known_placements(actor: dict, detailed: bool) -> list[dict]:
                 "item_id": worn.item_id,
                 "name": items[worn.item_id].get("name", ""),
                 "uncovered_regions": worn.uncovered_regions,
+                **({"partially_removed": True} if worn.partially_removed else {}),
                 **({"attachment_slot": worn.attachment_slot} if worn.attachment_slot else {}),
             }
         )

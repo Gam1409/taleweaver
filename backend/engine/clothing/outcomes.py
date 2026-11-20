@@ -28,6 +28,7 @@ class WardrobeOutcome(BaseModel):
     status: Literal["applied", "blocked"]
     reason_code: Reason
     worn: bool | None = None
+    partially_removed: bool | None = None
     uncovered_regions: list[Region] | None = Field(default=None, max_length=7)
     source_message_id: str | None = Field(default=None, max_length=100)
     source_revision_id: str | None = Field(default=None, max_length=100)
@@ -54,12 +55,14 @@ def record(
         else None
     )
     worn = None
+    partial = None
     regions = None
     profile = load_profile(actor.get("visual_profile")) if actor else None
     applied = reason in {"applied", "already_current"}
     if profile is not None and applied:
         entry = next((row for row in profile.worn if row.item_id == identifier), None)
         worn = entry is not None
+        partial = True if entry and entry.partially_removed else None
         regions = entry.uncovered_regions if entry else None
     result = WardrobeOutcome(
         actor_id=change.actor_id,
@@ -68,6 +71,7 @@ def record(
         status="applied" if applied else "blocked",
         reason_code=reason,
         worn=worn,
+        partially_removed=partial,
         uncovered_regions=regions,
         source_message_id=source.message_id if source else None,
         source_revision_id=source.revision_id if source else None,

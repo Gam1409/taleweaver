@@ -213,6 +213,9 @@ def alter_object(rows, change):
         return
     if change == "unchanged":
         return
+    if change == "held":
+        next(row for row in rows if row.id == "LINA").inventory = ["BENCH"]
+        return
     target = next(row for row in rows if row.id == "BENCH")
     key, value = {
         "hidden": ("is_hidden", True),
@@ -223,8 +226,12 @@ def alter_object(rows, change):
 
 
 @pytest.mark.parametrize("current", [False, True])
-@pytest.mark.parametrize("change", ["unchanged", "hidden", "carried", "away", "removed"])
-def test_object_target_retention_uses_current_rows_and_overrides(current, change):
+@pytest.mark.parametrize(
+    "confirmed,change",
+    [(False, value) for value in ("unchanged", "hidden", "carried", "held", "away", "removed")]
+    + [(True, "held")],
+)
+def test_object_target_retention_uses_current_rows_and_overrides(current, confirmed, change):
     host, rows = fixture(current=False)
     command(host, "SECOND", "sitting", source="object-input", target="BENCH", kind="scene_object")
     if current:
@@ -247,7 +254,11 @@ def test_object_target_retention_uses_current_rows_and_overrides(current, change
             },
         )
         bind_turn(host, host._chpm_turn)
-    fail_shared(host, rows, after_prepare=lambda: alter_object(rows, change))
+    assert shared.begin(host, TEXT)
+    shared.prepare(host, actor_records(host, rows), rows)
+    alter_object(rows, change)
+    shared.complete(host, SceneExtraction() if confirmed else None, [])
+    assert shared.consume(host, TEXT, completed=True)
     second = host.state.entity_states[KEY]["actors"]["SECOND"]
     assert ("placement" in second) is (change == "unchanged")
     assert second["posture"]["value"] == "sitting"

@@ -12,6 +12,7 @@ from backend.engine.clothing.visuals import session_objects
 from backend.engine.narrated_items import evidence, reference_schema, response_sections
 from backend.engine.scene_staging import attribution, command_guard, props
 from backend.engine.scene_staging.proposals import StagingProposal
+from backend.engine.scene_staging.room_items import placement_targets, visible_targets
 from backend.engine.scene_staging.schema import INSTRUCTIONS
 from backend.engine.scene_staging.shared import apply_extraction, consume
 from backend.engine.scene_staging.state import KEY, digest, project
@@ -75,12 +76,16 @@ async def reconcile_narration(manager: Any, narration: str, *, completed: bool) 
         scope=f"{state.session_id}:{getattr(manager, '_vn_player_message_id', '')}:{state.current_scene_id}",
     )
     authority = await attribution.capture(manager)
+    targets = placement_targets(manager.avatar, rows, state)
+    previous = project(state, cast, scene_objects=targets, target_ids=True)
+    objects = visible_targets(targets, previous)
     payload = json.dumps(
         {
             "scene_id": state.current_scene_id,
             "present_cast": cast,
+            "scene_objects": objects,
             "owned_items": items,
-            "previous_staging": project(state, cast),
+            "previous_staging": previous,
             "current_narration": catalog.narration_passages,
             **command_guard.metadata(manager, cast),
             **attribution.context(manager, authority, player_text_ref=None),
@@ -133,6 +138,7 @@ async def reconcile_narration(manager: Any, narration: str, *, completed: bool) 
             evidence.bind_staging(response, catalog),
             unconfirmed_sections=response_sections.missing_staging(response),
             authority=authority,
+            offered_objects=frozenset(objects),
         )
         applied = True
     except asyncio.CancelledError:

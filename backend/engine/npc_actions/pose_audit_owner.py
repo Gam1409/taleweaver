@@ -7,6 +7,7 @@ from typing import Any
 
 from backend.engine.actor_aliases import public_actor_id
 from backend.engine.npc_actions import execution_frame
+from backend.engine.scene_staging.room_items import placement_targets
 from backend.engine.scene_staging.state import KEY, _project_actor, digest, retained
 from backend.engine.visual_novel.config import read_settings
 from backend.engine.visual_novel.continuity import SCENE
@@ -54,7 +55,11 @@ def facts(manager: Any, actors: dict, rows: list[Any]) -> dict[str, dict]:
 
     turn = manager._chpm_turn
     public = targets(turn)
-    saved = retained(manager.state, shared._cast(manager, actors, rows))
+    saved = retained(
+        manager.state,
+        shared._cast(manager, actors, rows),
+        placement_targets(manager.avatar, rows, manager.state),
+    )
     result = {}
     for actor in turn.decisions:
         if actor not in public:
@@ -87,7 +92,13 @@ def preview(manager: Any, narration: str, staging: Any, actors: dict, rows: list
     changes, _ = bindings.resolve(validated.value, manager.avatar.id, [])
     pending = getattr(manager, "_shared_scene_staging", None)
     _, _, external, denied = attribution.admit(
-        manager, changes, cast, narration, getattr(pending, "authority", None)
+        manager,
+        changes,
+        cast,
+        narration,
+        getattr(pending, "authority", None),
+        scene_objects=placement_targets(manager.avatar, rows, manager.state),
+        offered_objects=getattr(pending, "offered_objects", None),
     )
     refused = {row["actor_id"] for row in denied}
     rejected = tuple(

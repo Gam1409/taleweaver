@@ -41,6 +41,13 @@ def _facts(context: dict, detailed: bool) -> dict:
                 for row in worn
                 if isinstance(row, dict) and "item_id" in row
             },
+            "partially_removed_item_ids": [
+                row["item_id"]
+                for row in worn
+                if isinstance(row, dict)
+                and row.get("partially_removed") is True
+                and row.get("item_id")
+            ],
             "body_placements": {
                 row["item_id"]: row["attachment_slot"]
                 for row in worn

@@ -31,6 +31,8 @@ class _VisualModel(BaseModel):
         for key in ("body", "attachment_slot", "source"):
             if key in result and result[key] is None:
                 result.pop(key)
+        if result.get("partially_removed") is False:
+            result.pop("partially_removed")
         if not result.get("unassessed_wear_item_ids"):
             result.pop("unassessed_wear_item_ids", None)
         if result.get("wear_assessment_complete") is True:
@@ -68,12 +70,13 @@ class Garment(_VisualModel):
 class WornItem(_VisualModel):
     item_id: str = Field(min_length=1, max_length=100)
     uncovered_regions: list[Region] = Field(default_factory=list, max_length=7)
+    partially_removed: StrictBool = False
     attachment_slot: BodySlot | None = None
     source: WearSource | None = None
 
     @model_validator(mode="after")
     def coherent(self) -> "WornItem":
-        if self.attachment_slot and self.uncovered_regions:
+        if self.attachment_slot and (self.uncovered_regions or self.partially_removed):
             raise ValueError("Body placement cannot carry clothing displacement.")
         return self
 

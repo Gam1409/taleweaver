@@ -13,6 +13,7 @@ export interface WardrobeRejection {
   evidence: string
   placement_evidence: string
   restore_coverage?: boolean
+  partially_removed?: boolean
   coverage: string[]
   uncovered_regions: string[]
   reasons: string[]
@@ -65,10 +66,11 @@ watch(
       <blockquote class="whitespace-pre-wrap break-words border-l-2 border-rose-800 pl-2">
         {{ entry.evidence }}
       </blockquote>
-      <div v-if="entry.uncovered_regions.length || entry.placement_evidence" class="space-y-1">
+      <div v-if="entry.partially_removed || entry.uncovered_regions.length || entry.placement_evidence" class="space-y-1">
+        <p v-if="entry.partially_removed">Partially removed</p>
         <p class="text-xs">
           Garment coverage: {{ entry.coverage.join(', ') || 'unspecified' }} · Exposed:
-          {{ entry.uncovered_regions.join(', ') || 'none' }}
+          {{ entry.uncovered_regions.join(', ') || (entry.partially_removed ? 'unchanged' : 'none') }}
         </p>
         <p class="font-bold">Proposed placement quote</p>
         <blockquote class="whitespace-pre-wrap break-words border-l-2 border-rose-800 pl-2">

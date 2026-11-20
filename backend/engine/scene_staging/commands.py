@@ -9,28 +9,13 @@ from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
 from backend.engine.scene_staging.schema import Placement, Posture
 from backend.engine.scene_staging.state import (
     KEY,
-    _project_actor,
     apply_fields,
     invalidate_relations,
+    position,
     retained,
 )
 
 _POSTURE: TypeAdapter[Posture] = TypeAdapter(Posture)
-
-
-def _position(row: dict) -> dict:
-    """Use known prop identity; legacy labels cannot masquerade as proven IDs."""
-    position = _project_actor(row)
-    placement = position.get("placement")
-    if not placement or placement["target_kind"] != "scene_object":
-        return position
-    identifier = row["placement"].get("target_id")
-    placement["target"] = (
-        ("id", identifier)
-        if isinstance(identifier, str) and identifier
-        else ("label", placement["target"])
-    )
-    return position
 
 
 class CommandProof(BaseModel):
@@ -171,7 +156,7 @@ def apply_command(
         if previous != command:
             raise ValueError("A pose command identity cannot be reused for a different request.")
         return deepcopy(states)
-    previous_position = _position(row)
+    previous_position = position(row)
     actors[actor_id] = apply_fields(
         row, actor_id=actor_id, posture=posture, placement=selected, known=known, proof=source
     )
@@ -180,7 +165,7 @@ def apply_command(
         actors[actor_id]["placement"]["target_id"] = target_id
     # Re-stamping a command proves the same position again; only a changed
     # final public pose or placement invalidates another actor's relation.
-    moved = _position(actors[actor_id]) != previous_position
+    moved = position(actors[actor_id]) != previous_position
     invalidate_relations(actors, {actor_id} if moved else set(), {actor_id} if selected else set())
     return _finish(states, data, actors, actor_id, scene_id)
 

@@ -12,7 +12,7 @@ DESCRIPTIONS = {
     "give_item": "Stage giving your carried item to a present recipient. No voluntary recipient response is implied.",
     "wear_item": "Stage fully wearing an owned garment.",
     "take_off_item": "Stage removing your worn garment; you keep carrying it.",
-    "adjust_clothing": "Stage the final uncovered regions of your worn garment; it remains worn. Empty restores full coverage.",
+    "adjust_clothing": "Stage the final uncovered regions of your worn garment; it remains worn. Use partially_removed=true for a garment partly off without an entire exposed region. Empty regions alone restore normal wear.",
     "change_item_state": "Stage a current descriptive property of your item. Cannot change identity, mechanics or create abilities.",
     "use_item": "Stage partial/full use of your item; describe remaining state when relevant. No invented numeric effects.",
     "discard_actions": "Discard this whole unsubmitted action plan. Does not undo memory/notebook operations.",

@@ -151,6 +151,7 @@ def visible_character(
                 "item_id": current.item_id,
                 "name": name[:200] if isinstance(name, str) else "",
                 "description": garment.description if detailed is True else "",
+                **({"partially_removed": True} if current.partially_removed else {}),
                 "visible_regions": [region for region in REGIONS if region in visible],
                 **(
                     {"uncovered_regions": current.uncovered_regions}

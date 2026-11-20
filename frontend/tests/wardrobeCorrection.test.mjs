@@ -18,7 +18,7 @@ const compiled = ts.transpileModule(`import {computed,ref,watch} from '${import.
 import {quoteError,quoteSuggestion} from '${quoteModule}';
 export function setup(props, emit) {
   ${source}
-  return { status, evidence, placement, uncovered, restoreCoverage, valid, submit, itemError, placementError, regionError, regionChoices, useSelection, canUseSelection, resetExposedRegions };
+  return { status, evidence, placement, uncovered, restoreCoverage, partiallyRemoved, valid, submit, itemError, placementError, regionError, regionChoices, useSelection, canUseSelection, resetExposedRegions };
 }`, {compilerOptions: {target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext}}).outputText
 const { setup } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`)
 
@@ -190,4 +190,22 @@ test('copying edge whitespace submits the same canonical quotes the server reval
   const payload = JSON.parse(f.calls[0][1].split(' ').slice(4).join(' '))
   assert.equal(payload.evidence, 'red briefs')
   assert.equal(payload.placement_evidence, 'They are lowered to her knees.')
+})
+
+test('coarse displacement requires a quote and preserves the distinction from restoration', t => {
+  const f = fixture(t)
+  const quote = 'Lina slips one arm out of the coat.'
+  f.props.source = quote
+  f.status.value = 'worn'
+  f.evidence.value = quote
+  f.partiallyRemoved.value = true
+  assert.deepEqual(f.uncovered.value, [])
+  assert.equal(f.valid.value, false)
+  f.placement.value = quote
+  f.submit()
+  const payload = JSON.parse(f.calls[0][1].slice('/debug wardrobe_correct preview 2 '.length))
+  assert.equal(payload.partially_removed, true)
+  assert.deepEqual(payload.uncovered_regions, [])
+  f.restoreCoverage.value = true
+  assert.equal(f.partiallyRemoved.value, false)
 })

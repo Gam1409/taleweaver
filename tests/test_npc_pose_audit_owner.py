@@ -139,3 +139,38 @@ def test_transient_pose_classification_never_becomes_a_second_persisted_pose_own
         assert ledger.frame_actions[0].model_dump() == legacy
         assert ledger.frame_message_id == "reply"
     assert "poses" not in str(states)
+
+
+def test_preview_accepts_the_same_grounded_echo_of_a_bound_room_object_as_the_owner():
+    from tests.test_scene_staging_action_authority import controlled
+    from tests.test_scene_staging_command_retention import command, fixture
+
+    host, rows = fixture(current=False)
+    command(host, "SECOND", "sitting", source="old", target="BENCH", kind="scene_object")
+    controlled(host, "SECOND")
+    host._chpm_turn.execution_frame = execution_frame.Frame(
+        {},
+        "START",
+        0,
+        {"SECOND": {"kind": "actor"}, "BENCH": {"kind": "item", "owner_id": "__scene__"}},
+        None,
+    )
+    text = "Second remains sitting near the bench."
+    assert shared.begin(host, text)
+    actors = actor_records(host, rows)
+    shared.prepare(host, actors, rows)
+    staging = StagingProposal(
+        changes=[
+            {
+                "entity_id": "SECOND",
+                "evidence": text,
+                "posture": "sitting",
+                "placement": {"relation": "near", "target_kind": "scene_object", "target": "bench"},
+            }
+        ]
+    )
+    preview = pose_audit_owner.preview(host, text, staging, actors, rows)
+    assert not preview.rejected
+    assert preview.facts["SECOND"]["placement"]["target"] == "BENCH"
+    shared.apply_extraction(host, text, shared._cast(host, actors, rows), rows, staging)
+    assert pose_audit_owner.facts(host, actors, rows) == preview.facts

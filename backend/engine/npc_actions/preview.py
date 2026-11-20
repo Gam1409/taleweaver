@@ -389,6 +389,7 @@ class Draft:
                 request_hash=digest,
                 operation=request.tool,
             )
+        partial = isinstance(request, Adjust) and request.partially_removed
         actor = wardrobe_preview(
             self._actors[self.scope.actor_id],
             request.item_id,
@@ -396,9 +397,21 @@ class Draft:
             regions,
             detailed=self.scope.detailed,
             proof=proof,
+            partially_removed=partial,
         )
         self._actors[self.scope.actor_id] = actor
-        return {"item_id": request.item_id, "operation": operation, "uncovered_regions": regions}
+        if partial:
+            regions = next(
+                row.get("uncovered_regions", [])
+                for row in actor["visual_profile"]["worn"]
+                if row["item_id"] == request.item_id
+            )
+        return {
+            "item_id": request.item_id,
+            "operation": operation,
+            "uncovered_regions": regions,
+            **({"partially_removed": True} if partial else {}),
+        }
 
     def _property(self, request: ChangeState | Use) -> dict:
         owned = {

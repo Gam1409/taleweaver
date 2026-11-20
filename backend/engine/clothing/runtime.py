@@ -57,7 +57,12 @@ def _store_actor(manager: Any, states: dict, actor: dict) -> None:
 
 def _change_wear(actor: dict, action: WardrobeAction, source: WearSource | None = None) -> None:
     change_owned_wear(
-        actor, action.item_id, action.operation, action.uncovered_regions, source=source
+        actor,
+        action.item_id,
+        action.operation,
+        action.uncovered_regions,
+        source=source,
+        partially_removed=action.partially_removed,
     )
 
 
@@ -209,7 +214,15 @@ def _action_result(manager: Any, actor: dict, action: WardrobeAction) -> dict:
         "actor_id": action.actor_id,
         "item_id": action.item_id,
         "operation": action.operation,
-        "uncovered_regions": action.uncovered_regions,
+        "uncovered_regions": next(
+            (
+                r.get("uncovered_regions", [])
+                for r in (actor["visual_profile"] or {}).get("worn", [])
+                if r["item_id"] == action.item_id
+            ),
+            [],
+        ),
+        **({"partially_removed": True} if action.partially_removed else {}),
         **item_facts(item, include_inner=_detail_allowed(actor, manager)),
     }
 

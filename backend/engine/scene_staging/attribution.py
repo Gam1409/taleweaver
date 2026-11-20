@@ -12,8 +12,9 @@ from typing import Any
 from backend.core.text_passages import spans
 from backend.engine import turn_controls
 from backend.engine.npc_actions.reconciliation import context as command_context
+from backend.engine.scene_staging.bindings import bind_retained_objects
 from backend.engine.scene_staging.schema import SceneDelta, SceneExtraction
-from backend.engine.scene_staging.state import project
+from backend.engine.scene_staging.state import project, retained
 from backend.engine.visual_novel import movement_sources
 
 MAX_OPERATION_SOURCES = 16
@@ -223,8 +224,19 @@ def _source(manager: Any, scope: Scope, change: SceneDelta, known: set[str]) -> 
 
 
 def admit(
-    manager: Any, extraction: SceneExtraction, cast: list[dict], narration: str, scope: Scope | None
+    manager: Any,
+    extraction: SceneExtraction,
+    cast: list[dict],
+    narration: str,
+    scope: Scope | None,
+    *,
+    scene_objects: dict[str, str | None],
+    offered_objects: frozenset[str] | None,
 ) -> tuple[SceneExtraction, dict, dict, list[dict]]:
+    # Compare actor authority only after preview and publication bind the same room identity.
+    bind_retained_objects(
+        extraction, retained(manager.state, cast, scene_objects), scene_objects, offered_objects
+    )
     control = command_context(manager)
     controlled = (
         scope.controlled
@@ -233,7 +245,7 @@ def admit(
     )
     if not controlled:
         return extraction, {}, {}, []
-    current = project(manager.state, cast)
+    current = project(manager.state, cast, scene_objects=scene_objects, target_ids=True)
     known = {row["id"] for row in cast}
     selected, sources, external, rejected = [], {}, {}, []
     for change in extraction.changes:

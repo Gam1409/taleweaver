@@ -37,6 +37,9 @@ def echo(actor: dict, action: Any) -> bool:
     worn = next((row for row in profile.worn if row.item_id == action.item_id), None)
     return bool(
         worn is not None
+        and worn.partially_removed == action.partially_removed
         and worn.attachment_slot is None
-        and set(worn.uncovered_regions) == set(action.uncovered_regions)
+        and (
+            action.partially_removed or set(worn.uncovered_regions) == set(action.uncovered_regions)
+        )
     )

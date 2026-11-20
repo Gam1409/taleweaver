@@ -2,7 +2,15 @@
 
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    SerializerFunctionWrapHandler,
+    field_validator,
+    model_serializer,
+    model_validator,
+)
 
 from backend.engine.clothing.schema import Region
 from backend.engine.physical_conditions.schema import ITEM_PART_PATTERN
@@ -67,7 +75,21 @@ class TakeOff(Item):
 
 class Adjust(Item):
     tool: Literal["adjust_clothing"]
+    partially_removed: bool = False
     uncovered_regions: list[Region] = Field(max_length=7)
+
+    @model_validator(mode="after")
+    def coherent_adjustment(self) -> "Adjust":
+        if self.partially_removed and self.uncovered_regions:
+            raise ValueError("For a general partial removal, leave uncovered_regions empty.")
+        return self
+
+    @model_serializer(mode="wrap")
+    def legacy_shape(self, handler: SerializerFunctionWrapHandler) -> dict:
+        data: dict = handler(self)
+        if not self.partially_removed:
+            data.pop("partially_removed", None)
+        return data
 
     @field_validator("uncovered_regions")
     @classmethod

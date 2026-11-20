@@ -98,6 +98,7 @@ class CompletedChange(Contract):
     recipient_id: str | None = Field(default=None, min_length=1, max_length=100)
     posture: str | None = Field(default=None, min_length=1, max_length=120)
     uncovered_regions: list[str] | None = Field(default=None, max_length=7)
+    partially_removed: StrictBool | None = None
 
 
 class ReceiptReview(SharedReview):

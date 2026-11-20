@@ -15,6 +15,7 @@ class Reading:
     disposition: str
     uncovered_regions: tuple[str, ...] | None
     attachment_slot: str | None
+    partially_removed: bool | None
 
     @property
     def direction(self) -> tuple[str, str]:
@@ -29,6 +30,7 @@ def read(action: ItemAction) -> Reading:
         action.disposition,
         tuple(sorted(action.uncovered_regions)) if action.uncovered_regions is not None else None,
         action.attachment_slot,
+        action.partially_removed,
     )
 
 
@@ -46,6 +48,10 @@ def wardrobe_echo(action: Any, effect: dict, *, wearer: str | None = None) -> bo
     return (
         effect.get("operation") in {"wear", "adjust"}
         and action.disposition == "worn"
+        and (
+            action.partially_removed is None
+            or action.partially_removed == bool(effect.get("partially_removed"))
+        )
         and (
             action.uncovered_regions is None
             or set(action.uncovered_regions) == set(effect.get("uncovered_regions") or ())

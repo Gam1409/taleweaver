@@ -8,6 +8,7 @@ from pydantic import (
     ConfigDict,
     Field,
     SerializerFunctionWrapHandler,
+    field_validator,
     model_serializer,
 )
 
@@ -93,6 +94,16 @@ class SceneExtraction(BaseModel):
     props: list[PropDelta] = Field(default_factory=list, max_length=24)
     explicit: list[ExplicitDelta] = Field(default_factory=list, max_length=8)
 
+    @field_validator("changes")
+    @classmethod
+    def actionable_changes(cls, changes: list[SceneDelta]) -> list[SceneDelta]:
+        # A model may describe a second aspect in a row that changes no staging field.
+        return [
+            row
+            for row in changes
+            if row.clear or row.posture is not None or row.placement is not None
+        ]
+
 
 INSTRUCTIONS = """Extract supported final visual changes and explicit states from current_narration.
 current_narration is an ordered map of source passages. Every evidence field selects
@@ -110,8 +121,9 @@ A request or intention to sit is not sitting. Silence does not change a pose.
 Use one change per character at the FINAL instant, not intermediate poses.
 Posture is standing/sitting/lying/kneeling/crouching/on_all_fours; unknown explicitly clears it.
 Placement is a spatial relation to a present character ID or to a scene object.
-For scene_object, target must be a literal phrase from the evidence, in its original
-language. Do not infer an object from a role or invent distances, left/right, or body
+For a registered scene object, target is its ID from scene_objects. This ID need
+not appear in the passage. For unregistered scenery use a literal phrase from the evidence.
+Do not infer an object from a role or invent distances, left/right, or body
 part positions. A person standing in front of a seated person is not standing on the
 bench. Use null for unchanged fields; clear=true if an explicit movement invalidates
 prior staging but does not establish a new pose/placement. Do not guess a replacement.

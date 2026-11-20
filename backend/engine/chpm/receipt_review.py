@@ -26,6 +26,8 @@ custody/wear/pose/placement/travel change of a controlled actor, with passage_id
 actor_id, current applied operation_id, tool, target_id. Target is item_id, set_pose
 actor_id, approach placement.target or travel destination. Also copy recipient_id
 for give, posture for set_pose/approach, uncovered_regions for adjust; otherwise null.
+For adjust_clothing, use partially_removed=true when the passage and receipt leave the garment
+partly off and still worn. This permits no new exposure. Restoration or full removal needs its own result.
 For wear_item or take_off_item, uncovered_regions may also copy an explicit [] from the public receipt.
 Exclude speech/gestures, plans, unchanged state and resolved external effects.
 Representative actions are not proof. Blocked/attempted/omitted effects cannot
@@ -108,6 +110,9 @@ def _target(row: dict) -> str | None:
 def _attributes(row: dict) -> dict:
     effect = row.get("effect") or {}
     return {
+        "partially_removed": effect.get("partially_removed")
+        if row["tool"] == "adjust_clothing"
+        else None,
         "recipient_id": effect.get("destination_owner") if row["tool"] == "give_item" else None,
         "posture": effect.get("posture") if row["tool"] in {"set_pose", "approach"} else None,
         "uncovered_regions": effect.get("uncovered_regions")
@@ -117,8 +122,8 @@ def _attributes(row: dict) -> dict:
 
 
 def _same_attributes(claim: passages.CompletedChange, row: dict) -> bool:
-    current = claim.model_dump(include={"recipient_id", "posture", "uncovered_regions"})
     expected = _attributes(row)
+    current = claim.model_dump(include=set(expected))
     # Basic dressing commands can report the neutral coverage list that their owner writes.
     if (
         row["tool"] in {"wear_item", "take_off_item"}
@@ -127,6 +132,9 @@ def _same_attributes(claim: passages.CompletedChange, row: dict) -> bool:
     ):
         current["uncovered_regions"] = None
     for values in (current, expected):
+        # Old adjust receipts omit the neutral flag.
+        if row["tool"] == "adjust_clothing" and values["partially_removed"] is None:
+            values["partially_removed"] = False
         if isinstance(values["uncovered_regions"], list):
             values["uncovered_regions"] = sorted(values["uncovered_regions"])
     return current == expected

@@ -198,11 +198,21 @@ def project(
 
 
 def _add_poses(manager: Any, rows: list, actors: dict, entities: dict) -> None:
+    from backend.engine.scene_staging.room_items import placement_targets
     from backend.engine.scene_staging.shared import _cast
     from backend.engine.scene_staging.state import project as poses
+    from backend.engine.visual_novel.config import read_settings
 
+    if not read_settings(manager.state).scene_staging:
+        return
     try:
-        current = poses(manager.state, _cast(manager, actors, rows))
+        # Technical inspection exposes the same available object ID as an approach command.
+        current = poses(
+            manager.state,
+            _cast(manager, actors, rows),
+            scene_objects=placement_targets(manager.avatar, rows, manager.state),
+            target_ids=True,
+        )
     except (KeyError, TypeError, ValueError):
         return
     for identifier, pose in current.items():

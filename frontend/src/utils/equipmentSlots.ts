@@ -11,6 +11,7 @@ export interface EquipmentDisplayItem {
   description?: string
   current_state?: ItemStateValue[]
   layer?: number
+  partially_removed?: boolean
   uncovered_regions?: string[]
   [key: string]: unknown
 }

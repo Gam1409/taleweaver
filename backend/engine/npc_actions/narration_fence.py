@@ -20,6 +20,7 @@ from backend.engine.chpm.state import KEY
 from backend.engine.clothing.context import actor_records
 from backend.engine.clothing.profiles import load_profile
 from backend.engine.clothing.projection import item_wear_state
+from backend.engine.clothing.schema import WornItem
 from backend.engine.clothing.visuals import session_objects
 from backend.engine.narrated_items.schema import ItemAction
 from backend.engine.npc_actions.control import validated_outcomes
@@ -181,6 +182,19 @@ def _wear_conflict(action: ItemAction, actor: dict) -> dict:
     )
     if current is None:
         return {}
+    return _placement_conflict(action, current)
+
+
+def _placement_conflict(action: ItemAction, current: WornItem) -> dict:
+    if (
+        action.partially_removed is not None
+        and action.partially_removed != current.partially_removed
+    ):
+        return {
+            "field": "partially_removed",
+            "actual": current.partially_removed,
+            "proposed": action.partially_removed,
+        }
     if action.attachment_slot is not None and action.attachment_slot != current.attachment_slot:
         return {
             "field": "attachment_slot",

@@ -18,6 +18,7 @@ export interface WardrobeItem {
   clothing: Clothing | null
   worn: boolean
   uncovered_regions?: string[]
+  partially_removed?: boolean
   attachment_slot?: BodyPlacementSlot | null
   spatial_position?: string
   location?: 'scene'
@@ -122,6 +123,7 @@ const emit = defineEmits<{
       <summary class="cursor-pointer text-cyan-300">Description</summary>
       <p class="mt-1 whitespace-pre-wrap">{{ item.description }}</p>
     </details>
+    <p v-if="item.partially_removed" class="mt-2 text-[10px] text-amber-200">Partially removed</p>
     <p v-if="item.uncovered_regions?.length" class="mt-2 text-[10px] text-amber-200">
       Partially displaced — exposed: {{ item.uncovered_regions.join(', ') }}
     </p>

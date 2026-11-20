@@ -18,6 +18,7 @@ from backend.engine.scene_continuity.presentation import visual_facts as scene_v
 from backend.engine.scene_illustrations import capture_scene_snapshot
 from backend.engine.scene_staging import props
 from backend.engine.scene_staging.provenance import stamp
+from backend.engine.scene_staging.room_items import placement_targets
 from backend.engine.scene_staging.state import digest, project, registry
 from backend.engine.visual_novel.config import read_settings
 from backend.engine.visual_novel.environment import bind_player, room_objects
@@ -138,7 +139,15 @@ async def capture_completed_moment(manager: Any, message: Any) -> None:
             saved.get("source_hash") == digest(message.content)
             and saved.get("scene_id") == manager.state.current_scene_id
         )
-        staging = project(manager.state, facts["characters"]) if matches else {}
+        staging = (
+            project(
+                manager.state,
+                facts["characters"],
+                scene_objects=placement_targets(manager.avatar, list(rows.values()), manager.state),
+            )
+            if matches
+            else {}
+        )
         facts["staging_status"] = saved.get("status", "unconfirmed") if matches else "unconfirmed"
         for person in facts["characters"]:
             person.update(staging.get(person["id"], {}))

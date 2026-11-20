@@ -7,6 +7,8 @@ from backend.engine.chpm import context, host_observations, recent_scene
 from backend.engine.chpm.host_observation_contracts import HostFacts
 from backend.engine.scene_continuity.scope import SceneScope
 from backend.engine.scene_staging import props
+from backend.engine.scene_staging.room_items import placement_targets
+from backend.engine.visual_novel.config import read_settings
 
 
 @step("npc.scene_context")
@@ -37,6 +39,14 @@ def capture(manager: Any, actor: Any, names: dict[str, str]) -> HostFacts:
     cast = [_person(manager.avatar, manager.state)]
     cast.extend(_person(row, manager.state) for row in present.values())
     items = props.candidates(manager.avatar, list(scope.entities), manager.state, set(present))
+    room_rows = (
+        scope.item_state_entities if scope.item_state_entities is not None else scope.entities
+    )
+    objects = (
+        placement_targets(manager.avatar, list(room_rows), manager.state)
+        if read_settings(manager.state).scene_staging
+        else None
+    )
     return host_observations.capture(
         manager.state,
         actor,
@@ -44,6 +54,7 @@ def capture(manager: Any, actor: Any, names: dict[str, str]) -> HostFacts:
         scene_targets=set(scope.targets),
         scene_description=scope.description,
         staging_cast=cast,
+        scene_objects=objects,
         placed_items=items,
         player_id=manager.avatar.id,
         last_observed_scene=observed,

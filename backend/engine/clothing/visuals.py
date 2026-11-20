@@ -76,6 +76,8 @@ def _garment_description(item: dict) -> str:
     description = (
         f"{item['name']}: {item['description']}" if item.get("description") else item["name"]
     )
+    if item.get("partially_removed"):
+        description += " (partially removed)"
     return f"{description} (visible on: {', '.join(item['visible_regions'])})"
 
 

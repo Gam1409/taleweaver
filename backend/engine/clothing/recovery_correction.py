@@ -24,14 +24,16 @@ class RecoveryCorrection(BaseModel):
     uncovered_regions: list[Region] = Field(default_factory=list, max_length=7)
     placement_evidence: str = Field(default="", max_length=800)
     restore_coverage: StrictBool = False
+    partially_removed: StrictBool = False
     attachment_slot: BodySlot | None = None
 
     @model_validator(mode="after")
     def coherent(self) -> "RecoveryCorrection":
+        displaced = bool(self.partially_removed or self.uncovered_regions)
         if self.attachment_slot:
             if (
                 self.status != "worn"
-                or self.uncovered_regions
+                or displaced
                 or self.placement_evidence
                 or self.restore_coverage
             ):
@@ -40,15 +42,15 @@ class RecoveryCorrection(BaseModel):
                 )
             return self
         if self.status == "carried" and (
-            self.uncovered_regions or self.placement_evidence or self.restore_coverage
+            displaced or self.placement_evidence or self.restore_coverage
         ):
             raise ValueError("Removed garments cannot have partial placement.")
-        if self.restore_coverage and (self.uncovered_regions or not self.placement_evidence):
+        if self.partially_removed and self.uncovered_regions:
+            raise ValueError("Choose general displacement or an explicit list of exposed regions.")
+        if self.restore_coverage and (displaced or not self.placement_evidence):
             raise ValueError("Restoring coverage requires an exact quote and no exposed regions.")
-        if not self.restore_coverage and bool(self.uncovered_regions) != bool(
-            self.placement_evidence
-        ):
-            raise ValueError("Partial placement requires both regions and an exact quote.")
+        if not self.restore_coverage and displaced != bool(self.placement_evidence):
+            raise ValueError("Partial placement requires an explicit change and an exact quote.")
         if len(set(self.uncovered_regions)) != len(self.uncovered_regions):
             raise ValueError("Exposed regions must be unique.")
         return self
@@ -77,6 +79,7 @@ def _corrected_proposal(
             "attachment_slot": correction.attachment_slot or entry.action.attachment_slot,
         },
         "uncovered_regions": correction.uncovered_regions,
+        "partially_removed": correction.partially_removed,
         "placement_evidence": correction.placement_evidence,
         "restore_coverage": correction.restore_coverage,
     }

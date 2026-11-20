@@ -28,6 +28,7 @@ def mutate(
     uncovered_regions: list[Region],
     *,
     source: WearSource | None = None,
+    partially_removed: bool = False,
 ) -> None:
     """Change an already authorized working copy; callers own policy/source validation."""
     if operation not in {"wear", "remove", "adjust"}:
@@ -42,11 +43,17 @@ def mutate(
     equipped = {_id(value) for value in actor["equipment"].values()}
     if operation != "wear" and item_id not in worn and item_id not in equipped:
         raise ValueError("That garment is not currently worn.")
+    if partially_removed:
+        existing = worn.get(item_id)
+        uncovered_regions = list(existing.uncovered_regions) if existing else []
     if operation == "remove":
         worn.pop(item_id, None)
     else:
         worn[item_id] = WornItem(
-            item_id=item_id, uncovered_regions=uncovered_regions, source=source
+            item_id=item_id,
+            uncovered_regions=uncovered_regions,
+            partially_removed=partially_removed,
+            source=source,
         )
     profile.worn = list(worn.values())
     actor["visual_profile"] = validate_profile(
@@ -71,6 +78,7 @@ def preview(
     *,
     detailed: bool,
     proof: WearCommandProof | None = None,
+    partially_removed: bool = False,
 ) -> dict:
     """Validate on a copy without fabricating narration or changing the previous actor."""
     item = owned_items(actor["resolved_inventory"], equipment=actor["equipment"]).get(item_id)
@@ -88,7 +96,14 @@ def preview(
         )
     source = _command_source(actor, item_id, operation, proof)
     changed = deepcopy(actor)
-    mutate(changed, item_id, operation, uncovered_regions, source=source)
+    mutate(
+        changed,
+        item_id,
+        operation,
+        uncovered_regions,
+        source=source,
+        partially_removed=partially_removed,
+    )
     return changed
 
 

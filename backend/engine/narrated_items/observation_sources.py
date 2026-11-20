@@ -18,7 +18,7 @@ def _bindings(extraction: ItemExtraction, actors: dict) -> dict[tuple[str, str],
         if action.basis not in {"observed_wear", "observed_placement"} or not action.item_id:
             continue
         if action.basis == "observed_wear" and not (
-            action.uncovered_regions or action.attachment_slot
+            action.uncovered_regions or action.attachment_slot or action.partially_removed
         ):
             continue
         actor = actors.get(action.destination_owner)

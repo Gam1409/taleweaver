@@ -78,7 +78,7 @@ async def equipment_rows(
         for row in profile.worn
         if row.item_id in items
         and row.item_id not in result
-        and (row.attachment_slot or row.uncovered_regions)
+        and (row.attachment_slot or row.uncovered_regions or row.partially_removed)
         and row.source is not None
     ]
     ids = {
@@ -135,6 +135,7 @@ async def equipment_rows(
             objects,
             state.entity_states or {},
             uncovered_regions=row.uncovered_regions,
+            **({"partially_removed": True} if row.partially_removed else {}),
             description=garment.description if garment and detailed_for_state(state) else "",
             **({"slots": [BODY_SLOT_KEYS[row.attachment_slot]]} if row.attachment_slot else {}),
         )

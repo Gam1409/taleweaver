@@ -8,6 +8,7 @@ from pydantic import ValidationError
 
 from backend.engine.npc_actions.reconciliation import context as command_context
 from backend.engine.scene_staging.commands import CommandProof
+from backend.engine.scene_staging.room_items import placement_targets
 from backend.engine.scene_staging.schema import SceneExtraction
 from backend.engine.scene_staging.state import KEY, _object_unavailable, project, retained
 
@@ -62,9 +63,15 @@ def _bound(source: Any, actor: str, scene: str, input_id: str) -> bool:
     ) == ("command", input_id, actor, scene)
 
 
-def _row(state: Any, raw: dict, cast: list[dict] | None, actor: str) -> dict:
+def _row(
+    state: Any,
+    raw: dict,
+    cast: list[dict] | None,
+    actor: str,
+    scene_objects: dict[str, str | None] | None,
+) -> dict:
     if cast is not None:
-        row: dict = retained(state, cast).get(actor, {})
+        row: dict = retained(state, cast, scene_objects).get(actor, {})
         return row
     row = deepcopy(raw)
     placement = row.get("placement", {})
@@ -82,7 +89,12 @@ def _row(state: Any, raw: dict, cast: list[dict] | None, actor: str) -> dict:
     return row
 
 
-def capture(manager: Any, cast: list[dict] | None = None) -> dict[str, ProtectedActor]:
+def capture(
+    manager: Any,
+    cast: list[dict] | None = None,
+    *,
+    scene_objects: dict[str, str | None] | None = None,
+) -> dict[str, ProtectedActor]:
     control = command_context(manager)
     data = (manager.state.entity_states or {}).get(KEY)
     if (
@@ -110,7 +122,7 @@ def capture(manager: Any, cast: list[dict] | None = None) -> dict[str, Protected
             )
         ):
             continue
-        row = _row(manager.state, raw, cast, actor)
+        row = _row(manager.state, raw, cast, actor, scene_objects)
         if not row:
             continue
         facts = {
@@ -218,31 +230,16 @@ def _command_fact(source: Any, actor: str, scene: str) -> bool:
     return (proof.actor_id, proof.scene_id) == (actor, scene)
 
 
-def _available_objects(state: Any, rows: list[Any]) -> set[str]:
-    return {
-        row.id
-        for row in rows
-        if row.entity_type == "OBJECT" and not _object_unavailable(state, row.id, row)
-    }
-
-
-def _available_placement(fact: Any, objects: set[str]) -> bool:
-    return (
-        not isinstance(fact, dict)
-        or fact.get("target_kind") != "scene_object"
-        or fact.get("target_id") in objects
-    )
-
-
-def _carry_commands(state: Any, result: dict, cast: list[dict], objects: set[str]) -> dict:
-    valid = project(state, cast)
+def _carry_commands(
+    state: Any, result: dict, cast: list[dict], objects: dict[str, str | None] | None
+) -> dict:
+    valid = project(state, cast, scene_objects=objects)
     actors = {}
-    for actor, row in retained(state, cast).items():
+    for actor, row in retained(state, cast, objects).items():
         facts = {
             name: deepcopy(row[name])
             for name in FIELDS.intersection(valid.get(actor, {}))
             if _command_fact(row.get(name), actor, state.current_scene_id)
-            and (name != "placement" or _available_placement(row[name], objects))
         }
         if not facts:
             continue
@@ -258,11 +255,10 @@ def preserve(
     manager: Any, result: dict, cast: list[dict] | None = None, rows: list[Any] | None = None
 ) -> dict:
     """Failed extraction preserves retained command facts without locking future updates."""
-    objects = _available_objects(manager.state, rows or [])
+    objects = (
+        placement_targets(manager.avatar, rows, manager.state)
+        if rows is not None and cast is not None
+        else None
+    )
     carried = _carry_commands(manager.state, result, cast, objects) if cast is not None else result
-    protected = capture(manager, cast)
-    if cast is not None and rows is not None:
-        for record in protected.values():
-            if not _available_placement(record.fields.get("placement"), objects):
-                record.fields["placement"] = None
-    return restore(carried, protected)
+    return restore(carried, capture(manager, cast, scene_objects=objects))

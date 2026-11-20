@@ -8,6 +8,7 @@ from pydantic import (
     ConfigDict,
     Field,
     SerializerFunctionWrapHandler,
+    StrictBool,
     field_validator,
     model_serializer,
     model_validator,
@@ -63,6 +64,10 @@ class ItemAction(WithEvidenceSpan):
     destination_owner: str = Field(min_length=1, max_length=100)
     disposition: Literal["carried", "held", "worn"]
     evidence: str = Field(min_length=4, max_length=800)
+    partially_removed: StrictBool | None = Field(
+        default=None,
+        description="For worn clothing only. True for a garment partly taken off, even when no whole body region is uncovered. False when restored. Null leaves this detail unspecified.",
+    )
     uncovered_regions: list[Region] | None = Field(
         default=None,
         max_length=7,
@@ -84,6 +89,13 @@ class ItemAction(WithEvidenceSpan):
     def one_identity(self) -> "ItemAction":
         if bool(self.item_id) == bool(self.new_item):
             raise ValueError("Use an existing ID or a new item, never both.")
+        if self.partially_removed is not None and (
+            self.disposition != "worn" or self.attachment_slot is not None
+        ):
+            raise ValueError("Partial removal only applies to worn clothing.")
+        if self.partially_removed:
+            # A coarse observation cannot replace independently confirmed regional facts.
+            self.uncovered_regions = None
         if self.basis == "observed_possession" and (
             self.source_owner != self.destination_owner
             or self.source_owner == "__scene__"
@@ -119,6 +131,8 @@ class ItemAction(WithEvidenceSpan):
     @model_serializer(mode="wrap")
     def preserve_legacy_shape(self, handler: SerializerFunctionWrapHandler) -> dict:
         result = super().preserve_legacy_shape(handler)
+        if self.partially_removed is None:
+            result.pop("partially_removed", None)
         if self.attachment_slot is None:
             result.pop("attachment_slot", None)
         if self.performed_by is None:
@@ -283,7 +297,9 @@ order and continuous ownership; each step needs its own non-overlapping exact ev
 Clothing pulled down, lifted or only partly put on remains disposition=worn.
 Moving an attached strap, cuff or hem is partial displacement of that garment.
 It remains worn with the same ID and owner unless a separate completed transfer occurs.
-Set uncovered_regions to the garment regions it no longer covers, not all bare body
+For a general partial removal, set partially_removed=true and uncovered_regions=null.
+This preserves prior coverage. Set partially_removed=false when put fully back on.
+Set uncovered_regions to the whole garment regions it no longer covers, not all bare body
 regions. [] explicitly restores normal coverage; null leaves known placement unchanged.
 Review the supplied worn entries: covering a previously uncovered region is a placement
 change even when the same garment stays on the same owner. Report that existing item

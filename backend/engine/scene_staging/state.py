@@ -9,6 +9,7 @@ from typing import Any
 from pydantic import TypeAdapter, ValidationError
 
 from backend.engine.scene_staging import props
+from backend.engine.scene_staging.room_items import placement_targets
 from backend.engine.scene_staging.schema import Placement, Posture, SceneDelta, SceneExtraction
 from backend.engine.visual_novel.config import read_settings
 
@@ -29,7 +30,9 @@ def _origin(person: dict) -> str:
     return str(person.get("position") or "")
 
 
-def retained(state: Any, cast: list[dict]) -> dict:
+def retained(
+    state: Any, cast: list[dict], scene_objects: dict[str, str | None] | None = None
+) -> dict:
     data = registry(state)
     if data.get("scene_id") != state.current_scene_id or data.get("status") != "ready":
         return {}
@@ -51,27 +54,37 @@ def retained(state: Any, cast: list[dict]) -> dict:
             or placement.get("target_origin") != _origin(present[placement["target"]])
         ):
             row.pop("placement", None)
-        if (
-            placement.get("target_kind") == "scene_object"
-            and placement.get("source_kind") == "command"
-            and _object_unavailable(state, placement.get("target_id"))
-        ):
-            row.pop("placement", None)
+        if placement.get("target_kind") == "scene_object":
+            _retain_object(state, row, placement, scene_objects)
         actors[person["id"]] = row
     return actors
 
 
-def _object_unavailable(state: Any, identifier: Any, entity: Any = None) -> bool:
+def _retain_object(
+    state: Any, row: dict, placement: dict, scene_objects: dict[str, str | None] | None
+) -> None:
+    if "target_id" not in placement and placement.get("source_kind") != "command":
+        return  # Older narrated placements were grounded labels, without canonical identities.
+    target_id = placement.get("target_id")
+    if not isinstance(target_id, str) or _object_unavailable(state, target_id):
+        row.pop("placement", None)
+        return
+    if scene_objects is None:
+        return
+    if name := scene_objects.get(target_id):
+        placement["target"] = name
+    else:
+        row.pop("placement", None)
+
+
+def _object_unavailable(state: Any, identifier: Any) -> bool:
     if not isinstance(identifier, str) or not identifier:
         return True
     override = (state.entity_states or {}).get(identifier, {})
     return not isinstance(override, dict) or bool(
-        override.get("is_hidden", getattr(entity, "is_hidden", False))
-        or override.get("is_in_inventory", getattr(entity, "is_in_inventory", False))
-        or override.get(
-            "current_scene_id", getattr(entity, "current_scene_id", state.current_scene_id)
-        )
-        != state.current_scene_id
+        override.get("is_hidden")
+        or override.get("is_in_inventory")
+        or override.get("current_scene_id", state.current_scene_id) != state.current_scene_id
     )
 
 
@@ -111,6 +124,39 @@ def _validate_explicit(
     return atoms, rejected
 
 
+def _resolve_target(
+    change: SceneDelta,
+    known: dict,
+    scene_objects: dict[str, str | None],
+    offered: frozenset[str] | None,
+) -> tuple[SceneDelta, str | None, bool]:
+    placement = change.placement
+    if placement is None or placement.relation == "unknown":
+        return change, None, True
+    target = placement.target
+    if placement.target_kind == "character":
+        valid = target in known and target != change.entity_id
+    elif target in scene_objects or (offered is not None and target in offered):
+        name = scene_objects.get(target) if offered is None or target in offered else None
+        if name:
+            bound = placement.model_copy(update={"target": name})
+            return change.model_copy(update={"placement": bound}), target, True
+        valid = False
+    else:
+        # Unregistered scenery in existing games retains its grounded, textual placement.
+        valid = (
+            bool(target)
+            and target in change.evidence
+            and all(
+                target.casefold() != label.casefold() for label in scene_objects.values() if label
+            )
+        )
+    if valid:
+        return change, None, True
+    # An unresolvable placement does not invalidate an independently grounded posture.
+    return change.model_copy(update={"placement": None}), None, False
+
+
 def reconcile(
     state: Any,
     cast: list[dict],
@@ -120,31 +166,21 @@ def reconcile(
     unconfirmed_actors: set[str] | None = None,
     invalid_changes: int = 0,
     resolved_sources: dict[str, dict] | None = None,
+    scene_objects: dict[str, str | None] | None = None,
+    offered_objects: frozenset[str] | None = None,
 ) -> dict:
     """Quotes ground proposals; semantic accuracy still depends on the extractor."""
     known = {person["id"]: person for person in cast}
-    actors = retained(state, cast)
+    actors = retained(state, cast, scene_objects)
     uncertain = set(unconfirmed_actors or ()) & known.keys()
     counts = Counter(change.entity_id for change in extraction.changes)
     rejected = invalid_changes
     moved = set()
     explicit_placements = set()
     source = digest(narration)
-    for change in extraction.changes:
-        placement = change.placement
-        invalid_target = (
-            placement is not None
-            and placement.relation != "unknown"
-            and (
-                (
-                    placement.target_kind == "character"
-                    and (placement.target not in known or placement.target == change.entity_id)
-                )
-                or (
-                    placement.target_kind == "scene_object"
-                    and (not placement.target or placement.target not in change.evidence)
-                )
-            )
+    for candidate in extraction.changes:
+        change, target_id, valid_target = _resolve_target(
+            candidate, known, scene_objects or {}, offered_objects
         )
         if (
             change.entity_id not in known
@@ -155,21 +191,26 @@ def reconcile(
                 change.evidence_span is not None
                 and not change.evidence_span.matches(narration, change.evidence)
             )
-            or invalid_target
+            or (not valid_target and change.posture is None)
         ):
             rejected += 1
             if change.entity_id in known:
                 uncertain.add(change.entity_id)
             continue
-        previous = _project_actor(actors.get(change.entity_id, {}))
+        previous = position(actors.get(change.entity_id, {}))
         row = {} if change.clear else actors.get(change.entity_id, {})
-        if placement is not None:
+        if not valid_target:
+            rejected += 1
+            row.pop("placement", None)
+        if change.placement is not None:
             explicit_placements.add(change.entity_id)
         actors[change.entity_id] = _apply_change(
             row, change, known, source, (resolved_sources or {}).get(change.entity_id)
         )
+        if target_id is not None:
+            actors[change.entity_id]["placement"]["target_id"] = target_id
         # Repeated evidence changes provenance, not the target's actual final position.
-        if _project_actor(actors[change.entity_id]) != previous:
+        if position(actors[change.entity_id]) != previous:
             moved.add(change.entity_id)
     for actor_id in uncertain:
         actors.pop(actor_id, None)
@@ -252,14 +293,20 @@ def invalidate_relations(actors: dict, moved: set[str], explicit_placements: set
     return invalidated
 
 
-def project(state: Any, cast: list[dict]) -> dict[str, dict]:
+def project(
+    state: Any,
+    cast: list[dict],
+    *,
+    scene_objects: dict[str, str | None] | None = None,
+    target_ids: bool = False,
+) -> dict[str, dict]:
     if not read_settings(state).scene_staging:
         return {}
-    actors = retained(state, cast)
-    return {key: _project_actor(row) for key, row in actors.items()}
+    actors = retained(state, cast, scene_objects)
+    return {key: _project_actor(row, target_ids=target_ids) for key, row in actors.items()}
 
 
-def _project_actor(row: dict) -> dict:
+def _project_actor(row: dict, *, target_ids: bool = False) -> dict:
     result: dict[str, Any] = {}
     try:
         if row.get("posture"):
@@ -269,9 +316,30 @@ def _project_actor(row: dict) -> dict:
                 {key: row["placement"][key] for key in ("relation", "target_kind", "target")}
             )
             result["placement"] = value.model_dump()
+            if (
+                target_ids
+                and value.target_kind == "scene_object"
+                and "target_id" in row["placement"]
+            ):
+                result["placement"]["target"] = row["placement"]["target_id"]
     except (KeyError, TypeError, ValidationError):
         return {}  # A corrupt legacy actor is unknown without hiding other actors.
     return result
+
+
+def position(row: dict) -> dict:
+    """Use known prop identity; legacy labels cannot masquerade as proven IDs."""
+    position = _project_actor(row)
+    placement = position.get("placement")
+    if not placement or placement["target_kind"] != "scene_object":
+        return position
+    identifier = row["placement"].get("target_id")
+    placement["target"] = (
+        ("id", identifier)
+        if isinstance(identifier, str) and identifier
+        else ("label", placement["target"])
+    )
+    return position
 
 
 def narration_block(state: Any, entities: list[Any], avatar: Any) -> str:
@@ -297,7 +365,7 @@ def narration_block(state: Any, entities: list[Any], avatar: Any) -> str:
                 "position": override.get("spatial_position", entity.spatial_position),
             }
         )
-    facts = project(state, cast)
+    facts = project(state, cast, scene_objects=placement_targets(avatar, entities, state))
     items = props.candidates(
         avatar, entities, state, {entity.id for entity in entities if entity.entity_type == "NPC"}
     )

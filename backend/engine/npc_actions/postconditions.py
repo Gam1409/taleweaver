@@ -85,6 +85,8 @@ def _wear(actor: dict, request: Wear | TakeOff | Adjust, effect: dict) -> str | 
     )
     if state != "worn" or worn is None or worn.attachment_slot is not None:
         return "wear"
+    if worn.partially_removed != bool(effect.get("partially_removed")):
+        return "coverage"
     return "coverage" if set(worn.uncovered_regions) != set(effect["uncovered_regions"]) else None
 
 

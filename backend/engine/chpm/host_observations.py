@@ -22,6 +22,7 @@ def capture(
     scene_description: str | None = None,
     staging_cast: list[dict] | None = None,
     placed_items: list[dict] | None = None,
+    scene_objects: dict[str, str | None] | None = None,
     player_id: str = "",
     last_observed_scene: ObservedScene | None = None,
 ) -> HostFacts:
@@ -36,7 +37,14 @@ def capture(
     known_inventory = isinstance(inventory, (list, tuple, dict))
     worn = known_worn_item_ids(raw, inventory) if known_inventory else None
     poses, placed, staging_omissions = (
-        staging_observations(state, staging_cast, placed_items or [], actor.id, player_id)
+        staging_observations(
+            state,
+            staging_cast,
+            placed_items or [],
+            actor.id,
+            player_id,
+            scene_objects=scene_objects,
+        )
         if staging_cast is not None
         else (None, None, None)
     )
