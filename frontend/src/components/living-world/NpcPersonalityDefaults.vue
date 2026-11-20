@@ -197,6 +197,13 @@ function selectActor(id: string, selected: boolean) {
             </select></label
           >
         </div>
+        <label v-if="!isCombatControl && draft.mode === 'live'" class="mt-4 block text-xs text-slate-300">NPC decision detail
+          <select name="npc-decision-detail" :value="draft.decision_detail ?? 'full'" class="mt-2 w-full rounded-lg bg-slate-800 p-2" @change="update('decision_detail', ($event.target as HTMLSelectElement).value as ChpmSettings['decision_detail'])">
+            <option value="full">Full (default)</option>
+            <option value="compact">Compact</option>
+          </select>
+          <span class="mt-2 block text-slate-400">Full compares two to four intentions. Compact returns the chosen intention and its motives. A clarifying question includes what the NPC would do for each answer.</span>
+        </label>
         <label v-if="draft.mode === 'live'" class="mt-4 block text-xs text-slate-300">NPC decision workflow
           <select name="npc-decision-workflow" :value="draft.workflow ?? 'staged'" class="mt-2 w-full rounded-lg bg-slate-800 p-2" @change="setWorkflow(($event.target as HTMLSelectElement).value as 'staged' | 'integrated')">
             <option value="staged" :disabled="isCombatControl">Staged — memory tools, then decision (default)</option>

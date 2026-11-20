@@ -67,8 +67,12 @@ class ProposalModel(NativeModel):
         ]
 
 
-async def deliberate(protocol, plan, *, repair=True, actions=True, input_limit=34500):
+async def deliberate(
+    protocol, plan, *, repair=True, actions=True, input_limit=34500, detail="full"
+):
     chosen = proposal()
+    if detail == "compact":
+        del chosen["candidates"]["DEFER"]
     chosen["candidates"]["CONTINUE"]["intention"] = "Offer to inspect the workshop later."
     if repair:
         chosen["choice"]["reason"] = "x" * 301
@@ -92,6 +96,7 @@ async def deliberate(protocol, plan, *, repair=True, actions=True, input_limit=3
     usage = Usage()
     settings = Settings(
         mode="live",
+        decision_detail=detail,
         actor_ids=["npc"],
         workflow="integrated",
         tool_protocol=protocol,
@@ -191,3 +196,13 @@ async def test_actual_controlled_initial_and_repair_respect_unchanged_request_li
 
 def test_legacy_default_proposal_text_remains_byte_identical():
     assert hashlib.sha256(prompts.PROPOSE.encode()).hexdigest() == LEGACY_PROPOSAL_HASH
+
+
+@pytest.mark.parametrize("protocol", ["native", "json"])
+async def test_compact_choice_survives_action_staging_and_bounded_repair(protocol):
+    model, draft, decision, usage, _ = await deliberate(protocol, "staged", detail="compact")
+    assert len(decision.proposal.candidates) == 1
+    assert decision.selected.kind == "CONTINUE"
+    assert len(draft.operations) == 1 and draft.approved and draft.published_results is None
+    assert usage.proposal_repairs == 1
+    assert all(body["decision_detail"] == "compact" for _, body in model.initial_requests(protocol))

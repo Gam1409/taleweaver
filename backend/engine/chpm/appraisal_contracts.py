@@ -15,6 +15,7 @@ from backend.engine.chpm.schema import (
     ChoicePreference,
     Proposal,
     QuestionGate,
+    SingleIntentProposal,
 )
 
 Explanation = Annotated[str, Field(min_length=1, max_length=160)]
@@ -65,7 +66,8 @@ class GroundedProposal(Contract):
     question_gate: QuestionGate | None = None
 
     def canonical(self) -> Proposal:
-        return Proposal(
+        schema = SingleIntentProposal if len(self.candidates) == 1 else Proposal
+        return schema(
             candidates=[
                 Candidate(kind=kind, **body.model_dump(exclude={"motives"}))
                 for kind, body in sorted(self.candidates.items())

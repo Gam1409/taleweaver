@@ -4,6 +4,7 @@ from typing import Any
 
 from pydantic import AliasChoices, Field, model_validator
 
+from backend.engine.chpm import compact_decision
 from backend.engine.chpm.appraisal_contracts import (
     Assessment,
     FeltExperience,
@@ -76,6 +77,8 @@ class Draft(Contract):
         for kind, candidate in self.candidates.items():
             body["candidates"][kind].update(_goal(candidate, catalogue))
         schema = DevelopmentProposal if isinstance(self, DevelopmentDraft) else GroundedProposal
+        if len(self.candidates) == 1:
+            schema = compact_decision.schema_for(schema)
         return schema.model_validate(body)
 
 

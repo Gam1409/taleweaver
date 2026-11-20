@@ -238,3 +238,14 @@ test('two-phase decisions are opt-in for VN actions and clear when those actions
   const combat = fixture(t, original, { hostMode: 'rpg' })
   assert.equal(descendants(combat.root).some(node => node.props?.name === 'npc-decision-mode'), false)
 })
+
+test('decision detail can change independently of workflow and tool rounds', async t => {
+  const f = fixture(t, settings(), { hostMode: 'vn' })
+  const field = () => descendants(f.root).find(node => node.props?.name === 'npc-decision-detail')
+  assert.equal(field().props.value, 'full')
+  field().props.onChange({ target: { value: 'compact' } })
+  await nextTick()
+  assert.equal(f.value.value.decision_detail, 'compact')
+  assert.equal(f.value.value.workflow, settings().workflow)
+  assert.equal(f.value.value.agent_steps, settings().agent_steps)
+})

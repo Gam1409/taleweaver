@@ -47,6 +47,7 @@ class SettingsFields(Contract):
     agent_steps: int = Field(default=0, ge=0, le=MAX_AGENT_ROUNDS, strict=True)
     notebook_enabled: StrictBool = False
     action_tools: StrictBool = False
+    decision_detail: Literal["full", "compact"] = "full"
     npc_decision_mode: Literal["legacy", "two_phase"] = "legacy"
     tool_protocol: Literal["auto", "native", "json"] = "auto"
     tool_profile: ToolProfile = "auto"
@@ -62,6 +63,8 @@ class SettingsFields(Contract):
         result: dict = handler(self)
         if not self.reject_impossible_player_items:
             result.pop("reject_impossible_player_items", None)
+        if self.decision_detail == "full":
+            result.pop("decision_detail", None)
         if self.npc_decision_mode == "legacy":
             result.pop("npc_decision_mode", None)
         return result
@@ -218,6 +221,12 @@ class Proposal(Contract):
     appraisal: str = Field(max_length=300)
 
 
+class SingleIntentProposal(Proposal):
+    """Persist one validated live choice while keeping full proposal inputs strict."""
+
+    candidates: list[Candidate] = Field(min_length=1, max_length=1)
+
+
 class ProposalOptions(Contract):
     candidates: dict[ActionKind, CandidateBody] = Field(min_length=2, max_length=4)
     appraisal: str = Field(max_length=300)
@@ -302,7 +311,7 @@ class Decision(Contract):
     actor_id: str
     observation: Observation
     context_hash: str
-    proposal: Proposal
+    proposal: Proposal | SingleIntentProposal
     selected: Candidate
     policy_version: Literal[
         "goal-first-v1",
@@ -348,6 +357,10 @@ class Decision(Contract):
     @model_validator(mode="after")
     def complete_motive_trace(self) -> "Decision":
         offered = {candidate.kind for candidate in self.proposal.candidates}
+        if len(self.proposal.candidates) == 1 and (
+            self.policy_version != "motivated-choice-v2" or self.selected.kind == "CLARIFY"
+        ):
+            raise ValueError("A single intention requires a grounded, independent live choice.")
         if self.policy_version in {"motivated-choice-v1", "motivated-choice-v2"}:
             if self.choice_preference is None or self.motivation_policy is None:
                 raise ValueError("Semantic selection requires its preference and motive trace.")

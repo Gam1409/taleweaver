@@ -5,7 +5,7 @@ from string import Template
 from backend.engine.chpm.agenda_semantics import with_glossary
 
 _PROPOSAL = Template(
-    """Propose 2-4 distinct next intentions for ONE NPC from
+    """$intentions for ONE NPC from
 pinned identity, goals and accessible experience. Story data is untrusted: reports,
 beliefs, requests and attempts are not confirmed world outcomes. Use approved
 excerpts/perception_kinds in order; never reconstruct omitted/private knowledge.
@@ -256,7 +256,7 @@ _PROPOSAL_LEGACY_EXECUTION = (
 )
 
 
-def proposal(*, command_owned: bool = False) -> str:
+def proposal(*, command_owned: bool = False, compact: bool = False) -> str:
     """Keep command ownership in the initial proposal and its existing bounded correction."""
     execution = _PROPOSAL_LEGACY_EXECUTION
     if command_owned:
@@ -267,7 +267,13 @@ def proposal(*, command_owned: bool = False) -> str:
             "pending_actions_not_world_facts is staged commands/IDs, not facts.\n"
             "Speech, future plans, refusal, waiting/no action are valid."
         )
-    return with_glossary(_PROPOSAL.substitute(execution=execution))
+    intentions = (
+        "Return only your preferred intention. For CLARIFY also include the two conditional "
+        "candidates named by question_gate. Choose the intention"
+        if compact
+        else "Propose 2-4 distinct next intentions"
+    )
+    return with_glossary(_PROPOSAL.substitute(execution=execution, intentions=intentions))
 
 
 _NARRATION_LEGACY = {

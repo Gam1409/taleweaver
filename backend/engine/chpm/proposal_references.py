@@ -5,7 +5,12 @@ from typing import ClassVar, Literal
 
 from pydantic import AliasChoices, ConfigDict, Field, model_validator
 
-from backend.engine.chpm import agenda_references, experience_schema, json_contract
+from backend.engine.chpm import (
+    agenda_references,
+    compact_decision,
+    experience_schema,
+    json_contract,
+)
 from backend.engine.chpm.appraisal_contracts import Explanation, GroundedProposal
 from backend.engine.chpm.core.contracts import Contract, ExperienceValue, Identifier
 from backend.engine.chpm.core.limits import MAX_PROPOSED_FACT_CITATIONS
@@ -142,8 +147,10 @@ class ReferenceDraft(ReferenceContract):
             for item in body["developments"]:
                 for key in ("citations", "counterexamples"):
                     item[key] = [references.episode(c["episode_id"]) for c in item[key]]
-            return DevelopmentDraft.model_validate(body).materialize(catalogue)
-        return Draft.model_validate(body).materialize(catalogue)
+        schema = DevelopmentDraft if isinstance(self, ReferenceDevelopmentDraft) else Draft
+        if len(self.candidates) == 1:
+            schema = compact_decision.schema_for(schema)
+        return schema.model_validate(body).materialize(catalogue)
 
 
 class Development(ReferenceContract):

@@ -10,12 +10,12 @@ from backend.engine.chpm import (
     agent_lookup_payload,
     agent_native,
     cognitive_proposal,
+    development_request,
     inference,
     integrated_protocol,
     integrated_submission,
     json_contract,
     offered_tools,
-    proposal_actions,
     tool_operations,
 )
 from backend.engine.chpm.agent_tools import Tools
@@ -160,18 +160,18 @@ def _wire(
     remaining: int,
     history: list[dict],
     llm: Any,
-    limit: int,
+    settings: Settings,
 ) -> tuple[cognitive_proposal.Prepared, list[dict], list[dict]]:
     messages = _messages(prepared, tools, remaining, history)
     offered = _definitions(prepared, tools, remaining)
     if (
         "additional_actions" in prepared.schema.model_fields
-        and inference.tool_input_size(llm, messages, offered) > limit
+        and inference.tool_input_size(llm, messages, offered) > settings.max_input_chars
     ):
         # Preserve the existing actor context and ordinary tool rounds in tight windows.
         # The parser uses the same reduced schema that is sent to the model.
-        schema = proposal_actions.wire_schema(
-            issubclass(prepared.schema, proposal_actions.ActionDevelopmentDraft), False
+        schema = development_request.wire_schema(
+            settings, "developments" in prepared.schema.model_fields, False
         )
         prepared = replace(prepared, schema=schema)
         messages = _messages(prepared, tools, remaining, history)
@@ -218,9 +218,7 @@ async def request(
             if prepared.cached is not None:
                 return prepared.cached
             remaining = lookup_rounds - index
-            prepared, messages, offered = _wire(
-                prepared, tools, remaining, history, llm, settings.max_input_chars
-            )
+            prepared, messages, offered = _wire(prepared, tools, remaining, history, llm, settings)
             try:
                 turn = await integrated_protocol.read(
                     manager,

@@ -5,9 +5,11 @@ from typing import Literal, NamedTuple
 from backend.engine.chpm import (
     appraisal_context,
     cognitive_context,
+    compact_decision,
     development,
     development_context,
     motivation,
+    proposal_actions,
     proposal_references,
     two_phase_decision,
 )
@@ -29,6 +31,17 @@ class Prepared(NamedTuple):
     status: Literal["available", "not_yet_eligible", "deferred_input_budget"]
 
 
+def wire_schema(
+    settings: Settings, development: bool, actions: bool
+) -> type[proposal_references.ReferenceDraft]:
+    base = (
+        two_phase_decision.wire_schema(development)
+        if settings.npc_decision_mode == "two_phase"
+        else proposal_actions.wire_schema(development, actions)
+    )
+    return compact_decision.schema_for(base) if settings.decision_detail == "compact" else base
+
+
 def prepare(
     mind: Mind,
     observation: Observation,
@@ -42,6 +55,9 @@ def prepare(
     focus_subjects: tuple[str, ...] = (),
     reference_binding: dict | None = None,
 ) -> Prepared:
+    if settings.decision_detail == "compact":
+        # Keep cached full decisions distinct even when the visible evidence is identical.
+        supplied = {**supplied, "decision_detail": "compact"}
     available = development_context.episodes(
         mind, query=observation.player_request, focus_subjects=focus_subjects
     )
@@ -58,9 +74,7 @@ def prepare(
                 settings,
                 proposal_references.instructions(instruction + development.INSTRUCTIONS),
                 schema=DevelopmentProposal,
-                wire_schema=two_phase_decision.PhysicalDevelopmentDraft
-                if settings.npc_decision_mode == "two_phase"
-                else proposal_references.ReferenceDevelopmentDraft,
+                wire_schema=wire_schema(settings, True, False),
                 pinned=pinned,
                 pinned_beliefs=pinned_beliefs,
                 focus_subjects=focus_subjects,
@@ -89,9 +103,7 @@ def prepare(
         settings,
         proposal_references.instructions(instruction),
         extra={"development_context": body},
-        wire_schema=two_phase_decision.PhysicalDraft
-        if settings.npc_decision_mode == "two_phase"
-        else proposal_references.ReferenceDraft,
+        wire_schema=wire_schema(settings, False, False),
         pinned=pinned,
         pinned_beliefs=pinned_beliefs,
         focus_subjects=focus_subjects,

@@ -201,7 +201,7 @@ def resolve(
 
 
 INSTRUCTIONS = """
-MOTIVES: Give each of 2-4 plausible candidates 1-3 distinct motivation_context IDs,
+MOTIVES: Give each submitted candidate 1-3 distinct motivation_context IDs,
 supports/tension and specific relevance. appraisal_ref uses appraisal_context;
 context_ref uses outer input. One support must be the NPC's authored identity,
 trait, value, role, goal or active own agenda.

@@ -87,6 +87,8 @@ class CupRoles(LocalFailureRoles):
         result["candidates"]["REFUSE"]["intention"] = (
             "Decline to open the parcel and act on my own choice about the cup."
         )
+        if payload.get("decision_detail") == "compact":
+            del result["candidates"]["DEFER"]
         result["choice"] = preferred_choice(payload, preferred="REFUSE")
         result["physical_intent"] = {
             "mode": "act" if self.steps else "none",
@@ -112,13 +114,14 @@ class CupRoles(LocalFailureRoles):
         return json.dumps({"requests": [{"name": n, "arguments": a} for n, a in requests]})
 
 
-async def seed(db, protocol, *, pair):
+async def seed(db, protocol, *, pair, detail="full"):
     user, state = await seed_pair(db, policy="strict")
     config = load(state)
     config.settings = type(config.settings).model_validate(
         {
             **config.settings.model_dump(),
             "npc_decision_mode": "two_phase",
+            "decision_detail": detail,
             "action_tools": True,
             "workflow": "integrated",
             "actor_ids": ["LINA", "MILA"] if pair else ["LINA"],
@@ -184,14 +187,15 @@ async def test_prose_first_ordinary_entry_keeps_tier_zero_and_the_24k_cap(monkey
 
 
 @pytest.mark.parametrize("protocol", ["native", "json"])
+@pytest.mark.parametrize("detail", ["full", "compact"])
 async def test_competing_refusals_publish_one_cup_then_recall_only_own_result(
-    monkeypatch, protocol
+    monkeypatch, protocol, detail
 ):
     roles = CupRoles([TAKE])
     install(monkeypatch, roles)
     _, publications = observe(monkeypatch)
     async with TestSessionLocal() as db:
-        user, state = await seed(db, protocol, pair=True)
+        user, state = await seed(db, protocol, pair=True, detail=detail)
         user_id, session_id = user.id, state.session_id
         manager, events = await run(db, user, PLAYER)
         assert_committed(events)
@@ -215,6 +219,10 @@ async def test_competing_refusals_publish_one_cup_then_recall_only_own_result(
 
     async with TestSessionLocal() as db:
         user, manager, snapshot = await reload(db, session_id, user_id)
+        assert load(manager.state).settings.decision_detail == detail
+        assert len(load(manager.state).actors["LINA"].proposal.candidates) == (
+            1 if detail == "compact" else 2
+        )
         assert snapshot.owners[CUP] == "LINA"
         assert CUP not in [entry["id"] for entry in manager.avatar.inventory]
         roles.steps = []

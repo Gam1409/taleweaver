@@ -19,6 +19,7 @@ export interface ChpmSettings {
   agent_steps?: number
   notebook_enabled?: boolean
   action_tools?: boolean
+  decision_detail?: 'full' | 'compact'
   npc_decision_mode?: 'legacy' | 'two_phase'
   tool_protocol?: 'auto' | 'native' | 'json'
   tool_profile?: NpcToolProfile

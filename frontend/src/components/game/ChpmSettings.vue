@@ -35,6 +35,13 @@ defineExpose({ save })
         <span class="mt-1 block text-slate-400">Checks named items before narration. A blocked action shows the reason and your original words. The Small model uses the number of passes set in Intelligence settings.</span>
       </label>
       <template v-if="draft.mode !== 'off'">
+        <label v-if="!isCombatControl && draft.mode === 'live'" class="block text-xs text-slate-300">NPC decision detail
+          <select name="npc-decision-detail" :value="draft.decision_detail ?? 'full'" class="mt-1 w-full rounded-lg border border-slate-600 bg-slate-800 p-2" @change="draft.decision_detail = ($event.target as HTMLSelectElement).value as ChpmSettings['decision_detail']">
+            <option value="full">Full (default)</option>
+            <option value="compact">Compact</option>
+          </select>
+          <span class="mt-2 block text-slate-400">Full compares two to four intentions. Compact returns the chosen intention and its motives. A clarifying question includes what the NPC would do for each answer.</span>
+        </label>
         <label v-if="draft.mode === 'live'" class="block text-xs text-slate-300">NPC decision workflow
           <select name="npc-decision-workflow" :value="draft.workflow ?? 'staged'" class="mt-1 w-full rounded-lg border border-slate-600 bg-slate-800 p-2" @change="setWorkflow(($event.target as HTMLSelectElement).value as 'staged' | 'integrated')">
             <option value="staged" :disabled="isCombatControl">Staged — memory tools, then decision (default)</option>

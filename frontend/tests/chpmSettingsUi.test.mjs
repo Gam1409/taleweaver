@@ -243,3 +243,9 @@ test('item admission is an opt-in VN session control available in Standard mode'
   assert.match((await renderMode('vn', { reject_impossible_player_items: true })).match(control)[0], /checked/)
   assert.doesNotMatch(await renderMode('rpg'), control)
 })
+
+test('live dialogue exposes decision detail with and without tool rounds', async () => {
+  assert.match(await render(1, [], { host_mode: 'vn' }), /name="npc-decision-detail" value="full"/)
+  assert.match(await render(1, [], { host_mode: 'vn' }, { decision_detail: 'compact', agent_steps: 0 }), /name="npc-decision-detail" value="compact"/)
+  assert.doesNotMatch(await render(1, [], { host_mode: 'rpg' }), /name="npc-decision-detail"/)
+})

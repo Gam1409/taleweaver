@@ -17,6 +17,19 @@ in a session preserves that session's minds, notebook, agenda and witnessed memo
 Old saves load as Staged. With zero tool rounds, both use the existing decision
 path; Observe mode also keeps its existing path. No schema-version bump is needed.
 
+## NPC decision detail
+
+In Enabled dialogue mode, **NPC decision detail** controls how many intentions each
+NPC submits. **Full** is the default and requests two to four alternatives.
+**Compact** requests one chosen intention with its motives and continuity evidence.
+When the NPC chooses to ask a clarifying question, it also supplies the two
+conditional intentions so the engine can verify that the answer changes its decision.
+
+Both settings work with Staged and Integrated workflows, including two-phase world
+actions. The same memory, appraisal, action and narration checks apply. The choice
+is saved per session and can also be set in adventure defaults. Compare the decision
+phase timings on similar turns to measure the effect on your model.
+
 ## Contracts and limits
 
 Integrated reuses the native function adapter or its JSON compatibility port.

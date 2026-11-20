@@ -112,7 +112,10 @@ def prepare(
         actor_id=actor_id,
     ).model_dump(exclude_none=True)
     instruction = (
-        prompts.proposal(command_owned=tools is not None and tools.actions is not None)
+        prompts.proposal(
+            command_owned=tools is not None and tools.actions is not None,
+            compact=settings.decision_detail == "compact",
+        )
         + INSTRUCTIONS
         + (two_phase_decision.INSTRUCTIONS if two_phase else "")
         + motivation.INSTRUCTIONS
@@ -245,9 +248,9 @@ def prepare(
     return Prepared(
         instruction,
         payload,
-        two_phase_decision.wire_schema(schema is DevelopmentProposal)
-        if two_phase
-        else proposal_actions.wire_schema(schema is DevelopmentProposal, action_draft is not None),
+        development_request.wire_schema(
+            settings, schema is DevelopmentProposal, action_draft is not None
+        ),
         identifiers,
         accept,
         references,
