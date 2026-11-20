@@ -94,7 +94,7 @@ class HardRuleEvaluator:
             if isinstance(item, dict):
                 if item.get("id"):
                     inv_ids.add(str(item["id"]).strip().upper())
-                if item.get("name"):
+                elif item.get("name"):
                     inv_names.add(str(item["name"]).strip().upper())
             elif isinstance(item, str) and item.strip():
                 inv_ids.add(item.strip().upper())

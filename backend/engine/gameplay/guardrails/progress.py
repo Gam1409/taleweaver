@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from typing import Any, Optional
 
 from backend.core.state_rejection_trace import reject
-from backend.engine.gameplay.guardrails.base import GuardrailBase
+from backend.engine.gameplay.guardrails.base import GuardrailBase, entity_view
 from backend.engine.hard_rule_evaluator import HardRuleEvaluator
 from backend.engine.rule_engine import GameEvent
 from backend.models.world_entity import WorldEntity
@@ -18,35 +18,20 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class Accessibility:
-    """IDs and names (lower-cased) of everything the protagonist can reach this turn."""
+    """Canonical IDs reachable in the proposed turn."""
 
     ids: set[str] = field(default_factory=set)
-    names: set[str] = field(default_factory=set)
 
-    def mark(self, ent_id: Any, name: Any) -> None:
-        if ent_id:
-            self.ids.add(str(ent_id).lower().strip())
-        if name:
-            self.names.add(str(name).lower().strip())
+    def mark(self, entity_id: str | None) -> None:
+        if entity_id:
+            self.ids.add(entity_id.strip().casefold())
 
     def mark_items(self, items: Any) -> None:
         for item in items or []:
             if isinstance(item, dict):
-                self.mark(item.get("id"), item.get("name"))
-
-    def reaches(self, ent: WorldEntity) -> bool:
-        return bool(
-            (ent.id and ent.id.lower().strip() in self.ids)
-            or (ent.name and ent.name.lower().strip() in self.names)
-        )
-
-
-def _mentions(text_lower: str, ent: WorldEntity) -> bool:
-    """Word-boundary match so e.g. 'key' does not match 'keyboard'."""
-    return any(
-        token and re.search(r"\b" + re.escape(token.lower()) + r"\b", text_lower)
-        for token in (ent.id, ent.name)
-    )
+                self.mark(item.get("id"))
+            elif isinstance(item, str):
+                self.mark(item)
 
 
 class ProgressGuardMixin(GuardrailBase):
@@ -55,49 +40,37 @@ class ProgressGuardMixin(GuardrailBase):
     def _accessibility(self, event: GameEvent, entities: list[WorldEntity]) -> Accessibility:
         acc = Accessibility()
         scene = self.state.current_scene_id
+        movements = {move.entity_id: move.to_scene_id for move in event.moved_entities or []}
+        visibility = {
+            change.entity_id: change.is_hidden
+            for change in event.updated_entities or []
+            if change.is_hidden is not None
+        }
         for ent in entities:
-            if ent.current_scene_id == scene:
-                acc.mark(ent.id, ent.name)
-                if ent.entity_type == "NPC":
-                    acc.mark_items(ent.inventory)
-            if ent.is_in_inventory:
-                acc.mark(ent.id, ent.name)
+            view = entity_view(ent, self.state.entity_states or {})
+            present = movements.get(ent.id, view.scene_id) == scene and not visibility.get(
+                ent.id, view.hidden
+            )
+            if present or view.in_inventory:
+                acc.mark(ent.id)
+            if present and ent.entity_type == "NPC":
+                override = (self.state.entity_states or {}).get(ent.id, {})
+                acc.mark_items(override.get("inventory", ent.inventory))
         acc.mark_items(self.avatar.inventory)
         acc.mark_items(list((self.avatar.equipment or {}).values()))
         for item in [*(event.new_inventory_items or []), *(event.spawned_items or [])]:
-            acc.mark(item.id, item.name)
-        by_id = {e.id: e for e in entities}
-        for move in event.moved_entities or []:
-            if move.to_scene_id == scene:
-                moved = by_id.get(move.entity_id)
-                acc.mark(move.entity_id, moved.name if moved else None)
+            acc.mark(item.id)
         return acc
 
     @staticmethod
     def _depends_on_unreachable(
-        texts: list[Any], entities: list[WorldEntity], acc: Accessibility
+        requirement: str, entities: list[WorldEntity], acc: Accessibility
     ) -> bool:
-        for text in texts:
-            if not text:
-                continue
-            lowered = str(text).lower()
-            blocker = next(
-                (
-                    e
-                    for e in entities
-                    if (e.id or e.name) and _mentions(lowered, e) and not acc.reaches(e)
-                ),
-                None,
-            )
-            if blocker is not None:
-                logger.info(
-                    "[Quest/Award Guardrail] Blocked because text '%s' mentions inaccessible entity '%s' (%s)",
-                    text,
-                    blocker.name or "",
-                    blocker.id or "",
-                )
-                return True
-        return False
+        # Legacy authors embedded canonical ID tokens directly in the objective.
+        # Only uppercase technical tokens carry this meaning; display names and
+        # incidental mentions in descriptions cannot add a prerequisite.
+        ids = set(re.findall(r"(?<![\w-])[A-Z][A-Z0-9_-]*(?![\w-])", requirement))
+        return any(ent.id in ids and ent.id.casefold() not in acc.ids for ent in entities)
 
     def _hard_rules_unmet(self, rule_owner: dict[str, Any], event: GameEvent) -> str | None:
         if not HardRuleEvaluator.has_hard_rules(rule_owner):
@@ -116,7 +89,7 @@ class ProgressGuardMixin(GuardrailBase):
         self,
         keys: list[str],
         lookup: dict[str, dict[str, Any]],
-        text_fields: tuple[str, str],
+        objective_field: str,
         label: str,
         context: tuple[GameEvent, list[WorldEntity], Accessibility],
     ) -> list[str]:
@@ -146,7 +119,9 @@ class ProgressGuardMixin(GuardrailBase):
                     "[%s Guardrail] Blocked '%s' due to unmet hard rule: %s", label, key, unmet
                 )
                 continue
-            if self._depends_on_unreachable([owner.get(f) for f in text_fields], entities, acc):
+            if not HardRuleEvaluator.has_hard_rules(owner) and self._depends_on_unreachable(
+                str(owner.get(objective_field) or ""), entities, acc
+            ):
                 reject(
                     "progression",
                     "inaccessible_dependency",
@@ -187,7 +162,7 @@ class ProgressGuardMixin(GuardrailBase):
                 if isinstance(q.get("id"), str)
             }
             event.completed_quest_ids = self._validated(
-                event.completed_quest_ids, quests, ("goal", "description"), "Quest", context
+                event.completed_quest_ids, quests, "goal", "Quest", context
             )
         if event.earned_award_keys:
             awards = {
@@ -196,7 +171,7 @@ class ProgressGuardMixin(GuardrailBase):
                 if isinstance(a.get("key"), str)
             }
             event.earned_award_keys = self._validated(
-                event.earned_award_keys, awards, ("requirement", "description"), "Award", context
+                event.earned_award_keys, awards, "requirement", "Award", context
             )
 
     def _guard_expression(self, field_name: str) -> str:

@@ -169,3 +169,21 @@ async def test_initiative_uses_real_concordia_without_committing_actions():
     result = await concordia_adapter.decide({"actor": {"id": "NPC"}}, callback)
     assert result == proposal
     callback.assert_awaited_once()
+
+
+def test_addressed_speech_resolves_a_reference_before_reading_the_body(monkeypatch):
+    monkeypatch.setattr(conversation, "physically_present", lambda actor, state: True)
+    state = SimpleNamespace(entity_states={})
+    one = SimpleNamespace(id="NPC_ONE", name="Mira", entity_type="NPC")
+    two = SimpleNamespace(id="NPC_TWO", name="Mira", entity_type="NPC")
+    audience = [one, two]
+    assert (
+        conversation.select_actor(state, "Will you help NPC_ONE?", audience, addressee=two.id)
+        is two
+    )
+    assert conversation.select_actor(state, "Will you help?", audience, addressee="Mira") is None
+    assert conversation.select_actor(state, "Will you help?", [one], addressee="absent") is None
+    two.name = "Lina"
+    assert (
+        conversation.select_actor(state, "Will you help Mira?", audience, addressee="Lina") is two
+    )

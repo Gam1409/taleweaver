@@ -9,7 +9,7 @@ from typing import Any, Literal
 
 from pydantic import ConfigDict, Field, model_validator
 
-from backend.core.text_evidence import WithEvidenceSpan
+from backend.core.text_evidence import WithEvidenceSpan, grounded_occurrence
 
 
 def digest(text: str) -> str:
@@ -140,11 +140,7 @@ def reconcile(
             key in known
             and counts[change.item_id] == 1
             and key not in seen
-            and change.evidence in narration
-            and (
-                change.evidence_span is None
-                or change.evidence_span.matches(narration, change.evidence)
-            )
+            and grounded_occurrence(narration, change.evidence, change.evidence_span)
             and (
                 change.status != "confirmed"
                 or bool(change.spatial_position and change.spatial_position in change.evidence)

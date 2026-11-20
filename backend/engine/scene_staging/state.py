@@ -8,6 +8,7 @@ from typing import Any
 
 from pydantic import TypeAdapter, ValidationError
 
+from backend.core.text_evidence import grounded_occurrence
 from backend.engine.scene_staging import props
 from backend.engine.scene_staging.room_items import placement_targets
 from backend.engine.scene_staging.schema import Placement, Posture, SceneDelta, SceneExtraction
@@ -100,11 +101,7 @@ def _validate_explicit(
         if (
             any(participant not in known for participant in participants)
             or len(participants) < minimum
-            or delta.evidence not in narration
-            or (
-                delta.evidence_span is not None
-                and not delta.evidence_span.matches(narration, delta.evidence)
-            )
+            or not grounded_occurrence(narration, delta.evidence, delta.evidence_span)
         ):
             rejected += 1
             continue
@@ -186,11 +183,7 @@ def reconcile(
             change.entity_id not in known
             or change.entity_id in uncertain
             or counts[change.entity_id] > 1
-            or change.evidence not in narration
-            or (
-                change.evidence_span is not None
-                and not change.evidence_span.matches(narration, change.evidence)
-            )
+            or not grounded_occurrence(narration, change.evidence, change.evidence_span)
             or (not valid_target and change.posture is None)
         ):
             rejected += 1

@@ -2,8 +2,7 @@
 
 A CONSTRUCTABLE is a hidden object that materializes when the player combines ALL of its
 ``combination_ingredients`` (minimum 2). Crafting requires the GM's ``combination_intent``
-(set by the LLM in any language), every ingredient to be reachable, and at least one
-ingredient to be referenced (or the GM granting the result directly).
+(set by the LLM in any language), reachable ingredients and an unambiguous result.
 """
 
 from __future__ import annotations
@@ -12,7 +11,12 @@ import logging
 import re
 from dataclasses import dataclass, field
 
-from backend.engine.gameplay.guardrails.base import GuardrailBase, item_id_upper
+from backend.engine.gameplay.guardrails.base import (
+    GuardrailBase,
+    GuardrailNotice,
+    entity_view,
+    item_id_upper,
+)
 from backend.engine.rule_engine import GameEvent, InventoryItem
 from backend.engine.switch_service import SwitchService
 from backend.models.world_entity import WorldEntity
@@ -20,18 +24,15 @@ from backend.models.world_entity import WorldEntity
 logger = logging.getLogger(__name__)
 
 MIN_INGREDIENTS = 2
-MIN_TOKEN_LENGTH = 3
 
 
 @dataclass
 class CraftingState:
     """Per-turn crafting bookkeeping."""
 
-    lowered_msg: str
     entities_by_id: dict[str, WorldEntity]
     inventory_ids: dict[str, str]  # upper id -> original id (for removal)
     accessible_ids: set[str]
-    consumed: set[str] = field(default_factory=set)
     constructed: set[str] = field(default_factory=set)
     messages: list[str] = field(default_factory=list)
 
@@ -47,10 +48,28 @@ def _granted_by_gm(event: GameEvent, entity_id: str) -> bool:
     return any(item_id_upper(item) == entity_id.upper() for item in items)
 
 
+def _legacy_ingredients(text: str, cs: CraftingState) -> set[str]:
+    """Resolve old flag-only responses using whole, unambiguous inventory/catalog tokens."""
+    aliases: dict[str, set[str]] = {}
+    for identifier in cs.accessible_ids:
+        ent = cs.entities_by_id.get(identifier)
+        for token in (identifier, ent.name if ent else None):
+            if token:
+                aliases.setdefault(token.casefold(), set()).add(identifier)
+    mentioned = set()
+    folded = text.casefold()
+    for alias, identifiers in aliases.items():
+        if len(identifiers) == 1 and re.search(
+            r"(?<![\w-])" + re.escape(alias) + r"(?![\w-])", folded
+        ):
+            mentioned.update(identifiers)
+    return mentioned
+
+
 class CraftingGuardMixin(GuardrailBase):
     """Resolves crafting and reverts constructables the GM produced without crafting."""
 
-    def _crafting_state(self, entities: list[WorldEntity], lowered: str) -> CraftingState:
+    def _crafting_state(self, entities: list[WorldEntity]) -> CraftingState:
         inventory_ids = {
             str(i["id"]).strip().upper(): str(i["id"])
             for i in self.avatar.inventory or []
@@ -58,14 +77,15 @@ class CraftingGuardMixin(GuardrailBase):
         }
         scene_ids = set()
         for ent in entities:
-            # Scene presence uses the stored location; only the hidden flag honours overrides.
-            in_scene = (
-                ent.current_scene_id == self.state.current_scene_id and not ent.is_in_inventory
-            )
-            if ent.id and in_scene and not self._is_hidden_now(ent):
+            view = entity_view(ent, self.state.entity_states or {})
+            if (
+                ent.id
+                and view.scene_id == self.state.current_scene_id
+                and not view.in_inventory
+                and not view.hidden
+            ):
                 scene_ids.add(ent.id.upper())
         return CraftingState(
-            lowered_msg=lowered,
             entities_by_id={e.id.upper(): e for e in entities if e.id},
             inventory_ids=inventory_ids,
             accessible_ids=set(inventory_ids) | scene_ids,
@@ -77,24 +97,12 @@ class CraftingGuardMixin(GuardrailBase):
             return bool(override["is_hidden"])
         return bool(ent.is_hidden)
 
-    @staticmethod
-    def _ingredient_referenced(needed: set[str], cs: CraftingState) -> bool:
-        for ingredient in needed:
-            ent = cs.entities_by_id.get(ingredient)
-            for token in (ingredient, ent.name if ent and ent.name else ""):
-                low = token.lower()
-                if len(low) >= MIN_TOKEN_LENGTH and re.search(
-                    r"\b" + re.escape(low) + r"\b", cs.lowered_msg
-                ):
-                    return True
-        return False
-
     def _is_craftable(self, ent: WorldEntity, needed: set[str], cs: CraftingState) -> bool:
-        if len(needed) < MIN_INGREDIENTS or ent.id.upper() in cs.consumed:
-            return False
-        if not self._is_hidden_now(ent) or needed & cs.consumed:
-            return False
-        return needed.issubset(cs.accessible_ids)
+        return (
+            len(needed) >= MIN_INGREDIENTS
+            and self._is_hidden_now(ent)
+            and needed.issubset(cs.accessible_ids)
+        )
 
     async def _craft_guard_blocks(self, ent: WorldEntity) -> list[str] | None:
         """Runs the craft guard expression; returns failure messages or None when allowed."""
@@ -117,22 +125,20 @@ class CraftingGuardMixin(GuardrailBase):
             or detail
             or f"You cannot construct {ent.name} right now."
         )
-        await self._save_chat_message("system", fail_text)
-        return [*messages, fail_text]
+        return [*(GuardrailNotice(message) for message in messages), fail_text]
 
     def _consume_ingredients(self, event: GameEvent, needed: set[str], cs: CraftingState) -> bool:
         """Removes inventory ingredients / hides scene ingredients. True if all came from the inventory."""
         all_in_inventory = True
-        for ingredient in needed:
+        for ingredient in sorted(needed):
             if ingredient in cs.inventory_ids:
                 event.removed_inventory_item_ids = event.removed_inventory_item_ids or []
                 original = cs.inventory_ids[ingredient]
                 if original not in event.removed_inventory_item_ids:
                     event.removed_inventory_item_ids.append(original)
             else:
-                self._upsert_entity_update(event, ingredient, is_hidden=True)
+                self._upsert_entity_update(event, cs.entities_by_id[ingredient].id, is_hidden=True)
                 all_in_inventory = False
-            cs.consumed.add(ingredient)
         return all_in_inventory
 
     async def _craft(
@@ -156,17 +162,17 @@ class CraftingGuardMixin(GuardrailBase):
 
         names = [
             cs.entities_by_id[i].name if i in cs.entities_by_id and cs.entities_by_id[i].name else i
-            for i in needed
+            for i in sorted(needed)
         ]
-        cs.messages.append(f"You combine {', '.join(names)} to create {ent.name}!")
+        cs.messages.append(GuardrailNotice(f"You combine {', '.join(names)} to create {ent.name}!"))
         meta = dict(ent.metadata_json or {})
         if meta.get("on_craft_success_script"):
-            cs.messages += await self.manager._execute_inline_script(
+            messages = await self.manager._execute_inline_script(
                 meta["on_craft_success_script"], "on_craft_success", ent.id
             )
+            cs.messages.extend(GuardrailNotice(message) for message in messages)
         if meta.get("on_craft_success_text"):
-            await self._save_chat_message("system", meta["on_craft_success_text"])
-            cs.messages.append(meta["on_craft_success_text"])
+            cs.messages.append(GuardrailNotice(meta["on_craft_success_text"]))
         logger.info(
             "[Turn %s] CONSTRUCTABLE '%s' materialized from ingredients %s",
             self.game_id,
@@ -174,20 +180,76 @@ class CraftingGuardMixin(GuardrailBase):
             sorted(needed),
         )
 
+    @staticmethod
+    def _discard_proposed_consumption(event: GameEvent, ingredients: set[str]) -> None:
+        # The recipe owner consumes these IDs only after selection and validation.
+        # Keep unrelated changes proposed in the same turn.
+        if event.removed_inventory_item_ids:
+            event.removed_inventory_item_ids = [
+                identifier
+                for identifier in event.removed_inventory_item_ids
+                if identifier.upper() not in ingredients
+            ]
+        if event.deleted_entities:
+            event.deleted_entities = [
+                identifier
+                for identifier in event.deleted_entities
+                if identifier.upper() not in ingredients
+            ]
+        for change in list(event.updated_entities or []):
+            if change.entity_id.upper() in ingredients and change.is_hidden is True:
+                change.is_hidden = None
+                if (
+                    not change.model_dump(exclude={"entity_id"}, exclude_none=True)
+                    and event.updated_entities
+                ):
+                    event.updated_entities.remove(change)
+
+    @staticmethod
+    def _recipe_candidates(
+        event: GameEvent, constructables: list[WorldEntity], cs: CraftingState, user_msg: str
+    ) -> tuple[list[WorldEntity], set[str]]:
+        selected = (event.combination_result_id or "").strip().upper()
+        ingredients = {value.strip().upper() for value in event.combination_ingredient_ids or []}
+        grants = [ent for ent in constructables if _granted_by_gm(event, ent.id)]
+        if selected:
+            candidates = [ent for ent in constructables if ent.id.upper() == selected]
+        elif grants:
+            candidates = grants
+        else:
+            ingredients = ingredients or _legacy_ingredients(user_msg, cs)
+            candidates = constructables if ingredients else []
+        protected = set(ingredients)
+        if selected or grants:
+            for recipe in candidates:
+                protected.update(_ingredients(recipe))
+        if ingredients:
+            candidates = [ent for ent in candidates if _ingredients(ent) == ingredients]
+        return candidates, protected
+
     async def _try_craft(
-        self, event: GameEvent, constructables: list[WorldEntity], cs: CraftingState
+        self, event: GameEvent, constructables: list[WorldEntity], cs: CraftingState, user_msg: str
     ) -> None:
-        for ent in constructables:
-            needed = _ingredients(ent)
-            if not self._is_craftable(ent, needed, cs):
-                continue
-            if not self._ingredient_referenced(needed, cs) and not _granted_by_gm(event, ent.id):
-                continue
-            blocked = await self._craft_guard_blocks(ent)
-            if blocked is not None:
-                cs.messages += blocked
-                continue
-            await self._craft(event, ent, needed, cs)
+        candidates, protected = self._recipe_candidates(event, constructables, cs, user_msg)
+        self._discard_proposed_consumption(event, protected)
+        explicit = bool(event.combination_result_id or event.combination_ingredient_ids)
+        if len(candidates) != 1:
+            if len(candidates) > 1 or explicit:
+                cs.messages.append("Crafting requires one known result item ID.")
+            return
+        ent = candidates[0]
+        needed = _ingredients(ent)
+        if not self._is_craftable(ent, needed, cs):
+            if explicit:
+                cs.messages.append(
+                    "The selected recipe is unavailable or its ingredients cannot be reached."
+                )
+            return
+        blocked = await self._craft_guard_blocks(ent)
+        if blocked is not None:
+            cs.messages.extend(blocked)
+            return
+        await self._craft(event, ent, needed, cs)
 
     @staticmethod
     def _violation(kind: str, ent: WorldEntity | None, cid: str, fallback_name: str) -> str:
@@ -258,10 +320,9 @@ class CraftingGuardMixin(GuardrailBase):
         ]
         if not constructables:
             return []
-        lowered = (user_msg or "").strip().lower()
-        cs = self._crafting_state(entities, lowered)
-        if lowered and event.combination_intent:
-            await self._try_craft(event, constructables, cs)
+        cs = self._crafting_state(entities)
+        if event.combination_intent:
+            await self._try_craft(event, constructables, cs, user_msg)
 
         by_id = {e.id.upper(): e for e in constructables}
         for cid, ent in by_id.items():

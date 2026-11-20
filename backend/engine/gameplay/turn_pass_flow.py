@@ -15,6 +15,7 @@ from collections.abc import AsyncGenerator, Iterator
 from typing import Any
 
 from backend.core.game_modes import is_vn
+from backend.engine.gameplay.guardrails.base import GuardrailNotice
 from backend.engine.mutation_targets import validate_mutation_targets
 from backend.engine.rule_engine import GameEvent, GameOverException, RuleEngine
 from backend.engine.visual_novel.time import boundary_elapsed_time
@@ -60,8 +61,9 @@ async def run_guardrail_chain(
         enforce = getattr(manager, method_name)
         args = (game_event, user_msg) if takes_user_msg else (game_event,)
         messages = await enforce(*args)
-        rule_violations.extend(messages)
         for message in messages:
+            if not isinstance(message, GuardrailNotice):
+                rule_violations.append(message)
             await manager._save_chat_message("system", message)
             yield sse_system(message)
 

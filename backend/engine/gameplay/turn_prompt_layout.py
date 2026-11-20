@@ -28,6 +28,8 @@ _OUTCOME_EXCLUDED_FIELDS = {
     "requested_skill_checks",
     "requested_attacks",
     "combination_intent",
+    "combination_result_id",
+    "combination_ingredient_ids",
 }
 
 

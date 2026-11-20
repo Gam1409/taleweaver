@@ -48,7 +48,17 @@ def unique_span(text: str, quote: str, span: EvidenceSpan | None) -> EvidenceSpa
     if span is not None:
         require_span(text, quote, span)
         return span
+    start = _unique_start(text, quote)
+    return EvidenceSpan(start=start, end=start + len(quote)) if start is not None else None
+
+
+def _unique_start(text: str, quote: str) -> int | None:
     start = text.find(quote)
     if not quote or start < 0 or text.find(quote, start + 1) >= 0:
         return None
-    return EvidenceSpan(start=start, end=start + len(quote))
+    return start
+
+
+def grounded_occurrence(text: str, quote: str, span: EvidenceSpan | None) -> bool:
+    """Reject ambiguous legacy quotes and do not relocate a supplied incorrect span."""
+    return span.matches(text, quote) if span is not None else _unique_start(text, quote) is not None

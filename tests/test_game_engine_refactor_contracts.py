@@ -74,11 +74,12 @@ def test_hard_item_rules_keep_legacy_representation_identity():
     state = SimpleNamespace(entity_states={"STATE_ITEM": {"is_in_inventory": True}})
     avatar = SimpleNamespace(inventory=[SimpleNamespace(id="OBJECT_ID", name="Object name")])
     assert HardRuleEvaluator.check_item_rule("object_id", avatar, state)
-    # Objects historically prefer their ID, while dictionaries expose both ID and name.
+    # Canonical IDs win for every representation. Legacy name-only rows still resolve.
     assert not HardRuleEvaluator.check_item_rule("Object name", avatar, state)
-    assert HardRuleEvaluator.check_item_rule(
+    assert not HardRuleEvaluator.check_item_rule(
         "dict name", avatar, state, [{"id": "D", "name": "Dict name"}]
     )
+    assert HardRuleEvaluator.check_item_rule("Legacy", avatar, state, [{"name": "Legacy"}])
     assert HardRuleEvaluator.check_item_rule("state_item", avatar, state)
 
 

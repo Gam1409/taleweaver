@@ -14,6 +14,7 @@ from backend.engine.living_world.deliberation import require_compatible, require
 from backend.engine.living_world.dialogue_context import recent_context
 from backend.engine.living_world.dialogue_memory import Choice, grounded_choice, previous_context
 from backend.engine.living_world.state import load, save
+from backend.engine.mutation_targets import TargetIndex
 from backend.engine.npc_presence import physically_present
 from backend.engine.personality.profile import personality_context
 from backend.engine.turn_replay.transactions import release_for_model
@@ -63,7 +64,9 @@ This is a proposal, not completed action. Do not write dialogue or claim consequ
 """
 
 
-def select_actor(state: Any, message: str, visible: list[Any]) -> Any | None:
+def select_actor(
+    state: Any, message: str, visible: list[Any], *, addressee: str | None = None
+) -> Any | None:
     if message.lstrip().startswith("[") or not (
         BRANCH.search(message) or INITIATIVE.fullmatch(message.strip())
     ):
@@ -76,6 +79,13 @@ def select_actor(state: Any, message: str, visible: list[Any]) -> Any | None:
         and physically_present(actor, state)
         and not (state.entity_states or {}).get(actor.id, {}).get("is_defeated", False)
     ]
+    if addressee:
+        # An explicit /say recipient takes precedence over names in the speech.
+        # Check the visible roster first so an ineligible namesake cannot redirect it.
+        roster = [actor for actor in visible if actor.entity_type == "NPC"]
+        index = TargetIndex([{"id": actor.id, "name": actor.name} for actor in roster])
+        recipient_id = index.resolve(addressee)
+        return next((actor for actor in candidates if actor.id == recipient_id), None)
     mentioned = [
         actor
         for actor in candidates
@@ -136,7 +146,13 @@ async def prepare_choice(
         getattr(manager, "_turn_replay_recorded", False) or getattr(manager, "_replaying", False)
     ):
         return ""  # Never wait on a model inside an unrecoverable SQL transaction.
-    actor = select_actor(manager.state, message, visible)
+    address = getattr(manager, "_addressed_speech", None)
+    actor = select_actor(
+        manager.state,
+        address[1] if address else message,
+        visible,
+        addressee=address[0] if address else None,
+    )
     if actor is None:
         return ""
     try:

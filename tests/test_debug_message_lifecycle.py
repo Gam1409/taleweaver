@@ -3,7 +3,6 @@
 import importlib.util
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
 
 import pytest
 from alembic.migration import MigrationContext
@@ -73,7 +72,6 @@ async def test_unprefixed_debug_output_remains_debug_after_reload_and_session_co
         user, adventure, avatar, state = await _seed_game_context(db)
         manager = GameTurnManager(db, state.session_id, user)
         manager.state, manager.avatar, manager.adventure = state, avatar, adventure
-        manager._unhide_entities_in_text = AsyncMock()
         with debug_message_scope(manager):
             diagnostic = await manager._save_chat_message(
                 "assistant", "Generated technical output without a prefix."

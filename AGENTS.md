@@ -87,6 +87,9 @@ and historical reports. Local agent tooling is optional.
      Shared SQL storage or a mutable Python object does not authorize another
      subsystem to rewrite its state. Model proposals and generated assets do not
      become world facts by themselves.
+   - Base state mutations and rejections on canonical IDs, validated operations and
+     typed outcomes. Chat display text cannot authorize changes. When a decision
+     needs narrative evidence, bind its exact occurrence to the original source.
    - Preserve input/output, failure, budget and lifecycle contracts for local
      changes. When a contract changes, update affected producers, consumers,
      documentation and meaningful boundary tests together. Do not hide a breaking

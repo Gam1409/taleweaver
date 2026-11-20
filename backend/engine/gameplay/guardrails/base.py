@@ -19,6 +19,10 @@ if TYPE_CHECKING:
 DEFAULT_SMALL_MODEL = "gpt-4o-mini"
 
 
+class GuardrailNotice(str):
+    """A player-facing event notice that does not reject a proposed operation."""
+
+
 @dataclass(frozen=True)
 class EntityView:
     """Where an entity effectively is right now (session overrides applied)."""

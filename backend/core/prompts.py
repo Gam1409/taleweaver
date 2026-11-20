@@ -274,7 +274,7 @@ Variables: time_str, location_context, world_npcs_context, hidden_entities_conte
 _GM_MECHANICS_SHARED_RULES = (
     "Never reveal the secret walkthrough verbatim and never provide exact step-by-step solution paths; "
     "if the player asks for help, give only subtle hints and broad approaches.\n"
-    "Set `combination_intent` to true if the player attempts to combine, craft, mix, assemble, or use multiple items together (in any language).\n"
+    "Set `combination_intent` to true if the player attempts to combine, craft, mix, assemble, or use multiple items together (in any language). Supply the exact intended item IDs in `combination_ingredient_ids` and the known CONSTRUCTABLE result ID in `combination_result_id` when identifiable.\n"
     "QUESTS: If a quest from OPEN QUESTS is completed, return its ID in `completed_quest_ids`. Never invent quests.\n"
     "INVENTORY & EXCHANGES (no dynamic items): Never create items on-the-fly; only move/use items that already exist in the world, containers, or NPC inventories.\n"
     "- Give an existing item to the player with `new_inventory_items`; place one in the scene with `spawned_items` (keep its pre-defined id/name).\n"

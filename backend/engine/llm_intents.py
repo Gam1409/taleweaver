@@ -79,6 +79,8 @@ if TYPE_CHECKING:
         completed_quest_ids: Optional[list[str]]
         earned_award_keys: Optional[list[str]]
         sequence_completed: bool
+        combination_ingredient_ids: Optional[list[str]]
+        combination_result_id: Optional[str]
         combination_intent: bool
         remember_notes: Optional[list[str]]
         forget_notes: Optional[list[str]]

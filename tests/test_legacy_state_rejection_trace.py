@@ -37,9 +37,7 @@ def _manager():
     manager.state.completed_guard_expression = "False"
     manager.state.gameover_guard_expression = "False"
     manager.avatar.hp = 100
-    manager.adventure = SimpleNamespace(
-        awards=[{"key": "A", "requirement": "Find the remote relic."}]
-    )
+    manager.adventure = SimpleNamespace(awards=[{"key": "A", "requirement": "Find RELIC."}])
     entities = [
         WorldEntity(
             id="RELIC",

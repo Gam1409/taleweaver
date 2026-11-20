@@ -69,30 +69,40 @@ def _repeated_issue(
     quote = previous.sources.get((actor, source_hash))
     if not isinstance(quote, str):
         raise PoseAuditUnavailableError("The rejected physical source cannot be rechecked.")
-    start = narration.find(quote)
-    if start < 0:
-        return None
-    anchor = next(
-        (key for key, row in spans(narration).items() if row.start <= start < row.end), None
-    )
-    if anchor is None:
-        return None
+    # A repair can move or repeat the original sentence. Each surviving
+    # occurrence needs its own current classification before the issue is cleared.
+    passages = spans(narration)
     classified = [
         action
         for action in actions
         if action.evidence_span is not None
         and action.evidence_span.matches(narration, action.evidence)
-        and action.evidence_span.start <= start
-        and action.evidence_span.end >= start + len(quote)
         and action.poses is not None
     ]
-    if _resolved(issue, classified):
-        return None
-    return {
-        **issue,
-        "passage_id": anchor,
-        "expected_public_result": {"current_owner_pose": current.get(issue["actor_id"], {})},
-    }
+    start = narration.find(quote)
+    while start >= 0 and quote:
+        covering = [
+            action
+            for action in classified
+            if action.evidence_span is not None
+            and action.evidence_span.start <= start
+            and action.evidence_span.end >= start + len(quote)
+        ]
+        if not _resolved(issue, covering):
+            anchor = next(
+                (key for key, row in passages.items() if row.start <= start < row.end), None
+            )
+            if anchor is None:
+                raise PoseAuditUnavailableError(
+                    "The repeated physical source has no current passage."
+                )
+            return {
+                **issue,
+                "passage_id": anchor,
+                "expected_public_result": {"current_owner_pose": current.get(actor, {})},
+            }
+        start = narration.find(quote, start + 1)
+    return None
 
 
 def repeat(

@@ -211,3 +211,16 @@ template release so existing playthroughs retain their snapshots and assets.
 Full saved-session history, World Info and notebooks belong in a session transfer,
 not in this blueprint. Export and publication preparation are separate actions;
 preparing a compatible local copy does not publish it online.
+
+### Runtime references for crafting and progression
+
+The mechanics pass identifies a crafting attempt with `combination_intent` and
+`combination_ingredient_ids`. It can supply `combination_result_id` to distinguish
+recipes with the same ingredients. The engine checks the authored recipe and current
+access to every ingredient before consuming anything. Older flag-only responses
+need one complete, unambiguous set of ingredient references or an explicit result grant.
+
+Use `required_item_id`, `required_scene_id` and `required_defeated_npc_id` for
+deterministic quest and award conditions. Older goals and award requirements can
+refer to a reachable entity by its exact uppercase ID. Display names and flavor
+descriptions do not add an accessibility requirement.

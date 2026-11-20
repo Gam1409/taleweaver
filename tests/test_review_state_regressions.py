@@ -151,7 +151,6 @@ async def test_model_boundary_releases_writer_and_recovery_preserves_input(tmp_p
                 state=state,
                 avatar=avatar,
                 adventure=adventure,
-                _unhide_entities_in_text=AsyncMock(),
             )
             await service.record_before(manager, "I enter the room.")
             message = await GameTurnManager._save_chat_message(manager, "user", "I enter the room.")

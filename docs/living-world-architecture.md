@@ -141,6 +141,11 @@ A frozen prepared snapshot contains only bounded plain data. Existing shared
 inference fencing remains independent of game snapshots, since rewind cannot stop
 remote GPU work. The supported deployment is still a single backend worker.
 
+For an addressed conversation, `/say to NPC_ID: text` and the interface's
+`/say to Name: text` select a present, eligible speaker. An exact ID resolves
+namesakes. An ambiguous or unavailable addressee skips the private choice.
+Names mentioned inside the speech do not redirect an addressed conversation.
+
 ## Memory and context budgets
 
 No second vector store is introduced. Private state remains inside the existing

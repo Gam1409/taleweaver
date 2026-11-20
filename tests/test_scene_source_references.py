@@ -370,3 +370,64 @@ async def test_shared_sources_persist_for_room_pose_condition_prop_and_item(monk
         assert item["narration_source"]["revision_id"] == message.revision_id
         assert item["accepted"][0]["evidence_span"] == prop["evidence_span"]
         assert len(calls) == 1
+
+
+def test_repeated_action_requires_an_occurrence_and_repair_checks_both_copies():
+    from backend.engine.npc_actions.pose_audit_sources import Pending, digest, repeat
+    from backend.engine.scene_continuity.ledger import _actions
+
+    quote = "Mira sits down."
+    text = quote + " " + quote
+    raw = {"actor_ids": ["MIRA"], "evidence": quote, "detail": quote, "poses": []}
+    accepted, errors = _actions([raw], text, {"MIRA"})
+    assert errors and not accepted
+    first = {**raw, "evidence_span": {"start": 0, "end": len(quote)}}
+    second = {**raw, "evidence_span": {"start": len(quote) + 1, "end": len(text)}}
+    accepted, errors = _actions([second], text, {"MIRA"})
+    assert not errors and accepted[0].evidence_span.start == len(quote) + 1
+
+    issue = {
+        "reason_code": "pose_classification_required",
+        "actor_id": "MIRA",
+        "source_passage_hash": digest(quote),
+    }
+    pending = Pending({}, digest(quote), "", "review", {("MIRA", digest(quote)): quote})
+    retry = SimpleNamespace(proof=SimpleNamespace(review_scope="review"), failures=[issue])
+    assert repeat(pending, retry, text, [first], {})[0]["passage_id"] == "p1"
+    assert repeat(pending, retry, text, [first, second], {}) == []
+
+
+@pytest.mark.parametrize("bound", [False, True])
+def test_repeated_quote_has_one_policy_across_scene_owners(bound):
+    from backend.engine.scene_staging import props
+    from backend.engine.scene_staging.schema import SceneExtraction
+    from backend.engine.scene_staging.state import reconcile
+    from tests.test_scene_continuity import apply_to, message, update
+    from tests.test_scene_staging import CAST, state
+
+    quote = "Hero sits on the bench."
+    text = quote + " " + quote
+    anchor = {"evidence_span": {"start": len(quote) + 1, "end": len(text)}} if bound else {}
+    _, errors = apply_to(updates=[update(evidence=quote, **anchor)], reply=message(text=text))
+    assert bool(errors) is not bound
+
+    session = state()
+    proposal = {"entity_id": "hero", "posture": "sitting", "evidence": quote, **anchor}
+    outcome = reconcile(
+        session, CAST, text, SceneExtraction.model_validate({"changes": [proposal]})
+    )
+    assert ("hero" in outcome["actors"]) is bound
+    assert outcome["rejected"] == int(not bound)
+
+    prop = {"item_id": "BAG", "owner_id": "hero"}
+    change = props.PropDelta.model_validate(
+        {
+            **prop,
+            "status": "confirmed",
+            "spatial_position": "on the bench",
+            "evidence": quote,
+            **anchor,
+        }
+    )
+    assert props.reconcile(session, text, [change], [prop]) == int(not bound)
+    assert bool(session.entity_states[props.KEY]["items"]) is bound

@@ -438,38 +438,8 @@ class GameTurnManager:
         self._checkpoint_scene_label = None
         return checkpoint_events
 
-    async def _unhide_entities_in_text(self, text: str) -> None:
-        """Scan text for entity ID tokens like 'ID: TALKING_RAT' and set their
-        session override `is_hidden` to False so they appear in the scene.
-        """
-        if not text:
-            return
-        ids = set(re.findall(r"ID:\s*([A-Z0-9_]+)", text or ""))
-        if not ids or not self.state:
-            return
-        states = dict(self.state.entity_states or {})
-        changed = False
-        for eid in ids:
-            if eid not in states:
-                states[eid] = {}
-            if states[eid].get("is_hidden") is not False:
-                states[eid]["is_hidden"] = False
-                changed = True
-        if changed:
-            self.state.entity_states = states
-            flag_modified(self.state, "entity_states")
-            if getattr(self, "_atomic_post_turn_hook", False):
-                return
-            try:
-                await self.db.commit()
-            except Exception:
-                # Don't let unhide failures break the turn; log and continue
-                logger.exception("Failed to commit entity unhide changes")
-
     async def _save_chat_message(self, role: str, content: str) -> ChatMessage:
-        """Persist a ChatMessage and run post-save processing (unhide referenced entities).
-        Returns the created ChatMessage instance.
-        """
+        """Persist chat history. World mutations belong to the validated event."""
         if self.state is None:
             raise RuntimeError("Game turn context has not been initialized.")
         cm = ChatMessage(
@@ -481,11 +451,6 @@ class GameTurnManager:
         )
         self.db.add(cm)
         await self.db.flush()
-        # Attempt to unhide any referenced entities inside the message text
-        try:
-            await self._unhide_entities_in_text(content)
-        except Exception:
-            logger.exception("Failed to unhide entities for message")
         return cm
 
     async def _build_narration_messages(
@@ -915,6 +880,7 @@ class GameTurnManager:
 
         self._turn_anchor = turn_anchor(self.state)
         user_msg = message.strip()
+        self._addressed_speech: tuple[str, str] | None = None
         actual_user_input = user_msg
         if not user_msg:
             user_msg = "[LOOK AROUND]"
@@ -1064,7 +1030,11 @@ class GameTurnManager:
                 user_msg = "[EVALUATE STATE]"
                 yield f"event: status\ndata: {json.dumps({'content': 'The Game Master evaluates your situation...'})}\n\n"
             elif response.startswith("[TRIGGER_SAY]"):
-                user_msg = f'Say out loud: "{response[13:].strip()}"'
+                speech = response.removeprefix("[TRIGGER_SAY]").strip()
+                address = re.fullmatch(r"to\s+([^:\n]+):\s*(.+)", speech, re.IGNORECASE | re.DOTALL)
+                if address:
+                    self._addressed_speech = (address[1].strip(), address[2])
+                user_msg = f'Say out loud: "{speech}"'
                 # Continue turn as normal
             elif response.startswith("[TRIGGER_INSPECT]"):
                 user_msg = f"Inspect {response[17:].strip()}"

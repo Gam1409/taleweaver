@@ -321,6 +321,13 @@ class GameEvent(BaseModel):
         description="Set to true if the protagonist has met the end condition for the current sequence.",
     )
 
+    combination_ingredient_ids: Optional[list[str]] = Field(
+        default=None, description="Exact IDs of the items the player intends to combine."
+    )
+    combination_result_id: Optional[str] = Field(
+        default=None,
+        description="Known CONSTRUCTABLE result ID for the intended recipe, when identified.",
+    )
     combination_intent: bool = Field(
         default=False,
         description="Set to true if the player's message indicates they are attempting to combine, craft, mix, assemble, or use multiple items together (in any language).",
