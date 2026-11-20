@@ -227,6 +227,17 @@ def test_recommendation_groups_never_suggest_more_than_the_existing_eight_edit_b
         assert len(report.groups) == 8
 
 
+def test_dense_invalid_candidates_can_be_repaired_together_without_rewriting_the_choice():
+    schema = create_model("Decision", candidates=(dict[str, list[int]], ...), choice=(str, ...))
+    candidate = {"candidates": {str(i): ["bad"] for i in range(9)}, "choice": "keep"}
+    report = proposal_repair_groups.inspect(
+        candidate, schema, proposal_edits.paths(candidate, schema)
+    )
+    assert report is not None and report.error_count == 9
+    assert [group["path"] for group in report.groups] == ["/candidates"]
+    assert len(report.groups[0]["issues"]) == 9
+
+
 def test_grouped_constraints_remain_actionable_after_the_four_error_summary():
     _, candidate = dense_proposal()
     candidate["choice"].update(

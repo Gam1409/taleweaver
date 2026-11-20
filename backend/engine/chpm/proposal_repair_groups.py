@@ -81,6 +81,10 @@ def inspect(
         )
     targets = _targets(set(issues), allowed)
     if len(targets) > proposal_edits.MAX_EDITS:
+        # Dense errors can still occupy only a few independent fields. Let the
+        # model replace those fields once and keep every unaffected field intact.
+        targets = {_cover(path, allowed) for path in targets}
+    if len(targets) > proposal_edits.MAX_EDITS:
         return None
     grouped: dict[str, list[dict]] = {target: [] for target in sorted(targets)}
     for path, details in issues.items():

@@ -52,6 +52,14 @@ failures and truncated output do not acquire another retry. The role's output
 limit still applies; integrated responses use the decision-token budget because
 they may contain a complete proposal.
 
+An Integrated submission can omit `reference_scope`. The host binds the reply to
+the exact window offered on that call. An explicit scope must match that window.
+The actor still selects every evidence fragment and motive. For a completed native
+text proposal, the host can correct one mismatched closing bracket at the JSON
+parser's error position and validate the whole object. If errors in several
+nested fields exceed the eight-edit budget, the repair can replace their common
+parent fields. The reconstructed proposal goes through the full acceptance checks.
+
 JSON compatibility uses the configured provider's structured-output policy when
 its text port supports that option. Schema-capable modes receive an outer envelope
 for the currently offered functions: submission alone, or up to two nonfinal calls.

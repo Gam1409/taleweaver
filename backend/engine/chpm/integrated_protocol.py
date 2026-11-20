@@ -3,7 +3,7 @@
 import json
 import logging
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from backend.engine import turn_controls
@@ -92,24 +92,38 @@ async def read(
     finals = [call for call in turn.calls if call.name == FINAL]
     if finals and len(turn.calls) != 1:
         raise ProtocolError("mixed_submission")
-    if not turn.calls and not _proposal_content(turn.assistant_message.get("content")):
-        raise ProtocolError("missing_submission")
+    if not turn.calls:
+        raw = turn.assistant_message.get("content")
+        content = _proposal_content(raw)
+        if content is None:
+            raise ProtocolError("missing_submission")
+        if content != raw:
+            turn = replace(turn, assistant_message={**turn.assistant_message, "content": content})
     names = {item["function"]["name"] for item in offered}
     if any(call.name not in names for call in turn.calls):
         raise ProtocolError("unavailable_function")
     return turn
 
 
-def _proposal_content(raw: Any) -> bool:
+def _proposal_content(raw: Any) -> str | None:
     if not isinstance(raw, str) or len(raw) > MAX_TOOL_ARGUMENT_CHARS:
-        return False
+        return None
     try:
         preflight(raw, max_transport_bytes=MAX_TOOL_ARGUMENT_CHARS * 4)
-        candidate = json_contract.decode(raw)
+        try:
+            candidate = json_contract.decode(raw)
+        except json.JSONDecodeError as exc:
+            # Only swap the closing delimiter at the strict parser's failure position.
+            # Reparse the entire document, including duplicate keys and trailing data.
+            closer = {"}": "]", "]": "}"}.get(exc.doc[exc.pos : exc.pos + 1])
+            if closer is None or exc.msg != "Expecting ',' delimiter":
+                return None
+            raw = exc.doc[: exc.pos] + closer + exc.doc[exc.pos + 1 :]
+            candidate = json_contract.decode(raw)
         json.dumps(candidate, ensure_ascii=False, allow_nan=False).encode("utf-8")
     except (ValueError, TypeError, RecursionError, OverflowError):
-        return False
-    return {"candidates", "choice"} <= candidate.keys()
+        return None
+    return raw if {"candidates", "choice"} <= candidate.keys() else None
 
 
 @dataclass

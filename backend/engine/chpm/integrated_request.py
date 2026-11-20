@@ -63,6 +63,12 @@ def _definitions(prepared: cognitive_proposal.Prepared, tools: Tools, remaining:
         # Phase A may consult observer-local tools but never stages world operations.
         offered = [row for row in offered if row["function"]["name"] not in ACTION_MODELS]
     additional = "additional_actions" in prepared.schema.model_fields
+    parameters = json_contract.response_schema(
+        prepared.schema, prepared.identifiers, explicit_keys=True
+    )
+    # The dispatch owns this scope. Older producers may still echo its exact value.
+    if "reference_scope" in parameters.get("required", ()):
+        parameters["required"].remove("reference_scope")
     return [
         *offered,
         {
@@ -71,12 +77,7 @@ def _definitions(prepared: cognitive_proposal.Prepared, tools: Tools, remaining:
                 "name": FINAL,
                 "description": submission(offered, additional=additional),
                 "strict": False,
-                "parameters": share_schema(
-                    json_contract.response_schema(
-                        prepared.schema, prepared.identifiers, explicit_keys=True
-                    ),
-                    short_names=True,
-                ),
+                "parameters": share_schema(parameters, short_names=True),
             },
         },
     ]
@@ -112,7 +113,13 @@ def _messages(
         if tools.notebook is not None
         else INSTRUCTIONS.replace(NOTEBOOK_INSTRUCTIONS, "")
     )
-    instruction = prepared.instruction + offered_instruction
+    instruction = (
+        prepared.instruction.replace(
+            "Copy reference_scope;",
+            "The host binds the submitted decision to this reference_scope;",
+        )
+        + offered_instruction
+    )
     if tools.actions is not None and "physical_intent" not in prepared.schema.model_fields:
         from backend.engine.npc_actions.instructions import INSTRUCTIONS as ACTION_INSTRUCTIONS
 

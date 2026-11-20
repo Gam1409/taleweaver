@@ -52,6 +52,14 @@ async def submit(
             if raw is None:
                 raise ValueError("Use submit_decision with the complete grounded proposal.")
             candidate = json_contract.decode(raw)
+            # This response belongs to this exact dispatch. Only the host's envelope
+            # field can be restored; an explicit stale scope and all evidence IDs
+            # still go through the ordinary identifier and current-attempt checks.
+            if (
+                "reference_scope" in prepared.schema.model_fields
+                and "reference_scope" not in candidate
+            ):
+                candidate["reference_scope"] = prepared.references.scope
             candidate, corrections = wire_normalization.normalize(
                 prepared.schema, candidate, prepared.identifiers
             )

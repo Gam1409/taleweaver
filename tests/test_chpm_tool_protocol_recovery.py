@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+from dataclasses import replace
 
 import pytest
 
@@ -21,6 +22,10 @@ from tests.test_chpm_reliability import Replies
         '{"candidates":{},"choice":{},"padding":"' + "x" * 32768 + '"}',
         '{"candidates":{},"choice":{},"nested":' + "[" * 70 + "0" + "]" * 70 + "}",
         '{"candidates":{},"choice":{},"value":1e999}',
+        '{"candidates":{"A":1],"choice":{},"choice":{}}',
+        '{"candidates":{"A":1],"choice":{}] ',
+        '{"candidates":{"A":1],"choice":{}} trailing text',
+        '{"requests":[{"name":"inspect_self","arguments":{}]}',
         '{"candidates":{},"choice":{},"value":"\\ud800"}',
     ],
 )
@@ -233,6 +238,41 @@ async def test_native_text_final_uses_the_existing_validator_without_a_repair_re
     assert usage.calls == 1 and not usage.proposal_repairs
     assert usage.format_repairs == 1
     assert decision.choice_preference.preferred == "CONTINUE"
+
+
+@pytest.mark.parametrize("stale", [False, True])
+async def test_complete_text_decision_with_one_wrong_closer_stays_bound_to_its_dispatch(stale):
+    class TextModel(NativeModel):
+        async def aexecute_tool_turn(self, messages, tools, model, **kwargs):
+            final = await super().aexecute_tool_turn(messages, tools, model, **kwargs)
+            body = json.loads(final.calls[0].arguments_raw)
+            body.pop("reference_scope")
+            if stale:
+                body["reference_scope"] = "another-observer-window"
+            candidates = json.dumps(body.pop("candidates"))
+            text = '{"candidates":' + candidates[:-1] + "]," + json.dumps(body)[1:]
+            return replace(
+                final,
+                calls=(),
+                assistant_message={"role": "assistant", "content": text},
+                finish_reason="stop",
+            )
+
+    model = TextModel([final()])
+    if stale:
+        with pytest.raises(ValueError, match="remains invalid"):
+            await deliberate(model)
+        assert len(model.json_requests) == 1
+    else:
+        (decision, _), usage = await deliberate(model)
+        assert decision.choice_preference.preferred == "CONTINUE"
+        assert usage.calls == 1 and not model.json_requests
+    tools = model.requests[0][1]
+    parameters = next(
+        t["function"]["parameters"] for t in tools if t["function"]["name"] == "submit_decision"
+    )
+    assert "reference_scope" not in parameters["required"]
+    assert len(model.requests) == 1
 
 
 async def test_oversize_native_final_cannot_bypass_the_function_argument_limit():
