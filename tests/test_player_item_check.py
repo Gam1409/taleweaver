@@ -85,9 +85,9 @@ async def test_rejected_turn_never_enters_saved_story(monkeypatch, passes, techn
         assert not db.in_transaction()
         if technical and model.aexecute_complex_task.await_count == passes:
             raise TimeoutError("local stub")
-        return {
-            "extractions": [event(text, value="given", item_mention="medal", recipient_id="LINA")]
-        }
+        transfer = event(text, value="given", item_mention="medal", recipient_id="LINA")
+        # Repeating a proposal must not let the turn bypass the inventory check.
+        return {"extractions": [transfer, transfer]}
 
     model.aexecute_complex_task.side_effect = answer
     monkeypatch.setattr(checks.GameMasterLLM, "for_role", lambda *_: model)

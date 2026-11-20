@@ -75,6 +75,51 @@ def test_last_unambiguous_source_event_survives_reversal_in_model_output_order()
     assert [(r["value"], r["latest"]) for r in rows] == [("removed", False), ("worn", True)]
 
 
+def test_duplicate_proposals_preserve_separate_occurrences_and_concurrent_facts():
+    text = "I kneel. I stand. I kneel."
+    kneel = event("I kneel", kind="posture", value="kneeling")
+    feeling = event("I kneel", kind="emotion", value="relief")
+    stand = event("I stand", passage="p1", kind="posture", value="standing")
+    again = event("I kneel", passage="p2", kind="posture", value="kneeling")
+    rows, discarded = review(text, [kneel, feeling, stand, kneel, again, again])
+    assert discarded == 0
+    assert [(row["value"], row["start"], row["latest"]) for row in rows] == [
+        ("kneeling", 0, False),
+        ("relief", 0, False),
+        ("standing", 9, False),
+        ("kneeling", 18, True),
+    ]
+
+
+def test_same_quote_preserves_distinct_items_recipients_and_unresolved_mentions():
+    text = "I offer the scarf, cap, pin and ring to Rin."
+
+    def give(name, actor):
+        return event(text, value="given", item_mention=name, recipient_id=actor)
+
+    rows, discarded = review(
+        text,
+        [
+            give("scarf", "RIN"),
+            give("SCARF", "RIN"),
+            give("scarf", "__player__"),
+            give("cap", "RIN"),
+            give("pin", "RIN"),
+            give("ring", "RIN"),
+            event("invented quote"),
+        ],
+        {"SCARF": "scarf", "CAP": "cap"},
+    )
+    assert discarded == 1
+    assert [(row["item_id"], row["recipient_id"]) for row in rows] == [
+        ("SCARF", "RIN"),
+        ("SCARF", "__player__"),
+        ("CAP", "RIN"),
+        (None, "RIN"),
+        (None, "RIN"),
+    ]
+
+
 @pytest.mark.asyncio
 async def test_independent_reads_merge_grounded_events_in_source_order():
     text = "I remove my coat. I kneel and put the coat on."

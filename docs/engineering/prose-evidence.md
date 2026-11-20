@@ -30,8 +30,11 @@ sets the number of independent Small-model reads per message (1, 2 or 3, default
 This shared setting also applies to the optional VN player item check. A Debug review of
 both messages uses up to 2, 4 or 6 requests respectively. Extractions are aligned
 to their original text before merging. New findings are added in source order, including
-distinct subjects or kinds of action in the same passage. Overlapping duplicates
-count once and an earlier finding takes precedence over a conflicting later one.
+distinct subjects or kinds of action in the same passage. Within a single response,
+repeated findings for the same action, participants, item and exact source occurrence
+count once. The same action at a later position remains a separate event.
+Across passes, overlapping duplicates count once and an earlier finding takes
+precedence over a conflicting later one.
 Conflicts prevent an item-based rejection.
 If a later request fails, Debug marks the completed results as partial. The player
 item check reports an unavailable check so the player can retry.

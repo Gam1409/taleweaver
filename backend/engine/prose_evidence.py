@@ -114,20 +114,37 @@ def grounded(
     items: dict[str, str],
 ) -> tuple[list[dict], int]:
     rows = []
+    seen = set()
+    discarded = 0
     for entry in proposals.extractions:
         event = entry.event_attributes
         passage = passages.get(event.passage_id)
         offset = _span(entry.event, passage) if passage else None
         if not offset or not passage or event.value not in VALUES.get(event.kind, (event.value,)):
+            discarded += 1
             continue
         start, end = offset
-        item = (
-            _item_id(event.item_mention, entry.event, items)
-            if event.kind in {"clothing", "custody"}
-            else None
+        mention = event.item_mention if event.kind in {"clothing", "custody"} else None
+        item = _item_id(mention, entry.event, items)
+        target = event.recipient_id if event.kind == "custody" and event.value == "given" else None
+        # Keep distinct unresolved mentions and identities even when their public IDs are null.
+        occurrence = (
+            event.passage_id,
+            start,
+            end,
+            event.kind,
+            event.value,
+            event.actor_id,
+            event.performer_id,
+            target,
+            item,
+            mention if item is None else None,
         )
+        if occurrence in seen:
+            continue
+        seen.add(occurrence)
         actor = event.actor_id if event.actor_id in actors else None
-        recipient = event.recipient_id if event.recipient_id in actors else None
+        recipient = target if target in actors else None
         resolved = bool(actor and (item or event.kind not in {"clothing", "custody"}))
         rows.append(
             {
@@ -136,9 +153,7 @@ def grounded(
                 "actor_id": actor,
                 "item_id": item,
                 "performer_id": event.performer_id if event.performer_id in actors else None,
-                "recipient_id": recipient
-                if event.kind == "custody" and event.value == "given"
-                else None,
+                "recipient_id": recipient,
                 "resolved": resolved
                 and (event.kind != "custody" or event.value != "given" or bool(recipient)),
                 "passage_id": event.passage_id,
@@ -151,7 +166,7 @@ def grounded(
         )
     rows.sort(key=lambda r: (r["start"], r["end"]))
     _mark_latest(rows)
-    return rows, len(proposals.extractions) - len(rows)
+    return rows, discarded
 
 
 def _mark_latest(rows: list[dict]) -> None:
