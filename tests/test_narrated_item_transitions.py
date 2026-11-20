@@ -247,8 +247,11 @@ def test_native_partial_placement_schema_preserves_every_allowed_disposition(par
 
     from backend.core.llm_schema_projection import project
     from backend.engine.clothing.body_schema import BODY_SLOT_KEYS
+    from backend.engine.narrated_items.schema import ExistingItemAction
 
-    schema = ItemAction.model_json_schema()
+    # Normal extraction advertises separate existing-item and new-item branches.
+    # This fixture references the existing shirt; the host then validates ItemAction.
+    schema = ExistingItemAction.model_json_schema()
     validators = (Draft202012Validator(schema), Draft202012Validator(project(schema).schema))
     for disposition, slot, regions in product(
         ("carried", "held", "worn"), (None, next(iter(BODY_SLOT_KEYS))), (None, [], ["torso"])
