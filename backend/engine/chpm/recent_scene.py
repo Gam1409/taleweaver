@@ -6,7 +6,7 @@ from typing import Any
 from sqlalchemy import and_, or_, select
 
 from backend.core.system_diagnostics import service
-from backend.core.text_evidence import EvidenceSpan
+from backend.core.text_evidence import unique_span
 from backend.engine.chpm import movement_feedback
 from backend.engine.chpm.host_observation_contracts import (
     MAX_SCENE_CHARS,
@@ -131,14 +131,12 @@ def _witnesses(states: dict, message: ChatMessage) -> set[str]:
 def _action(row: Any, message: ChatMessage, targets: set[str]) -> ObservedSceneAction | None:
     if not set(row.actor_ids).issubset(targets):
         return None
-    span = row.evidence_span
+    try:
+        span = unique_span(message.content, row.evidence, row.evidence_span)
+    except ValueError:
+        # A stale saved span must never be relocated to another occurrence.
+        return None
     if span is None:
-        # A legacy unique quote is recoverable; repeated words need their saved occurrence.
-        if message.content.count(row.evidence) != 1:
-            return None
-        start = message.content.index(row.evidence)
-        span = EvidenceSpan(start=start, end=start + len(row.evidence))
-    if not span.matches(message.content, row.evidence):
         return None
     return ObservedSceneAction(
         actor_ids=tuple("@player" if value == "__player__" else value for value in row.actor_ids),

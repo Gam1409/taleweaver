@@ -12,6 +12,7 @@ from backend.engine.chpm import continuation, host_scene
 from backend.engine.chpm.schema import KernelState
 from backend.engine.chpm.state import load
 from backend.engine.scene_continuity.ledger import apply
+from backend.engine.scene_continuity.schema import KEY
 from backend.engine.scene_illustrations.snapshots import capture_scene_snapshot
 from backend.models.chat import ChatMessage
 from backend.models.world_entity import WorldEntity
@@ -20,21 +21,26 @@ from tests.test_chpm_host_turn import configured, roles_for, run
 
 ACTION = "Lina grips the chair while waiting for the rescue team."
 TEXT = ACTION + ' Lina: "Please tell me what happened." A private thought is not public.'
+REPEATED = TEXT + " Later someone recalls: " + ACTION
 
 
-async def seed_frame(db, *, duplicate=False, explicit_span=True, witnesses=None):
+async def seed_frame(db, *, narration=TEXT, evidence=ACTION, witnesses=None):
     user, state = await configured(db)
     source = ChatMessage(
         session_id=state.session_id,
         role="assistant",
         scene_id="START",
-        content=TEXT + (" Later someone recalls: " + ACTION if duplicate else ""),
+        content=narration,
     )
     db.add(source)
     await db.flush()
-    action = {"actor_ids": ["LINA"], "detail": ACTION, "evidence": ACTION}
-    if explicit_span:
-        action["evidence_span"] = EvidenceSpan(start=0, end=len(ACTION)).model_dump()
+    start = narration.index(evidence)
+    action = {
+        "actor_ids": ["LINA"],
+        "detail": evidence,
+        "evidence": evidence,
+        "evidence_span": EvidenceSpan(start=start, end=start + len(evidence)).model_dump(),
+    }
     state.entity_states, errors = apply(
         state.entity_states,
         [],
@@ -87,7 +93,7 @@ async def test_complete_turn_hands_the_same_scene_to_decision_narrator_and_revie
 
     roles.simple = observed
     async with TestSessionLocal() as db:
-        user, state, source = await seed_frame(db, duplicate=True)
+        user, state, source = await seed_frame(db, narration=REPEATED)
         manager, chunks = await run(db, user, "Can you answer?")
         assert any(chunk.startswith("event: final") for chunk in chunks), "".join(chunks)
         frame = json.loads(
@@ -159,14 +165,34 @@ async def test_unavailable_or_unwitnessed_moments_do_not_enter_the_actor_view(ch
         assert turn.scene_cues == {}
 
 
-@pytest.mark.parametrize("explicit_span", [False, True])
-async def test_repeated_words_require_the_original_occurrence(explicit_span):
+@pytest.mark.parametrize(
+    ("narration", "evidence", "legacy", "visible"),
+    [
+        pytest.param(REPEATED, ACTION, False, True, id="selected-occurrence"),
+        pytest.param(REPEATED, ACTION, True, False, id="ambiguous-legacy"),
+        pytest.param(TEXT, ACTION, True, True, id="unique-legacy"),
+        pytest.param("A clock goes tick-tick-tick.", "tick-tick", True, False, id="overlap-legacy"),
+    ],
+)
+async def test_frame_projection_requires_one_source_occurrence(
+    narration, evidence, legacy, visible
+):
     async with TestSessionLocal() as db:
-        _, state, _ = await seed_frame(db, duplicate=True, explicit_span=explicit_span)
+        _, state, _ = await seed_frame(db, narration=narration, evidence=evidence)
+        if legacy:
+            # Older saves predate evidence spans. Modern writes require an unambiguous source.
+            saved = deepcopy(state.entity_states)
+            del saved[KEY]["frame_actions"][0]["evidence_span"]
+            state.entity_states = saved
+            await db.commit()
+            await db.refresh(state)
         before = deepcopy(state.entity_states)
         manager, _, actor = await host(db, state)
         moment = host_scene.capture(manager, actor, {"LINA": "Lina"}).last_observed_scene
-        assert bool(moment) is explicit_span
+        assert bool(moment) is visible
+        if moment:
+            assert moment.actions[0].evidence_span.start == narration.index(evidence)
+            assert moment.actions[0].evidence_span.matches(narration, evidence)
         assert state.entity_states == before
 
 
