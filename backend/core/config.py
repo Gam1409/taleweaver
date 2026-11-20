@@ -82,6 +82,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str = ""
     # Experimental single-worker admission for self-hosted completion/embedding APIs.
     INFERENCE_SERIALIZATION_ENABLED: bool = False
+    NPC_JOURNAL_PLAYER_IDLE_SECONDS: int = Field(default=90, ge=0)
     BACKEND_PORT: int = 8000
     FRONTEND_PORT: int = 5173
     LOG_LEVEL: str = "INFO"

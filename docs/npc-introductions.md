@@ -69,10 +69,13 @@ change it. It survives template and session copying and export/import; old world
 without the setting keep indicators hidden. Saving the display preference during
 a game turn returns a busy response rather than overwriting the turn's state.
 
-After each completed response, the configured **Small / Utility** LLM extracts new
-information in the session's content language. This runs in the background and does
-not delay the player's next action. The journal stores appearance, background,
-relationships, belongings, equipment and events, each with a source passage.
+The completed response and its pending learning task are saved together. The
+configured **Small / Utility** LLM extracts new information in the session's
+content language after a pause in play (90 seconds by default). A new turn
+takes priority over queued learning. An extraction already running can finish
+and can delay the next request on a single-slot server. The journal stores
+appearance, background, relationships, belongings, equipment and events, each
+with a source passage.
 **Claim** records what a character said; **Observed** records what the narration
 directly established. Neither category reveals hidden template information.
 

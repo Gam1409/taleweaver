@@ -271,7 +271,7 @@ async def test_empty_or_deferred_journal_work_is_not_a_rejected_update(
     extract = AsyncMock(return_value=JournalExtraction())
     monkeypatch.setattr(worker, "extract", extract)
     if deferred:
-        monkeypatch.setattr(worker.scheduler, "can_start_background", lambda: False)
+        monkeypatch.setattr(worker.scheduler, "can_start_background", lambda **_: False)
     with scope(session_id="portrait-session", operation="npc_learning"):
         assert await worker.process_message(message_id, owner) is not deferred
     if not deferred:

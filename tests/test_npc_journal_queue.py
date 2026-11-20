@@ -266,3 +266,34 @@ async def test_stale_done_callback_cannot_remove_newer_session_worker(monkeypatc
     assert worker._tasks["s"] is newer
     await newer
     worker._finish("s", newer)
+
+
+async def test_scheduled_journal_stays_pending_until_a_pause_and_drains_in_order(
+    journal_world, monkeypatch
+):
+    owner, _ = journal_world
+    now = datetime.now()
+    first = await save_message(created_at=now)
+    second = await save_message(created_at=now + timedelta(seconds=1))
+    extracted = []
+
+    async def extract(user, session, message_id, payload):
+        extracted.append(message_id)
+        return JournalExtraction()
+
+    monkeypatch.setattr(worker, "extract", extract)
+    monkeypatch.setattr(worker.settings, "NPC_JOURNAL_PLAYER_IDLE_SECONDS", 90)
+    worker.scheduler.player_returned()
+    worker.schedule("portrait-session", owner)
+    pending = worker._tasks["portrait-session"]
+    for source in (first, second):
+        task = await task_for(source)
+        assert task["status"] == "pending" and task.get("attempts", 0) == 0
+    assert not pending.done() and not extracted
+    worker.scheduler.last_player_activity -= 90
+    worker.scheduler.changed.set()
+    await asyncio.wait_for(pending, 2)
+    assert extracted == [first, second]
+    for source in (first, second):
+        task = await task_for(source)
+        assert task["status"] == "done" and task["attempts"] == 1

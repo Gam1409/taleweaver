@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.auth import get_current_user
 from backend.core.database import get_db
+from backend.engine.memory_rag import scheduling
 from backend.models.game_session import GameSession
 from backend.models.user import User
 
@@ -60,5 +61,9 @@ async def record_playtime(
     )
     if result.scalar_one_or_none() is None:
         raise HTTPException(404, "Session not found.")
+    # Only a newly visible, owned session resets the journal clock. Periodic
+    # heartbeats must let the backlog drain while the player reads or steps away.
+    if payload.active and payload.start:
+        scheduling.scheduler.player_returned()
     await db.commit()
     return {"ok": True}

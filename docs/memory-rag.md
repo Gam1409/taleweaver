@@ -105,8 +105,13 @@ while reusing that turn's original vector lookup.
 
 Journal extraction, index batches and summaries share an idle scheduler. A new
 background unit starts only after a 15-second quiet period; a foreground turn
-prevents additional units from starting. Summary calls use the configured
-**compression** role, with bounded input and that role's configured deadline.
+prevents additional units from starting. NPC journal extraction also waits for
+90 seconds after a turn finishes or a player opens or returns to a visible
+session. Set `NPC_JOURNAL_PLAYER_IDLE_SECONDS` in the server environment to tune
+this delay. A value of 0 retains the shared 15-second grace. Reading with the
+tab left open and routine UI polling allow the timer to expire. Other maintenance
+can use its ordinary idle windows while the journal waits. Summary calls use the
+configured **compression** role, with bounded input and that role's deadline.
 Public indexing, chronicle compression, interval summaries and optional observer
 indexing take turns, with at most
 one model batch per idle unit. A failed phase backs off independently, allowing

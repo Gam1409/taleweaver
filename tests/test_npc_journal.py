@@ -36,6 +36,7 @@ def observation(category="appearance", text="Синий плащ", evidence="Н�
 @pytest_asyncio.fixture
 async def journal_world(portrait_world, monkeypatch):
     monkeypatch.setattr(worker, "scheduler", IdleScheduler(grace_seconds=0))
+    monkeypatch.setattr(worker.settings, "NPC_JOURNAL_PLAYER_IDLE_SECONDS", 0)
     monkeypatch.setattr(memory_worker, "schedule", MagicMock())
     async with TestSessionLocal() as db:
         db.add(

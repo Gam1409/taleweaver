@@ -257,3 +257,34 @@ async def test_inference_admission_defers_memory_without_failure_backoff(
     monkeypatch.setattr(worker, "_step", AsyncMock(return_value=False))
     assert not await worker._process_claim(resumed)
     await worker._release(resumed)
+
+
+async def test_journal_waits_for_player_pause_without_holding_maintenance_capacity(monkeypatch):
+    clock = SimpleNamespace(now=100.0)
+    monkeypatch.setattr(scheduling, "time", SimpleNamespace(monotonic=lambda: clock.now))
+    scheduler = IdleScheduler(grace_seconds=15)
+    journal_started = asyncio.Event()
+
+    async def journal():
+        async with scheduler.background(player_idle_seconds=90):
+            journal_started.set()
+
+    task = asyncio.create_task(journal())
+    await asyncio.sleep(0)
+    clock.now = 116
+    async with asyncio.timeout(1), scheduler.background():
+        assert not journal_started.is_set()
+    clock.now = 180
+    async with scheduler.foreground():
+        clock.now = 280
+        assert not scheduler.can_start_background(player_idle_seconds=90)
+    clock.now = 365
+    scheduler.player_returned()
+    clock.now = 370  # Earlier turn's grace expired; returning to the session restarted it.
+    scheduler.changed.set()
+    await asyncio.sleep(0)
+    assert scheduler.can_start_background() and not journal_started.is_set()
+    clock.now = 455
+    scheduler.changed.set()
+    await asyncio.wait_for(task, 1)
+    assert journal_started.is_set()

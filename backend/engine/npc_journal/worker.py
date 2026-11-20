@@ -5,13 +5,15 @@ import logging
 import time
 
 from backend.core import database
+from backend.core.config import settings
 from backend.core.diagnostic_failures import failure_details, failure_reason
 from backend.core.diagnostic_operations import diagnostic_job
+from backend.core.inference import admission
 from backend.core.inference.registry import InferenceQueueError, InferenceUncertainError
 from backend.core.llm_deadlines import role_timeout
 from backend.core.state_rejection_trace import reject
 from backend.engine.memory_rag.persistence import retry_transaction
-from backend.engine.memory_rag.scheduling import scheduler
+from backend.engine.memory_rag.scheduling import BackgroundDeferredError, scheduler
 from backend.engine.npc_journal import progress, queue
 from backend.engine.npc_journal.apply import apply_extraction
 from backend.engine.npc_journal.clock import clock_fields
@@ -108,18 +110,29 @@ async def _prepare(message_id: str, user_id: str) -> tuple[User, GameSession, di
 async def _extract_when_idle(
     user: User, session: GameSession, message_id: str, payload: str, task: dict
 ) -> JournalExtraction | None:
-    if not scheduler.can_start_background():
-        await _defer(message_id, task)
-        return None
-    progress.set_phase(session.id, message_id, "extracting")
+    def require_player_idle() -> None:
+        if not scheduler.can_start_background(
+            player_idle_seconds=settings.NPC_JOURNAL_PLAYER_IDLE_SECONDS
+        ):
+            raise BackgroundDeferredError("Character learning is waiting for a pause in play.")
+
+    # Carry the same check through provider preparation and endpoint admission.
+    guard = admission.dispatch_guard.set(require_player_idle)
     try:
+        require_player_idle()
+        progress.set_phase(session.id, message_id, "extracting")
         return await asyncio.wait_for(
             extract(user, session, message_id, payload), timeout=role_timeout(user, "small")
         )
+    except BackgroundDeferredError:
+        await _defer(message_id, task)
+        return None
     except (InferenceUncertainError, InferenceQueueError):
         await _defer(message_id, task, delay=queue.RETRY_DELAY)
         logger.info("NPC journal deferred by inference admission for message %s", message_id)
         return None
+    finally:
+        admission.dispatch_guard.reset(guard)
 
 
 @retry_transaction
@@ -209,7 +222,9 @@ async def _run(session_id: str, user_id: str) -> None:
     await resume_pending(session_id, user_id)
     consecutive_failures = 0
     while True:
-        async with scheduler.background():
+        async with scheduler.background(
+            player_idle_seconds=settings.NPC_JOURNAL_PLAYER_IDLE_SECONDS
+        ):
             message_id = await _next_message(session_id)
             if message_id is None:
                 await _schedule_retry(session_id, user_id)

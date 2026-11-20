@@ -22,6 +22,17 @@ from backend.core.inference.registry import (
 
 request_deadline: ContextVar[float | None] = ContextVar("inference_deadline", default=None)
 
+dispatch_guard: ContextVar[Callable[[], None] | None] = ContextVar(
+    "inference_dispatch_guard", default=None
+)
+
+
+def check_dispatch_guard() -> None:
+    guard = dispatch_guard.get()
+    if guard is not None:
+        guard()
+
+
 _registry = Registry(Path(settings.DATA_DIR) / "inference-reservations.json")
 
 
@@ -34,6 +45,7 @@ def enabled() -> bool:
 
 
 def ready(ticket: Ticket) -> bool:
+    check_dispatch_guard()
     if not ticket.background or ticket.concurrent:
         return True
     from backend.engine.memory_rag.scheduling import scheduler

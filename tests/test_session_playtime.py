@@ -1,5 +1,7 @@
 """Real playtime is independent of the story clock and excludes offline gaps."""
 
+from unittest.mock import Mock
+
 import pytest
 from sqlalchemy import select
 
@@ -84,3 +86,19 @@ async def test_playtime_can_update_while_narration_is_generating(auth_client, po
 async def test_playtime_cannot_update_another_users_session(auth_client, portrait_world):
     response = await auth_client.post("/api/adventures/sessions/other-session/playtime", json={})
     assert response.status_code == 404
+
+
+async def test_only_an_owned_visible_session_start_postpones_journal_learning(
+    auth_client, portrait_world, monkeypatch
+):
+    returned = Mock()
+    monkeypatch.setattr(session_playtime.scheduling.scheduler, "player_returned", returned)
+    invalid = await auth_client.post(
+        "/api/adventures/sessions/other-session/playtime", json={"start": True}
+    )
+    assert invalid.status_code == 404
+    for heartbeat in ({}, {"active": False}, {"start": True, "active": False}):
+        assert (await auth_client.post(PATH, json=heartbeat)).status_code == 200
+    returned.assert_not_called()
+    assert (await auth_client.post(PATH, json={"start": True})).status_code == 200
+    returned.assert_called_once_with()

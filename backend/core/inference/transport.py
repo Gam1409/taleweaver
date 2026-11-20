@@ -48,6 +48,7 @@ def guarded_async(method: Callable) -> Callable:
     async def guarded(router: Any, kwargs: dict) -> Any:
         key = target(router, kwargs)
         if key is None:
+            admission.check_dispatch_guard()
             llm_timing.dispatched()
             return await method(router, kwargs)
         if kwargs.get("stream"):
@@ -69,6 +70,7 @@ def guarded_sync(method: Callable) -> Callable:
     def guarded(router: Any, kwargs: dict) -> Any:
         key = target(router, kwargs)
         if key is None:
+            admission.check_dispatch_guard()
             llm_timing.dispatched()
             return method(router, kwargs)
         with admission.reserve_sync(
