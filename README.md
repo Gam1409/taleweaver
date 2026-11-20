@@ -88,7 +88,7 @@ Meet NPCs, learn who they are, and build a shared history. Character cards bring
 
 Optional session features add an [emotion palette and character thoughts](docs/npc-portrait-presentation.md) to NPC portraits. Show the dominant emotion as a subtle glow, or hover for a brief fictional thought and click to open the character card. Both options start disabled.
 
-### NPC Personality · Optional · v1.2.0
+### NPC Personality · Optional · v1.3.0
 
 **NPC Personality** is the player-facing name of the CHPM module. It adds a more deliberate decision layer to VN dialogue:
 

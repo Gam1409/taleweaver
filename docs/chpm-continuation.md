@@ -1,6 +1,6 @@
 # Keep playing when NPC analysis fails
 
-**NPC Personality 1.2.0** (technical module name: CHPM) adds an optional character and memory layer to Visual Novel
+**NPC Personality 1.3.0** (technical module name: CHPM) adds an optional character and memory layer to Visual Novel
 sessions. It helps NPCs respond from their own traits, values, goals and witnessed
 history. The narrator still writes the story. CHPM remains **off by default**.
 

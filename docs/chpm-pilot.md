@@ -1,6 +1,8 @@
 # NPC Personality — optional CHPM intentions module
 
-Module release **1.2.0**: start with [the player and recovery guide](chpm-continuation.md).
+For module release **1.3.0**, start with the [player and recovery guide](chpm-continuation.md).
+For quoted player action refusals and read-only Debug inspection, see
+[turn evidence and player item checks](engineering/prose-evidence.md).
 
 See [NPC decision workflows](npc-decision-workflows.md) for the optional integrated
 tool-or-decision path, input budgets and timing comparisons. Staged remains the default.

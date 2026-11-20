@@ -1,13 +1,25 @@
 # NPC Personality release history
 
 NPC Personality (technical module name: CHPM) has its own release version, independent of TaleWeaver's app
-version and persisted data contracts. The current version is **1.2.0**, defined
+version and persisted data contracts. The current version is **1.3.0**, defined
 in `backend/engine/chpm/version.py` and exposed in session settings and status.
 
-## Unreleased repairs
+## 1.3.0
 
-These changes are present in current main; the module release constant remains
-1.2.0. Historical version entries below describe their original rollout.
+- Let a selected character inspect its surroundings, choose an action and receive the
+  outcome of each operation. The engine validates the actor, target and current state
+  before it transfers an item, changes clothing, updates a pose or moves the character.
+- Add provider tool profiles and an opt-in two-phase workflow for choosing an action
+  in prose and grounding it in the available operations.
+- Track partial clothing removal and scene placement through review, saving and reload.
+  Debug can inspect the player and narrator messages separately and highlight the
+  evidence for a proposed change.
+- Add an optional check for impossible player item actions in VN sessions. The player
+  sees the quoted action and the recorded inventory or clothing conflict before the
+  turn enters the story.
+- Model decisions are still experimental. A model can omit an action, misidentify an
+  item, or trigger the session's configured fallback. Long-session reliability varies
+  with the model and story. See the [evidence and item check guide](engineering/prose-evidence.md).
 
 - Offer opt-in Staged and Integrated decision workflows, native/JSON memory
   compatibility, bounded parallel NPC analyses and provider timing diagnostics.

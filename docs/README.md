@@ -30,7 +30,7 @@ their measurements and proposed work are evidence from that snapshot.
 | Layer | Reference |
 | --- | --- |
 | Application release | [version.json](../version.json): 0.7.1-beta |
-| NPC Personality module | [public module version](../backend/engine/chpm/version.py): 1.2.0, independent of the app and saved-state schemas |
+| NPC Personality module | [public module version](../backend/engine/chpm/version.py): 1.3.0, independent of the app and saved-state schemas |
 | Adventure export format | [format owner](../backend/core/adventure_format.py): 1.3; the [catalog adapter](adventure-catalog.md) admits checked records through 1.3.1 |
 | Portable agent configuration | [contract v1](specs/agent_runtime.md): authored schemas/transport/negotiation; activation adapters and remote corpus ingestion remain separate integration work |
 | Saved subsystem schemas | Owned by their runtime modules; see [CHPM lifecycle](chpm-memory-lifecycle.md), [memory](memory-rag.md) and [checkpoint behavior](session-checkpoints.md) |
