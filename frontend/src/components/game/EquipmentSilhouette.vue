@@ -12,6 +12,7 @@ import { conditionSnapshot, conditionAge, conditionKind } from '@/utils/conditio
 import EquipmentItemIcon from './EquipmentItemIcon.vue'
 import maleSilhouette from '@/assets/svg/full-body-human-silhouette.svg'
 import femaleSilhouette from '@/assets/female-equipment-silhouette.png'
+import uterineMarker from '@/assets/uterine-marker.png'
 
 defineOptions({ inheritAttrs: false })
 
@@ -145,6 +146,7 @@ function context(key: string, items: EquipmentDisplayItem[], event: MouseEvent) 
         :icon="slot.icon"
         :compact="compact"
       />
+      <img v-else-if="slot.key === 'BodyUterine'" :src="uterineMarker" width="20" height="8" alt="" />
       <span v-else-if="slot.body" class="text-[10px] font-semibold" aria-hidden="true">{{ slot.shortLabel }}</span>
       <i
         v-else

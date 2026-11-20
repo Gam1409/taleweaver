@@ -15,6 +15,13 @@ try {
     await page.evaluate(async () => { await document.fonts.load('14px RPGAwesome'); await document.fonts.ready })
     await dialog.getByRole('checkbox', { name: 'Show empty slots', exact: true }).check()
     assert.equal(await dialog.locator('[data-equipment-slot^="Body"]').count(), 4)
+    const marker = dialog.getByRole('button', { name: 'Uterus', exact: true }).locator('img')
+    const size = await marker.evaluate(async node => {
+      await node.decode()
+      const { width, height } = node.getBoundingClientRect()
+      return [width, height]
+    })
+    assert.deepEqual(size, [20, 8])
     const boxes = await dialog.locator('[data-equipment-slot]').evaluateAll(nodes => nodes.map(node => ({ key: node.getAttribute('data-equipment-slot'), rect: node.getBoundingClientRect() })).filter(row => row.rect.width && row.rect.height).map(({ key, rect }) => ({ key, x: rect.x, y: rect.y, right: rect.right, bottom: rect.bottom })))
     for (const a of boxes) for (const b of boxes) {
       if (a.key >= b.key) continue

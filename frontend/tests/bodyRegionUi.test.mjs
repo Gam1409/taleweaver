@@ -20,7 +20,7 @@ async function component(name, active = '') {
     return ''
   })
   const prefix = `import {ref} from '${import.meta.resolve('vue')}';
-const maleSilhouette='male.svg',femaleSilhouette='female.png';
+const maleSilhouette='male.svg',femaleSilhouette='female.png',uterineMarker='uterine-marker.png';
 const useEquipmentHover=()=>({active:ref(${JSON.stringify(active)}),target:ref(${active ? "'body'" : 'null'}),style:ref({}),close(){}});`
   const code = ts.transpileModule(prefix + source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText
   return (await import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`)).default
