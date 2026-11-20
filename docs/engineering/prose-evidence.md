@@ -8,7 +8,7 @@ not to be wearing. The rejection shows the reason and the passage from the
 player's input. The player can dismiss the message and submit a revised action.
 
 The check runs before the story input is saved. When a known item name appears,
-the configured Small model can receive one request to identify performed actions.
+the Small model reads the message to identify performed actions.
 The host checks earlier actions in that message in order on a temporary view of
 possessions and clothing. Only the normal gameplay owners can update the world.
 Requests, memories, unknown item names, ambiguous references and incomplete
@@ -24,6 +24,17 @@ visible identities. A missing snapshot leaves item references unresolved.
 Play can continue during inspection. Each result refers to the captured message
 revision and remains available if the other source fails. Reviewing a turn
 leaves the story and saved state untouched.
+
+In Intelligence settings, **Pass 1: Mechanics & Rule Engine → Prose extraction passes**
+sets the number of independent Small-model reads per message (1, 2 or 3, default 1).
+This shared setting also applies to the optional VN player item check. A Debug review of
+both messages uses up to 2, 4 or 6 requests respectively. Extractions are aligned
+to their original text before merging. New findings are added in source order, including
+distinct subjects or kinds of action in the same passage. Overlapping duplicates
+count once and an earlier finding takes precedence over a conflicting later one.
+Conflicts prevent an item-based rejection.
+If a later request fails, Debug marks the completed results as partial. The player
+item check reports an unavailable check so the player can retry.
 
 LangExtract aligns a candidate with an exact occurrence inside its cited passage.
 The host resolves an item only when the quoted name identifies one accessible

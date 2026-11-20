@@ -1,3 +1,8 @@
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
+
+import pytest
+
 from backend.core.text_passages import spans
 from backend.engine import prose_evidence as evidence
 
@@ -68,3 +73,64 @@ def test_last_unambiguous_source_event_survives_reversal_in_model_output_order()
     rows, discarded = review(text, entries, {"C": "coat"})
     assert discarded == 0
     assert [(r["value"], r["latest"]) for r in rows] == [("removed", False), ("worn", True)]
+
+
+@pytest.mark.asyncio
+async def test_independent_reads_merge_grounded_events_in_source_order():
+    text = "I remove my coat. I kneel and put the coat on."
+    removed = event("remove my coat", kind="clothing", value="removed", item_mention="coat")
+    worn = event(
+        "kneel and put the coat on",
+        passage="p1",
+        kind="clothing",
+        value="worn",
+        item_mention="coat",
+    )
+    shorter = event(
+        "put the coat on", passage="p1", kind="clothing", value="worn", item_mention="coat"
+    )
+    pose = event("kneel", passage="p1", kind="posture", value="kneeling")
+    conflict = event(
+        "put the coat on", passage="p1", kind="clothing", value="removed", item_mention="coat"
+    )
+    llm = SimpleNamespace(
+        model="local",
+        aexecute_complex_task=AsyncMock(
+            side_effect=[
+                {"extractions": [worn]},
+                {"extractions": [removed, shorter, pose]},
+                {"extractions": [conflict]},
+            ]
+        ),
+    )
+    message = {"role": "user", "content": text, "id": "m", "revision_id": "r"}
+    result = await evidence.review(llm, "session", message, ACTORS, {"C": "coat"}, passes=3)
+    assert [(r["value"], r["latest"]) for r in result["events"]] == [
+        ("removed", False),
+        ("kneeling", True),
+        ("worn", True),
+    ]
+    assert result["completed_passes"] == result["requested_passes"] == 3
+    assert result["discarded"] == 1
+    calls = llm.aexecute_complex_task.await_args_list
+    assert len({c.args[1] for c in calls}) == 1
+    assert [c.kwargs["metadata"]["extraction_pass"] for c in calls] == [1, 2, 3]
+    assert all(c.kwargs["single_attempt"] for c in calls)
+
+
+@pytest.mark.asyncio
+async def test_failed_supplemental_debug_read_preserves_partial_results():
+    llm = SimpleNamespace(
+        model="local",
+        aexecute_complex_task=AsyncMock(
+            side_effect=[
+                {"extractions": [event("kneel", kind="posture", value="kneeling")]},
+                TimeoutError(),
+            ]
+        ),
+    )
+    message = {"role": "user", "content": "I kneel.", "id": "m", "revision_id": "r"}
+    result = await evidence.review(llm, "session", message, ACTORS, {}, passes=3)
+    assert result["completed_passes"] == 1 and result["requested_passes"] == 3
+    assert [r["quote"] for r in result["events"]] == ["kneel"]
+    assert llm.aexecute_complex_task.await_count == 2

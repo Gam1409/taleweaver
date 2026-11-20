@@ -10,7 +10,7 @@ interface Finding {
 }
 interface Review {
   has_snapshot: boolean
-  sources: { message_id: string; revision_id: string | null; role: string; discarded: number; events: Finding[]; error?: string }[]
+  sources: { message_id: string; revision_id: string | null; role: string; discarded: number; completed_passes: number; requested_passes: number; events: Finding[]; error?: string }[]
 }
 const review = ref<Review | null>(null)
 const busy = ref(false)
@@ -61,9 +61,13 @@ async function inspect() {
       <p v-if="!review.has_snapshot" class="text-xs text-amber-200">The original scene snapshot is unavailable. Item references are unresolved.</p>
       <section v-for="source in review.sources" :key="source.message_id" class="space-y-2">
         <h4 class="font-semibold">{{ source.role === 'user' ? 'Player' : 'Narrator' }}</h4>
+        <p v-if="source.requested_passes > 1" class="text-xs text-slate-400">
+          {{ source.completed_passes }} of {{ source.requested_passes }} passes completed.
+          <span v-if="source.completed_passes < source.requested_passes" class="text-amber-200">Partial review.</span>
+        </p>
         <p v-if="source.error" role="alert" class="text-sm text-amber-200">{{ source.error }}</p>
         <p v-else-if="!source.events.length" class="text-sm text-slate-400">No supported findings returned.</p>
-        <p v-if="source.discarded" class="text-xs text-amber-200">{{ source.discarded }} unsupported findings omitted.</p>
+        <p v-if="source.discarded" class="text-xs text-amber-200">{{ source.discarded }} unsupported or conflicting findings omitted.</p>
         <article v-for="(event, i) in source.events" :key="i" class="rounded-lg bg-slate-950/70 p-3 text-sm">
           <p>{{ event.kind }} · {{ event.value }} · {{ event.actor_id || 'Unknown actor' }} <span v-if="event.item_id">· {{ event.item_id }}</span><span v-if="event.recipient_id"> → {{ event.recipient_id }}</span></p>
           <p class="text-xs text-amber-200">{{ !event.resolved ? 'Unresolved reference' : event.latest ? 'Last mention in this source' : '' }}</p>

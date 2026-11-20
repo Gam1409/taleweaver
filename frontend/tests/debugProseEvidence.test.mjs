@@ -22,7 +22,7 @@ test('evidence inspection is manual and cancels obsolete model reads on session 
   fixture.button('Review latest turn').props.onClick()
   requests[1].resolve(Response.json({ has_snapshot: true, sources: [
     { role: 'user', message_id: 'u', events: [], error: 'Player review unavailable.' },
-    { role: 'assistant', message_id: 'a', events: [{ kind: 'posture', value: 'kneeling', actor_id: 'NPC',
+    { role: 'assistant', message_id: 'a', completed_passes: 1, requested_passes: 3, events: [{ kind: 'posture', value: 'kneeling', actor_id: 'NPC',
       resolved: true, latest: true, prefix: 'She ', quote: 'knelt', suffix: '.' }] },
   ] }))
   requests[0].resolve(Response.json({ has_snapshot: true, sources: [] }))
@@ -30,5 +30,6 @@ test('evidence inspection is manual and cancels obsolete model reads on session 
   assert.ok(fixture.all().some(node => node.props.role === 'alert' && fixture.text(node) === 'Player review unavailable.'))
   assert.ok(fixture.all().some(node => node.type === 'mark' && fixture.text(node) === 'knelt'))
   assert.ok(fixture.all().some(node => node.type === 'blockquote' && fixture.text(node) === 'She knelt.'))
+  assert.ok(fixture.all().some(node => node.type === 'p' && /1 of 3 passes completed\.\s*Partial review\./.test(fixture.text(node))))
   assert.equal(fixture.button('Review latest turn').props.disabled, false)
 })

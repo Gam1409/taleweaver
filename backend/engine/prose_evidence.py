@@ -1,4 +1,4 @@
-"""Read-only, source-local proposals. Gameplay owners never consume this diagnostic output."""
+"""Source-local evidence for Debug inspection and the optional player item check."""
 
 import json
 import re
@@ -11,6 +11,7 @@ from langextract.resolver import Resolver
 from pydantic import BaseModel, Field
 
 from backend.core.llm_router import GameMasterLLM
+from backend.core.prose_extraction_settings import MAX_PROSE_PASSES
 from backend.core.text_passages import Passage, spans
 from backend.engine.scene_staging.schema import Posture
 
@@ -168,6 +169,32 @@ def _mark_latest(rows: list[dict]) -> None:
             last["latest"] = True
 
 
+def _same_subject(left: dict, right: dict) -> bool:
+    if left["kind"] != right["kind"]:
+        return False
+    field = "item_id" if left["kind"] in {"clothing", "custody"} else "actor_id"
+    return not left[field] or not right[field] or left[field] == right[field]
+
+
+def _merge_pass(events: list[dict], incoming: list[dict]) -> int:
+    """Earlier grounded occurrences take precedence over overlapping later proposals."""
+    prior = tuple(events)
+    conflicts = 0
+    identity = ("kind", "value", "actor_id", "performer_id", "item_id", "recipient_id")
+    for row in incoming:
+        overlapping = [
+            old
+            for old in prior
+            if old["start"] < row["end"] and row["start"] < old["end"] and _same_subject(old, row)
+        ]
+        if not overlapping:
+            events.append(row)
+        elif not any(all(old[key] == row[key] for key in identity) for old in overlapping):
+            # The strict item check cannot reject a turn using contradictory evidence.
+            conflicts += 1
+    return conflicts
+
+
 async def review(
     llm: GameMasterLLM,
     session_id: str,
@@ -176,7 +203,10 @@ async def review(
     items: dict[str, str],
     *,
     player_check: bool = False,
+    passes: int = 1,
 ) -> dict:
+    if type(passes) is not int or not 1 <= passes <= MAX_PROSE_PASSES:
+        raise ValueError(f"Prose extraction requires between 1 and {MAX_PROSE_PASSES} passes.")
     passages = spans(message["content"])
     payload = {
         "source_role": message["role"],
@@ -193,23 +223,41 @@ async def review(
             "or recollections as player actions. Return all actual preceding pickups and dress changes "
             "in order. Include the actual literal object name in the quote. Leave uncertain IDs null."
         )
-    response = await llm.aexecute_complex_task(
-        instruction,
-        _GENERATOR.render(json.dumps(payload, ensure_ascii=False)),
-        Proposals,
-        llm.model,
-        game_id=session_id,
-        operation="prose_evidence",
-        phase=message["role"],
-        single_attempt=True,
-        max_input_chars=32000,
-    )
-    proposals = Proposals.model_validate(response)
-    events, discarded = grounded(proposals, passages, actors, items)
+    prompt = _GENERATOR.render(json.dumps(payload, ensure_ascii=False))
+    events: list[dict] = []
+    discarded = 0
+    completed = 0
+    for number in range(1, passes + 1):
+        try:
+            response = await llm.aexecute_complex_task(
+                instruction,
+                prompt,
+                Proposals,
+                llm.model,
+                game_id=session_id,
+                operation="prose_evidence",
+                phase=message["role"],
+                metadata={"extraction_pass": number, "extraction_passes": passes},
+                single_attempt=True,
+                max_input_chars=32000,
+            )
+            proposals = Proposals.model_validate(response)
+        except Exception:
+            # Debug may show a partial review. Admission must never use one.
+            if not completed or player_check:
+                raise
+            break
+        rows, unsupported = grounded(proposals, passages, actors, items)
+        discarded += unsupported + _merge_pass(events, rows)
+        completed += 1
+    events.sort(key=lambda r: (r["start"], r["end"]))
+    _mark_latest(events)
     return {
         "message_id": message["id"],
         "revision_id": message["revision_id"],
         "role": message["role"],
         "events": events,
         "discarded": discarded,
+        "completed_passes": completed,
+        "requested_passes": passes,
     }

@@ -9,6 +9,7 @@ from backend.core.auth import get_current_user
 from backend.core.config import settings
 from backend.core.database import get_db
 from backend.core.llm_router import GameMasterLLM
+from backend.core.prose_extraction_settings import configured_passes
 from backend.engine import prose_evidence
 from backend.engine.prose_evidence_catalog import Catalog, catalog
 from backend.engine.turn_replay.control import story_message_filter
@@ -98,11 +99,12 @@ async def _reviews(
     except Exception as exc:
         raise generation_error(exc, subject="prose evidence") from exc
 
+    passes = configured_passes(user.llm_settings)
     reviews = []
     failures = []
     for source in sources:
         try:
-            report = await prose_evidence.review(llm, game_id, source, *candidates)
+            report = await prose_evidence.review(llm, game_id, source, *candidates, passes=passes)
         except Exception as exc:
             failure = generation_error(exc, subject="prose evidence")
             failures.append(failure)
@@ -113,6 +115,8 @@ async def _reviews(
                 "error": failure.detail,
                 "events": [],
                 "discarded": 0,
+                "completed_passes": 0,
+                "requested_passes": passes,
             }
         reviews.append(report)
     if len(failures) == len(sources):

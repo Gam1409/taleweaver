@@ -66,6 +66,7 @@ from backend.core.ollama_role_config import (
     temporary_ollama_settings,
     validate_role_urls,
 )
+from backend.core.prose_extraction_settings import ProseExtractionPasses, configured_passes
 from backend.core.security import encryption_util
 from backend.core.style_catalog import normalize_image_styles_catalog
 from backend.engine.media_engine import MediaEngine
@@ -526,6 +527,7 @@ class SettingsPayload(OllamaRoleSettings, CustomOpenAIRoleSettings):
     compression_max_tokens: int = 4096
     compression_openrouter_provider: Optional[str] = ""
 
+    prose_extraction_passes: ProseExtractionPasses = 1
     turns_before_compacting: int = 10
     enable_history_compression: bool = True
 
@@ -897,6 +899,8 @@ async def update_llm_settings(
     updates = payload.model_dump()
     if "parallel_requests" not in payload.model_fields_set:
         updates["parallel_requests"] = (user.llm_settings or {}).get("parallel_requests", {})
+    if "prose_extraction_passes" not in payload.model_fields_set:
+        updates["prose_extraction_passes"] = configured_passes(user.llm_settings)
     user.llm_settings = _normalize_llm_settings(updates)
     if retained_memory is not None:
         user.llm_settings = {**user.llm_settings, "memory_rag": retained_memory}

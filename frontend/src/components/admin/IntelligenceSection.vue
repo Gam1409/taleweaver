@@ -35,6 +35,7 @@ const emit = defineEmits<{
 const normalizeLocalForm = (data: any) => ({
   ...data,
   sampling: normalizeSampling(data?.sampling),
+  prose_extraction_passes: data?.prose_extraction_passes ?? 1,
   parallel_requests: normalizeParallel(data?.parallel_requests),
   turns_before_compacting: typeof data?.turns_before_compacting === 'number' ? data.turns_before_compacting : 10,
   enable_history_compression: typeof data?.enable_history_compression === 'boolean' ? data.enable_history_compression : true,
@@ -525,6 +526,23 @@ const triggerTest = (passKey: OllamaRole, model: string, provider: string, openr
           class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-sm text-white font-mono focus:ring-2 focus:ring-purple-500/50 outline-none"
         />
       </div>
+
+      <label class="block text-xs font-bold text-slate-300">
+        Prose extraction passes
+        <select
+          v-model.number="localForm.prose_extraction_passes"
+          name="prose-extraction-passes"
+          aria-describedby="prose-extraction-help"
+          class="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-2.5 text-sm text-white sm:w-auto sm:block"
+        >
+          <option :value="1">1 pass (default)</option>
+          <option :value="2">2 passes</option>
+          <option :value="3">3 passes</option>
+        </select>
+      </label>
+      <p id="prose-extraction-help" class="text-xs text-slate-400">
+        Each pass reads the same message once. Applies to Debug turn evidence and the optional player item check.
+      </p>
 
       <!-- Test Result Alert -->
       <RoleGenerationSettings

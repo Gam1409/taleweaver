@@ -12,6 +12,7 @@ from backend.core.custom_openai_roles import ROLE_DEFAULTS as CUSTOM_OPENAI_ROLE
 from backend.core.llm_parallel import ParallelSettings
 from backend.core.llm_sampling import SamplingSettings
 from backend.core.ollama_role_config import OLLAMA_ROLE_DEFAULTS, preserve_explicit_ollama_models
+from backend.core.prose_extraction_settings import configured_passes
 from backend.core.tts_voices import GOOGLE_TTS_VOICE_CATALOG, GOOGLE_TTS_VOICE_LIST
 
 DEFAULT_SMALL_MAX_TOKENS = 12288
@@ -44,6 +45,7 @@ _LLM_ENDPOINT_DEFAULTS: dict[str, Any] = {
 }
 
 _LLM_FALLBACK: dict[str, Any] = {
+    "prose_extraction_passes": 1,
     **_LLM_ENDPOINT_DEFAULTS,
     "small_model": "",
     "small_model_provider": "openai",
@@ -230,6 +232,7 @@ def normalize_llm_settings(llm_settings: Optional[dict]) -> dict:
         }
 
     normalized = {**_LLM_ENDPOINT_DEFAULTS, **llm_settings}
+    normalized["prose_extraction_passes"] = configured_passes(llm_settings)
     normalized["parallel_requests"] = ParallelSettings.model_validate(
         normalized.get("parallel_requests") or {}
     ).model_dump()

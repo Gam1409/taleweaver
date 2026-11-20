@@ -5,6 +5,7 @@ import re
 from typing import Any
 
 from backend.core.llm_router import GameMasterLLM
+from backend.core.prose_extraction_settings import configured_passes
 from backend.engine import prose_evidence
 from backend.engine.chpm.control_settings import read
 from backend.engine.clothing.context import actor_records
@@ -104,6 +105,7 @@ async def preflight(manager: Any, text: str) -> str | None:
     # Only normal session initialization has run. Release its transaction before
     # the model call so a slow provider cannot block writers in other sessions.
     # The turn lease protects the captured inventory until admission finishes.
+    passes = configured_passes(manager.user.llm_settings)
     await manager.db.commit()
     try:
         llm = GameMasterLLM.for_role(manager.user, "small")
@@ -116,6 +118,7 @@ async def preflight(manager: Any, text: str) -> str | None:
             actors,
             items,
             player_check=True,
+            passes=passes,
         )
     except Exception:
         return error_event(

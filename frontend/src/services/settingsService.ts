@@ -80,6 +80,7 @@ class SettingsService {
     compression_max_tokens: 4096,
     compression_openrouter_provider: '',
 
+    prose_extraction_passes: 1,
     turns_before_compacting: 10,
     enable_history_compression: true,
 

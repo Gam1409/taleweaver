@@ -198,12 +198,45 @@ async def test_get_settings_returns_llm_ollama_default(client: AsyncClient):
     assert llm["small_model_provider"] == "openai"
     assert llm["complex_model_provider"] == "openai"
     assert llm["small_max_tokens"] == 12288
+    assert llm["prose_extraction_passes"] == 1
     assert llm["complex_max_tokens"] == 24576
     assert llm["play_agent_model"] == ""
     assert llm["play_agent_model_provider"] == "openai"
     assert llm["play_agent_monkey_mode"] is False
     assert llm["preferred_provider"] == "openai"
     assert llm["ollama_url"] == "http://localhost:11434"
+
+
+async def test_prose_passes_persist_across_older_clients_and_reject_invalid_values(
+    client: AsyncClient,
+):
+    payload = (await client.get("/api/settings")).json()["llm_settings"]
+    payload.pop("prose_extraction_passes")
+    for passes in (2, 3):
+        assert (
+            await client.post(
+                "/api/settings/llm", json={**payload, "prose_extraction_passes": passes}
+            )
+        ).status_code == 200
+        assert (await client.post("/api/settings/llm", json=payload)).status_code == 200
+        assert (await client.get("/api/settings")).json()["llm_settings"][
+            "prose_extraction_passes"
+        ] == passes
+    for invalid in (0, 4, True, 1.5, "2", None):
+        assert (
+            await client.post(
+                "/api/settings/llm", json={**payload, "prose_extraction_passes": invalid}
+            )
+        ).status_code == 422
+    assert (await client.get("/api/settings")).json()["llm_settings"][
+        "prose_extraction_passes"
+    ] == 3
+    assert (
+        await client.post("/api/settings/llm", json={**payload, "prose_extraction_passes": 1})
+    ).status_code == 200
+    assert (await client.get("/api/settings")).json()["llm_settings"][
+        "prose_extraction_passes"
+    ] == 1
 
 
 async def test_save_llm_settings_persists_play_agent_model(client: AsyncClient):

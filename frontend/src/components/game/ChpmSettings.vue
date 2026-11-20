@@ -32,7 +32,7 @@ defineExpose({ save })
       <label v-if="status.host_mode === 'vn'" class="block text-xs text-slate-300">
         <input v-model="draft.reject_impossible_player_items" name="reject-impossible-player-items" type="checkbox" class="mr-2 accent-cyan-400" />
         Reject player actions that contradict known item or clothing state
-        <span class="mt-1 block text-slate-400">Checks named items before narration. A blocked action shows the reason and your original words. Relevant turns may use one extra model request.</span>
+        <span class="mt-1 block text-slate-400">Checks named items before narration. A blocked action shows the reason and your original words. The Small model uses the number of passes set in Intelligence settings.</span>
       </label>
       <template v-if="draft.mode !== 'off'">
         <label v-if="draft.mode === 'live'" class="block text-xs text-slate-300">NPC decision workflow

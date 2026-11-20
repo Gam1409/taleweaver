@@ -20,8 +20,10 @@ PLAYER_LINE = "I pocket the compass."
 NARRATOR_LINE = "Lina kneels."
 
 
-async def exchange(db, client, *, action=PLAYER_LINE, reply=NARRATOR_LINE):
+async def exchange(db, client, *, action=PLAYER_LINE, reply=NARRATOR_LINE, passes=None):
     user, avatar, state, _ = await seed_vn(db)
+    if passes is not None:
+        user.llm_settings = {**(user.llm_settings or {}), "prose_extraction_passes": passes}
     state.is_debug_enabled = True
     avatar.inventory = [{"id": "COMPASS", "name": "compass"}]
     before = await capture(db, state.session_id)
@@ -82,12 +84,13 @@ def install_model(monkeypatch, failing=(), during_inference=None):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("passes", [1, 2, 3])
 async def test_review_through_http_uses_separate_sources_and_pre_turn_identities(
-    client, monkeypatch
+    client, monkeypatch, passes
 ):
     calls = install_model(monkeypatch)
     async with TestSessionLocal() as db:
-        replay, messages, state, avatar = await exchange(db, client)
+        replay, messages, state, avatar = await exchange(db, client, passes=passes)
         original = (
             deepcopy(replay.before),
             deepcopy(state.entity_states),
@@ -99,12 +102,16 @@ async def test_review_through_http_uses_separate_sources_and_pre_turn_identities
         assert report["has_snapshot"] is True
         assert [s["message_id"] for s in report["sources"]] == [m.id for m in messages]
         assert [s["revision_id"] for s in report["sources"]] == [m.revision_id for m in messages]
+        for source in report["sources"]:
+            assert len(source["events"]) == 1
+            assert source["completed_passes"] == source["requested_passes"] == passes
         player, narrator = (s["events"][0] for s in report["sources"])
         assert (player["item_id"], narrator["actor_id"]) == ("COMPASS", "LINA")
         assert all(row["resolved"] for row in (player, narrator))
         assert [(row["start"], row["end"]) for row in (player, narrator)] == [(0, 20), (0, 11)]
-        assert [phase for phase, _ in calls] == ["user", "assistant"]
-        assert NARRATOR_LINE not in calls[0][1] and PLAYER_LINE not in calls[1][1]
+        assert [phase for phase, _ in calls] == ["user"] * passes + ["assistant"] * passes
+        assert all(NARRATOR_LINE not in prompt for _, prompt in calls[:passes])
+        assert all(PLAYER_LINE not in prompt for _, prompt in calls[passes:])
         assert not any(
             secret in str(calls)
             for secret in ("HIDDEN_RING", "Hidden ring", "SECRET_GOAL", "ABSENT")

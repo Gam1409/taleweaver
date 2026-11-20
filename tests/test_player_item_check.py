@@ -76,14 +76,14 @@ def test_require_known_wearer_and_order_before_refusing():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("technical", [False, True])
-async def test_rejected_turn_never_enters_saved_story(monkeypatch, technical):
+@pytest.mark.parametrize(("passes", "technical"), [(1, False), (1, True), (2, False), (3, True)])
+async def test_rejected_turn_never_enters_saved_story(monkeypatch, passes, technical):
     text = "I hand the medal to Lina."
     model = SimpleNamespace(model="local", max_tokens=4096, aexecute_complex_task=AsyncMock())
 
     async def answer(*_args, **_kwargs):
         assert not db.in_transaction()
-        if technical:
+        if technical and model.aexecute_complex_task.await_count == passes:
             raise TimeoutError("local stub")
         return {
             "extractions": [event(text, value="given", item_mention="medal", recipient_id="LINA")]
@@ -93,6 +93,7 @@ async def test_rejected_turn_never_enters_saved_story(monkeypatch, technical):
     monkeypatch.setattr(checks.GameMasterLLM, "for_role", lambda *_: model)
     async with TestSessionLocal() as db:
         user, avatar, state, prior = await seed_vn(db)
+        user.llm_settings = {**(user.llm_settings or {}), "prose_extraction_passes": passes}
         state.entity_states = {
             **state.entity_states,
             "__chpm__": {"settings": {"reject_impossible_player_items": True}},
@@ -120,7 +121,7 @@ async def test_rejected_turn_never_enters_saved_story(monkeypatch, technical):
         )
         assert payload["retryable"] is technical
         assert payload["quote"] == ("" if technical else text)
-        assert model.aexecute_complex_task.await_count == 1
+        assert model.aexecute_complex_task.await_count == passes
         assert list(await db.scalars(select(ChatMessage.id))) == [prior]
         await db.refresh(avatar)
         assert not avatar.inventory
