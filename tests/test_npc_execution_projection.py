@@ -231,3 +231,59 @@ async def test_public_owner_receipts_survive_narrator_review_and_repair_chronolo
         assert [receipt["effect"] for receipt in receipts] == expected_effects
         assert all("effect_omitted" not in receipt for receipt in receipts)
         assert turn.action_outcomes == canonical
+
+
+def test_rejected_preview_uses_public_operands_and_keeps_the_raw_audit():
+    from backend.engine.npc_actions.outcome_projection import rejected_preview
+
+    raw = {
+        "operation_id": "op-1",
+        "item_id": "HIDDEN",
+        "target_id": "UNKNOWN",
+        "recipient_id": "__player__",
+        "dimension": "private_mark",
+        "destination_scene_id": "UNSEEN",
+        "reason_code": "owner_rejected",
+    }
+    public = rejected_preview(raw, {"@player", "KEY"}, {"HALL"})
+    assert public == {
+        "operation_id": "op-1",
+        "recipient_id": "@player",
+        "reason_code": "owner_rejected",
+    }
+    assert raw["item_id"] == "HIDDEN" and raw["dimension"] == "private_mark"
+    assert rejected_preview({"destination_scene_id": "HALL"}, set(), {"HALL"}) == {
+        "destination_scene_id": "HALL"
+    }
+
+
+async def test_rejected_receipts_recheck_current_public_view_before_narration():
+    async with TestSessionLocal() as db:
+        manager, observed, draft, turn = await prepared(db)
+        assert "KEY" in draft.scope.public_item_ids
+        assert draft.execute(Take(tool="take_item", item_id="KEY"))["status"] == "staged"
+        await publish_frame(manager, observed, draft, turn)
+        preview = {"tool": "take_item", "item_id": "KEY"}
+        # A current public view has precedence over the older captured scene.
+        turn.execution_frame.entities.pop("KEY")
+        assert execution_frame.rejected_records(turn, "LINA", [preview]) == [{"tool": "take_item"}]
+        assert preview["item_id"] == "KEY"
+        turn.execution_frame = None
+        assert execution_frame.rejected_records(turn, "LINA", [preview]) == [preview]
+        turn.control = {**turn.control, "attempt_id": "other_attempt"}
+        assert execution_frame.rejected_records(turn, "LINA", [preview]) == [{"tool": "take_item"}]
+
+
+def test_unobservable_approach_target_is_omitted_from_the_public_receipt():
+    from backend.engine.npc_actions.outcome_projection import project
+
+    effect = {
+        "posture": "standing",
+        "placement": {"target_kind": "scene_object", "target": "BENCH", "relation": "near"},
+    }
+    raw = {"tool": "approach", "status": "applied", "effect": effect}
+    public = project(raw, {})
+    assert public["status"] == "applied"
+    assert public["effect"] == {}
+    assert "BENCH" not in json.dumps(public)
+    assert project(raw, {"BENCH": {"kind": "item"}})["effect"] == effect

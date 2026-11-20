@@ -460,9 +460,11 @@ The narrator, reviewer and existing prose repair also receive current
 `rejected_command_previews` from the selected decision's tool audit, including
 when every command was rejected and no publication plan exists. The projection
 checks the attempt, input revision/hash, actor, operation and tool-call binding.
-It exposes bounded action references and typed reason codes, excluding notebook
-arguments, private purposes, free descriptions and diagnostic details. Invalid
-arguments retain a typed rejection without inventing an item or target.
+The story-facing copy includes typed reason codes and references visible in the
+public execution frame. When there was no publication, it uses the captured
+public scene and permitted routes. Concealed and unknown operands and proposed
+property names stay in the private audit. Invalid arguments retain a typed
+rejection without inventing an item or target.
 
 These records are preview feedback, not physical failed attempts or world facts.
 Later applied publications supersede only the matching `superseded_fields`;

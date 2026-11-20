@@ -5,6 +5,7 @@ current owners again before model dispatch; cached ORM rows carry no authority.
 """
 
 import json
+from collections.abc import Collection
 from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any
@@ -34,36 +35,52 @@ class Frame:
     player_id: str | None = None
 
 
-def _public_items(turn: Any, observation: Any) -> set[str]:
-    """Use visibility evidence from this captured input, never the command's own choice."""
-    result: set[str] = set()
-    expected = (
+def _bound_scope(turn: Any, actor: str, observation: Any) -> Any:
+    draft = getattr(turn, "action_drafts", {}).get(actor)
+    scope = getattr(draft, "scope", None)
+    if scope is None or scope.actor_id != actor:
+        return None
+    if (
+        scope.session_id,
+        scope.input_id,
+        scope.input_revision,
+        scope.input_hash,
+        scope.scene_id,
+    ) != (
         observation.session_id,
         observation.message_id,
         observation.revision_id,
         observation.content_hash,
         observation.scene_id,
-    )
-    for draft in getattr(turn, "action_drafts", {}).values():
-        scope = getattr(draft, "scope", None)
-        if (
-            scope is None
-            or (
-                scope.session_id,
-                scope.input_id,
-                scope.input_revision,
-                scope.input_hash,
-                scope.scene_id,
-            )
-            != expected
-        ):
-            continue
-        if all(
-            scope.control.get(key) == turn.control.get(key)
-            for key in ("attempt_id", "input_id", "input_revision", "input_hash")
-        ):
-            result.update(scope.public_item_ids)
-    return result
+    ):
+        return None
+    fields = ("attempt_id", "input_id", "input_revision", "input_hash")
+    return scope if all(scope.control.get(k) == turn.control.get(k) for k in fields) else None
+
+
+def _public_items(turn: Any, observation: Any) -> set[str]:
+    """Use visibility evidence from this captured input, never the command's own choice."""
+    return {
+        item
+        for actor in getattr(turn, "action_drafts", {})
+        if (scope := _bound_scope(turn, actor, observation)) is not None
+        for item in scope.public_item_ids
+    }
+
+
+def rejected_records(turn: Any, actor: str, rows: list[dict]) -> list[dict]:
+    # All commands may have been rejected, so a published execution frame is optional.
+    scope = _bound_scope(turn, actor, turn.decisions[actor].observation)
+    frame = getattr(turn, "execution_frame", None)
+    public: Collection[str]
+    if isinstance(frame, Frame):
+        public = frame.entities.keys()
+    elif scope is not None:
+        public = scope.public_item_ids | {public_actor_id(key) for key in scope.actors}
+    else:
+        public = set()
+    destinations = scope.destinations if scope is not None else frozenset()
+    return [outcome_projection.rejected_preview(row, public, destinations) for row in rows]
 
 
 def _known_items(outcomes: dict[str, list[dict]], public: set[str]) -> set[str]:

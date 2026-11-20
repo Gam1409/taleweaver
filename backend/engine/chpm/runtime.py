@@ -189,7 +189,9 @@ def contract_data(turn: Turn) -> dict:
             )
     for actor, records in command_feedback.project(turn).items():
         if actor in data:
-            data[actor]["rejected_command_previews"] = records
+            data[actor]["rejected_command_previews"] = owner_frame.rejected_records(
+                turn, actor, records
+            )
     data.update(owner_frame.context(turn))
     return data
 

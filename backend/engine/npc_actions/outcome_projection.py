@@ -17,11 +17,35 @@ def _omit(record: dict, fields: Collection[str], reason: str) -> dict:
 
 
 def _hidden_target(effect: dict, entities: Mapping[str, dict]) -> bool:
+    placement = effect.get("placement")
+    if isinstance(placement, dict) and (
+        not isinstance(placement.get("target"), str) or placement["target"] not in entities
+    ):
+        return True
     return any(
         not isinstance(effect[key], str) or effect[key] not in entities
         for key in ("item_id", "target_id")
         if key in effect
     )
+
+
+def rejected_preview(row: dict, public_ids: Collection[str], destinations: Collection[str]) -> dict:
+    """A rejected operand is model input, even when the rejection itself is authoritative."""
+    result = dict(row)
+    # A proposed property name can itself disclose a private detail; no property was published.
+    result.pop("dimension", None)
+    for field in ("item_id", "target_id", "recipient_id", "destination_scene_id"):
+        if field not in result:
+            continue
+        identifier = result[field]
+        if field in {"target_id", "recipient_id"}:
+            identifier = public_actor_id(identifier)
+        allowed = destinations if field == "destination_scene_id" else public_ids
+        if identifier in allowed:
+            result[field] = identifier
+        else:
+            del result[field]
+    return result
 
 
 def _public_property(effect: dict, entities: Mapping[str, dict]) -> bool:

@@ -87,7 +87,13 @@ async def test_rejected_take_and_give_reach_narration_and_review_with_an_empty_p
         assert not supplied["contract"]["LINA"].get("authoritative_command_outcomes")
         records = supplied["contract"]["LINA"]["rejected_command_previews"]
         assert [record["tool"] for record in records] == ["take_item", "give_item"]
-        assert all(record["item_id"] == "BRASS_KEY" for record in records)
+        assert all("item_id" not in record for record in records)
+        assert records[1]["recipient_id"] == "@player"
+        assert all(
+            row["item_id"] == "BRASS_KEY"
+            for step in saved.actors["LINA"].agent_audit
+            for row in step["requests"]
+        )
         assert all(record["reason_code"] == "unavailable_entity" for record in records)
         assert all(record["phase"] == "npc_tools" for record in records)
         assert "rejected_command_previews" in str(roles.prompts)
@@ -124,7 +130,11 @@ class OwnerRejectedRoles(RejectedKeyRoles):
     @staticmethod
     def commands():
         return [
-            {"name": "give_item", "arguments": {"item_id": "HIDDEN_RING", "recipient_id": "LINA"}}
+            {"name": "give_item", "arguments": {"item_id": "HIDDEN_RING", "recipient_id": "LINA"}},
+            {
+                "name": "give_item",
+                "arguments": {"item_id": "SPARE_ITEM", "recipient_id": "@player"},
+            },
         ]
 
 
@@ -138,10 +148,20 @@ async def test_real_owner_rejection_is_feedback_without_aborting_the_turn(monkey
         assert any(event.startswith("event: final") for event in events), "".join(events)
         _, supplied = roles.reviews[0]
         records = supplied["contract"]["LINA"]["rejected_command_previews"]
-        assert len(records) == 1
+        assert len(records) == 2
         assert records[0]["status"] == "blocked"
         assert records[0]["reason_code"] == "recipient_unavailable"
-        assert records[0]["item_id"] == "HIDDEN_RING"
+        assert "item_id" not in records[0]
+        assert records[0]["recipient_id"] == "LINA"
+        assert records[1]["item_id"] == "SPARE_ITEM"
+        assert records[1]["recipient_id"] == "@player"
+        assert records[1]["reason_code"] == "custody_changed"
+        assert "HIDDEN_RING" not in json.dumps(records)
+        assert any(
+            row.get("item_id") == "HIDDEN_RING"
+            for step in load(manager.state).actors["LINA"].agent_audit
+            for row in step["requests"]
+        )
         assert not supplied["contract"]["LINA"].get("authoritative_command_outcomes")
         assert load(manager.state).usage.calls == 4
 
