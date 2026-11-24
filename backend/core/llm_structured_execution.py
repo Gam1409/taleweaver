@@ -19,6 +19,10 @@ class InputBudgetError(ValueError):
         )
 
 
+class OutputLimitError(StructuredOutputError):
+    """The provider completed transport but ran out of generation budget."""
+
+
 def input_characters(kwargs: dict[str, Any]) -> int:
     fields = {
         key: kwargs[key]
@@ -39,18 +43,18 @@ def require_input_budget(kwargs: dict[str, Any], max_input_chars: int | None) ->
         raise InputBudgetError(measured, max_input_chars)
 
 
-def require_complete(records: list[Completion]) -> None:
+def require_complete(records: list[Completion], *, task: str = "structured") -> None:
     """Reuse the captured canonical/native finish classification before typed parsing."""
     if len(records) != 1 or records[0].tool_rejected:
         raise StructuredOutputError(
-            "LLM structured response has unsupported completion metadata. No retry was sent."
+            f"LLM {task} response has unsupported completion metadata. No retry was sent."
         )
     reason = records[0].tool_finish_reason
     if reason in {"length", "max_tokens"}:
-        raise StructuredOutputError(
-            "LLM structured response was truncated (token limit). No retry was sent."
+        raise OutputLimitError(
+            f"LLM {task} response was truncated (token limit). No retry was sent."
         )
     if reason != "stop":
         raise StructuredOutputError(
-            "LLM structured response did not finish with a complete stop. No retry was sent."
+            f"LLM {task} response did not finish with a complete stop. No retry was sent."
         )

@@ -1035,6 +1035,7 @@ class GameMasterLLM:
         messages: Optional[list[dict[str, Any]]] = None,
         response_format: dict[str, Any] | None = None,
         single_attempt: bool = False,
+        require_complete_output: bool = False,
         adventure_id: Optional[str] = None,
         game_id: Optional[str] = None,
         operation: Optional[str] = None,
@@ -1087,20 +1088,23 @@ class GameMasterLLM:
         result = response.choices[0].message.content or ""
         result = clean_technical_text(result) if technical else self.clean_thinking_tags(result)
 
-        log_llm_interaction(
-            model=model,
-            provider=self.provider,
-            system_prompt=system_prompt,
-            user_prompt=user_prompt,
-            response_content=result,
-            raw_response=response.model_dump(),
-            event_type="gm.turn.response",
-            adventure_id=adventure_id,
-            game_id=game_id,
-            operation=operation,
-            phase=phase,
-            metadata=metadata,
-        )
+        with capture_completions() as completions:
+            log_llm_interaction(
+                model=model,
+                provider=self.provider,
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                response_content=result,
+                raw_response=response.model_dump(),
+                event_type="gm.turn.response",
+                adventure_id=adventure_id,
+                game_id=game_id,
+                operation=operation,
+                phase=phase,
+                metadata=metadata,
+            )
+        if require_complete_output:
+            require_complete(completions, task="text")
 
         return result
 

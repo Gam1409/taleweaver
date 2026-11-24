@@ -113,11 +113,19 @@ tab left open and routine UI polling allow the timer to expire. Other maintenanc
 can use its ordinary idle windows while the journal waits. Summary calls use the
 configured **compression** role, with bounded input and that role's deadline.
 Public indexing, chronicle compression, interval summaries and optional observer
-indexing take turns, with at most
-one model batch per idle unit. A failed phase backs off independently, allowing
-other phases to advance; subsequent session activity can restart deferred work.
-Very slow models can time
-out during summarization while raw history remains available for retrieval.
+indexing take turns, with one model batch per idle unit. A failed phase backs off
+independently, allowing other phases to advance; subsequent session activity can
+restart deferred work. Very slow models can time out during summarization while raw
+history remains available for retrieval.
+
+Chronicle compression budgets the instructions, previous chronicle and new sources
+together, with a 16,000-character prompt ceiling and the compression role's separate
+output limit. The character ceiling is not a provider token-window measurement.
+The chronicle is saved only after a complete model stop. A confirmed output-limit
+finish permits one attempt with a smaller source batch, only while still idle and
+within the original deadline. If that fails, the last saved chronicle and source
+cursor stay unchanged. Transport failures and unknown completion do not trigger
+this smaller-batch attempt.
 
 This is process-local scheduling, not remote inference preemption. A request
 already executing on a single-slot model server may still delay the next turn,
