@@ -2,6 +2,7 @@
 
 from itertools import combinations
 from math import comb
+from typing import cast
 
 from backend.core.llm_schema_compaction import map_schema
 
@@ -19,7 +20,7 @@ _OBJECT_KEYS = {
 
 
 def project_cardinality(schema: dict) -> dict:
-    return map_schema(schema, _finite_object)
+    return cast(dict, map_schema(schema, _finite_object))
 
 
 def _finite_object(node: dict) -> dict:
