@@ -133,21 +133,32 @@ async def compress_history_one_group(
     history_hash = content_hash(history)
     router = GameMasterLLM.for_role(user, "compression")
     await db.commit()
-    retry = False
-    async with asyncio.timeout(role_timeout(user, "compression")):
+
+    async def generate_with_retry() -> tuple[dict, str, int, bool]:
         try:
             summary = await _generate(router, session_id, system, prior, batch)
         except OutputLimitError:
-            retry = True
-            limit = len(batch["events"]) // 2
-            smaller = await _batch(db, state, limit, retry=True)
+            smaller_limit = len(batch["events"]) // 2
+            smaller = await _batch(db, state, smaller_limit, retry=True)
             if not smaller:
                 raise
             await db.commit()
-            batch = smaller
-            summary = await _generate(router, session_id, system, prior, batch)
+            summary = await _generate(router, session_id, system, prior, smaller)
+            return smaller, summary, smaller_limit, True
+        return batch, summary, limit, False
+
+    selected, summary, selected_limit, retry = await asyncio.wait_for(
+        generate_with_retry(), timeout=role_timeout(user, "compression")
+    )
     return await _save_chronicle(
-        session_id, epoch, lease_token, history_hash, batch, summary, limit=limit, retry=retry
+        session_id,
+        epoch,
+        lease_token,
+        history_hash,
+        selected,
+        summary,
+        limit=selected_limit,
+        retry=retry,
     )
 
 

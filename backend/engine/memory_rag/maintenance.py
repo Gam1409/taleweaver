@@ -78,7 +78,7 @@ class Cycle:
             if blocked
             else None
         )
-        status = "waiting" if self.failures or blocked else "ready"
+        status: Literal["waiting", "ready"] = "waiting" if self.failures or blocked else "ready"
         return Outcome(status, index_idle, notice)
 
     def _failed(self, kind: str, exc: Exception) -> None:
