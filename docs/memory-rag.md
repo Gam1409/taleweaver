@@ -127,6 +127,11 @@ within the original deadline. If that fails, the last saved chronicle and source
 cursor stay unchanged. Transport failures and unknown completion do not trigger
 this smaller-batch attempt.
 
+Interval summaries also require a complete provider stop and reject answers
+larger than the existing 6,000-character storage limit instead of slicing them.
+A failed interval stays eligible for future background work without a second
+request in the same job. Existing saved summaries and raw sources are unchanged.
+
 This is process-local scheduling, not remote inference preemption. A request
 already executing on a single-slot model server may still delay the next turn,
 and stopping the local await does not guarantee that the remote server stops

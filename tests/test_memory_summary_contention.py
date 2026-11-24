@@ -89,6 +89,69 @@ async def test_truncated_chronicle_keeps_previous_summary_and_cursor(journal_wor
         assert state.compressed_history == {"summary": "Old history"}
 
 
+@pytest.mark.parametrize(
+    ("model", "role", "template"),
+    [
+        ("koboldcpp/local-model", "compression", {"enable_thinking": False}),
+        ("koboldcpp/local-model", "small", None),
+        ("local-model", "compression", None),
+    ],
+)
+async def test_interval_summary_retries_uncovered_sources_only_on_a_later_job(
+    journal_world, monkeypatch, model, role, template
+):
+    owner, _ = journal_world
+    await seed(owner)
+    llm = router(monkeypatch)
+    llm.model, llm.model_category = model, role
+    responses = iter([("An unfinished", "length"), ("A complete summary.", "stop")])
+    prompts = []
+
+    async def respond(request):
+        body = json.loads(request.content)
+        assert body.get("chat_template_kwargs") == template
+        prompts.append(body["messages"])
+        return httpx.Response(200, request=request, json=completion(*next(responses)))
+
+    mock_http(monkeypatch, respond)
+    monkeypatch.setattr(summaries.GameMasterLLM, "for_role", lambda *_: llm)
+    monkeypatch.setattr(summaries.scheduler, "can_start_background", lambda: True)
+
+    with pytest.raises(OutputLimitError):
+        await run("summary", owner)
+    assert len(prompts) == 1
+    async with TestSessionLocal() as db:
+        assert await db.scalar(select(MemorySummary)) is None
+
+    assert await run("summary", owner)
+    assert len(prompts) == 2
+    assert prompts[0] == prompts[1]
+    async with TestSessionLocal() as db:
+        saved = await db.scalar(select(MemorySummary))
+        assert saved.text == "A complete summary."
+        assert saved.source_keys
+
+
+async def test_overlong_completed_summary_is_not_silently_sliced(journal_world, monkeypatch):
+    owner, _ = journal_world
+    await seed(owner)
+    request = AsyncMock(return_value="a" * 6001)
+    model = SimpleNamespace(model="fake", aexecute_simple_task=request)
+    monkeypatch.setattr(summaries.GameMasterLLM, "for_role", lambda *_: model)
+    monkeypatch.setattr(summaries.scheduler, "can_start_background", lambda: True)
+
+    with pytest.raises(ValueError, match="summary exceeds"):
+        await run("summary", owner)
+    assert request.await_count == 1
+    async with TestSessionLocal() as db:
+        assert await db.scalar(select(MemorySummary)) is None
+    request.return_value = "b" * 6000
+    assert await run("summary", owner)
+    async with TestSessionLocal() as db:
+        saved = await db.scalar(select(MemorySummary))
+        assert saved.text == request.return_value
+
+
 async def test_chronicle_retries_wire_truncation_with_smaller_exact_source_batch(
     journal_world, monkeypatch
 ):

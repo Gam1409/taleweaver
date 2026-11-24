@@ -31,6 +31,7 @@ MIN_NEW_EVENTS = 8
 MIN_NPC_REPLIES = 20
 MAX_EVENTS = 24
 MAX_INPUT_CHARS = 12000
+MAX_SUMMARY_CHARS = 6000
 SummaryKey = tuple[str, str | None, str | None]
 
 
@@ -185,11 +186,16 @@ async def summarize_one_group(
             game_id=session_id,
             operation="memory_summary",
             phase=job.layer,
+            single_attempt=True,
+            require_complete_output=True,
         ),
         timeout=role_timeout(user, "compression"),
     )
-    if not text or not text.strip():
+    text = text.strip() if text else ""
+    if not text:
         raise ValueError("Memory summary model returned no text.")
+    if len(text) > MAX_SUMMARY_CHARS:
+        raise ValueError("Memory summary exceeds its storage limit. No summary was saved.")
     return await _save_summary(session_id, user_id, epoch, lease_token, job, text)
 
 
@@ -216,7 +222,7 @@ async def _save_summary(
             scene_id=job.scene_id,
         )
         db.add(row)
-        row.text = text.strip()[:6000]
+        row.text = text
         row.source_message_ids = job.message_ids
         row.source_hash = job.source_hash
         row.source_keys = job.source_keys
