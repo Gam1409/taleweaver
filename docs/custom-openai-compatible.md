@@ -37,12 +37,21 @@ In Docker, `127.0.0.1` is the container itself. Use `host.docker.internal` where
 
 The request timeout defaults to 300 seconds and is editable up to 3600 seconds; it also controls the initial and idle streaming timeouts. Existing per-pass output token settings remain in effect. The server determines the actual context limit.
 
+For `koboldcpp/` model IDs, the compression role sends
+`chat_template_kwargs.enable_thinking=false` when Thinking is off. This requires
+KoboldCpp Jinja chat formatting and a model template that honors the option.
+It does not change any other role.
+
 **Structured output support** defaults to **Prompt only** for compatibility. Prompt only and **JSON object** include the complete canonical schema in the prompt; JSON object also requests JSON syntax through `response_format`. If your server supports **JSON schema**, TaleWeaver sends a structural decoder schema through `response_format` and keeps canonical descriptions, defaults, examples and deferred validation rules in the prompt. Identical schema nodes can share local `$defs` references to reduce duplication. Scoped, recursive or unrecognized contracts retain the complete canonical prompt when a smaller representation cannot be proven safe. No narrative, source data or domain instructions are removed.
 
 Native schema mode requires the server to support the schema keywords and local `$defs` references it receives. Token and context accounting varies by server; native mode does not establish the available context. Where a prepared-request character limit is configured, it conservatively counts both messages and the response schema. A server rejection of the selected mode is reported without automatically replaying the request; choose Prompt only if the server lacks support. Separately, unsupported task-schema projections can select a weaker format before dispatch, as described in [technical structured output](structured-output.md). NPC Personality technical requests honor the same selection, including observer-specific identifier constraints. Freeform narration does not send `response_format`, and structured output does not require tool-calling support. TaleWeaver still parses and validates the response using the canonical Pydantic schema. Schema equivalence and transport tests do not establish a model's semantic accuracy or ability to follow complex instructions.
 
 NPC requests expand finite dictionary keys into explicit optional properties in
 the transport schema because some grammar backends ignore `propertyNames`.
+For discovered `koboldcpp/` model IDs in **JSON schema** mode, small closed maps
+with cardinality limits also use explicit required-key alternatives. This works
+around KoboldCpp converters that ignore `minProperties` and `maxProperties`,
+without changing the response shape or the canonical prompt.
 The prompt retains its canonical field guidance and its existing input budget.
 Backend validation still checks candidate counts, unique motives, source ownership
 and literal evidence; a server grammar does not establish semantic correctness.

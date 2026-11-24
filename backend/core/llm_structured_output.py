@@ -10,6 +10,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from backend.core.llm_kobold_schema import project_cardinality
 from backend.core.llm_provider_config import (
     is_minimax_model,
     normalize_model,
@@ -79,7 +80,7 @@ def select(
         return _simple(mode)
     try:
         projected = project(schema if schema is not None else response_model.model_json_schema())
-        contract = share_schema(_native_schema(projected.schema, provider))
+        contract = share_schema(_native_schema(projected.schema, provider, model))
     except SchemaProjectionError:
         fallback = "prompt" if provider == "anthropic" else "json_object"
         logger.debug(
@@ -126,11 +127,15 @@ def _strict(schema: dict) -> dict:
     return result
 
 
-def _native_schema(schema: dict, provider: str) -> dict:
+def _native_schema(schema: dict, provider: str, model: str) -> dict:
     if provider == "openai":
         return _strict(schema)
     if provider == "anthropic":
         return _anthropic(schema)
+    if provider == "custom_openai" and model.lower().removeprefix("openai/").startswith(
+        "koboldcpp/"
+    ):
+        return project_cardinality(schema)
     return schema
 
 

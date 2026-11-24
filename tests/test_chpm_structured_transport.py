@@ -81,8 +81,9 @@ async def test_configured_json_mode_reaches_technical_http_requests_only(
     assert "response_format" not in seen[1]
 
 
+@pytest.mark.parametrize("model", ["vendor/model", "koboldcpp/local-model"])
 async def test_finite_candidate_keys_reach_the_http_grammar_without_expanding_instructions(
-    monkeypatch, local_policy
+    monkeypatch, local_policy, model
 ):
     seen = []
 
@@ -106,7 +107,7 @@ async def test_finite_candidate_keys_reach_the_http_grammar_without_expanding_in
 
     monkeypatch.setattr(httpx.AsyncHTTPTransport, "handle_async_request", handle)
     router = make_router()
-    router.model, router.custom_response_format = "vendor/model", "json_schema"
+    router.model, router.custom_response_format = model, "json_schema"
     host = SimpleNamespace(user=None, game_id=None, _chpm_model_factory=lambda _role: router)
     identifiers = {"motive_ids": ["goal1", "character"]}
     usage = Usage()
@@ -119,8 +120,19 @@ async def test_finite_candidate_keys_reach_the_http_grammar_without_expanding_in
         "goal1",
         "character",
     ]
-    assert sent["properties"]["candidates"]["additionalProperties"] is False
-    assert "CONTINUE" in sent["properties"]["candidates"]["properties"]
+    candidates = sent["properties"]["candidates"]
+    if model.startswith("koboldcpp/"):
+        branches = candidates["anyOf"]
+        assert {len(branch["required"]) for branch in branches} == {2, 3, 4}
+        assert all(
+            branch["additionalProperties"] is False
+            and set(branch["required"]) == set(branch["properties"])
+            for branch in branches
+        )
+        assert any(set(branch["required"]) == {"CONTINUE", "INITIATE"} for branch in branches)
+    else:
+        assert candidates["additionalProperties"] is False
+        assert "CONTINUE" in candidates["properties"]
     compact = share_schema(json_contract.response_schema(Draft, identifiers), short_names=True)
     assert seen[0]["messages"][0]["content"].endswith(
         json.dumps(compact, ensure_ascii=False, separators=(",", ":"))

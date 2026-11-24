@@ -860,6 +860,7 @@ class GameMasterLLM:
             model=kwargs.get("model") or self.model,
             enabled=self.enable_thinking,
             budget_tokens=self.max_thinking_tokens,
+            role=getattr(self, "model_category", ""),
         )
 
     def _apply_openrouter_provider_routing(self, kwargs: dict) -> None:
