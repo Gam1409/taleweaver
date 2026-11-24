@@ -12,7 +12,13 @@ from fastapi import HTTPException
 from pydantic import BaseModel
 
 from backend.core.custom_openai_roles import resolve_url
-from backend.core.inference.admission import timeout_for
+from backend.core.inference.admission import (
+    begin_http_request,
+    confirm_local_rejection,
+    receive_http_response,
+    receive_http_response_sync,
+    timeout_for,
+)
 from backend.core.inference.events import sent
 from backend.core.llm_connection_test import ConnectionTestResult, test_connection
 from backend.core.llm_deadlines import custom_openai_timeout
@@ -131,15 +137,34 @@ async def discover_models(base: str, api_key: str | None) -> list[str]:
         ) from exc
 
 
+def _validated_inference_url(url: str) -> str:
+    try:
+        return validate_custom_url(url)
+    except HTTPException:
+        confirm_local_rejection()
+        raise
+
+
+async def _begin_request(request: httpx.Request) -> None:
+    begin_http_request(request)
+    await sent(request)
+
+
 def complete(router: Any, kwargs: dict) -> Any:
     """Use a bounded SDK client so redirects cannot bypass endpoint policy."""
     from openai import OpenAI
 
     with (
-        httpx.Client(follow_redirects=False) as transport,
+        httpx.Client(
+            follow_redirects=False,
+            event_hooks={
+                "request": [begin_http_request],
+                "response": [receive_http_response_sync],
+            },
+        ) as transport,
         OpenAI(
             api_key=router.api_key or "local-no-key",
-            base_url=validate_custom_url(router.api_base),
+            base_url=_validated_inference_url(router.api_base),
             http_client=transport,
             max_retries=0,
         ) as client,
@@ -164,10 +189,13 @@ async def acomplete(router: Any, kwargs: dict) -> Any:
         response_format=kwargs.get("response_format"),
     )
     async with (
-        httpx.AsyncClient(follow_redirects=False, event_hooks={"request": [sent]}) as transport,
+        httpx.AsyncClient(
+            follow_redirects=False,
+            event_hooks={"request": [_begin_request], "response": [receive_http_response]},
+        ) as transport,
         AsyncOpenAI(
             api_key=router.api_key or "local-no-key",
-            base_url=await asyncio.to_thread(validate_custom_url, router.api_base),
+            base_url=await asyncio.to_thread(_validated_inference_url, router.api_base),
             http_client=transport,
             max_retries=0,
         ) as client,
@@ -185,10 +213,12 @@ async def _stream(router: Any, kwargs: dict) -> Any:
     from openai import AsyncOpenAI
 
     async with (
-        httpx.AsyncClient(follow_redirects=False, event_hooks={"request": [sent]}) as transport,
+        httpx.AsyncClient(
+            follow_redirects=False, event_hooks={"request": [_begin_request]}
+        ) as transport,
         AsyncOpenAI(
             api_key=router.api_key or "local-no-key",
-            base_url=await asyncio.to_thread(validate_custom_url, router.api_base),
+            base_url=await asyncio.to_thread(_validated_inference_url, router.api_base),
             http_client=transport,
             max_retries=0,
         ) as client,

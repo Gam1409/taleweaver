@@ -5,7 +5,7 @@ import asyncio
 import httpx
 import pytest
 
-from backend.core.inference import transport
+from backend.core.inference import admission, transport
 from backend.core.inference.registry import InferenceUncertainError
 from backend.engine.memory_rag import embeddings
 from backend.engine.memory_rag.settings import MemoryRagSettings
@@ -60,6 +60,40 @@ async def test_failure_after_possible_submission_remains_uncertain(reservations,
         await call(router(), {})
     assert reservations.status()[0]["status"] == "UNCERTAIN"
     assert "PRIVATE_ENDPOINT" not in str(reservations.status())
+
+
+@pytest.mark.parametrize("status", [200, 500])
+async def test_http_body_receipt_distinguishes_sdk_processing_failure(reservations, status):
+    @transport.guarded_async
+    async def call(client, args):
+        await admission.receive_http_response(httpx.Response(status, content=b"malformed"))
+        error = ValueError("Could not process the provider response")
+        error.status_code = status
+        raise error
+
+    with pytest.raises(ValueError, match="Could not process"):
+        await call(router(), {})
+
+    if status == 200:
+        assert reservations.status() == []
+    else:
+        assert reservations.status()[0]["reason"] == "provider_http_5xx"
+
+
+async def test_http_headers_without_complete_body_are_not_a_receipt(reservations):
+    class InterruptedBody(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            yield b"partial"
+            raise httpx.ReadError("response body interrupted")
+
+    @transport.guarded_async
+    async def call(client, args):
+        await admission.receive_http_response(httpx.Response(200, stream=InterruptedBody()))
+
+    with pytest.raises(httpx.ReadError):
+        await call(router(), {})
+
+    assert reservations.status()[0]["status"] == "UNCERTAIN"
 
 
 async def test_connection_failure_after_recall_stops_waiting_releases_its_exact_lease(

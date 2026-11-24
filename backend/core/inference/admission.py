@@ -68,6 +68,34 @@ class Lease:
     reason: str = "completion_unconfirmed"
     finalize: Callable[[bool, str], None] | None = None
     reservation_id: str | None = None
+    http_attempted: bool = False
+
+
+_current_lease: ContextVar[Lease | None] = ContextVar("inference_lease", default=None)
+
+
+def begin_http_request(request: httpx.Request) -> None:
+    if (lease := _current_lease.get()) is not None and request.method == "POST":
+        lease.http_attempted = True
+        lease.certain = False
+
+
+def confirm_local_rejection() -> None:
+    if (lease := _current_lease.get()) is not None and not lease.http_attempted:
+        lease.certain = True
+
+
+async def receive_http_response(response: httpx.Response) -> None:
+    """An entire successful non-streaming body survives later SDK parsing errors."""
+    if (lease := _current_lease.get()) is not None and response.status_code == 200:
+        await response.aread()
+        lease.certain = True
+
+
+def receive_http_response_sync(response: httpx.Response) -> None:
+    if (lease := _current_lease.get()) is not None and response.status_code == 200:
+        response.read()
+        lease.certain = True
 
 
 def failure_reason(error: BaseException) -> str:
@@ -77,6 +105,9 @@ def failure_reason(error: BaseException) -> str:
         return "request_timeout"
     if isinstance(error, InferenceUncertainError):
         return "incomplete_stream"
+    status = getattr(error, "status_code", None)
+    if type(status) is int and 500 <= status < 600:
+        return "provider_http_5xx"
     if (
         isinstance(error, (ConnectionError, OSError, httpx.ConnectError))
         or "connection" in type(error).__name__.lower()
@@ -136,6 +167,7 @@ async def reserve(
             events.emit(
                 "blocked",
                 reservation_id=ticket.token,
+                blocking_reservation_id=getattr(error, "blocking_reservation_id", None),
                 error=error,
                 duration_ms=(time.monotonic() - started) * 1000,
             )
@@ -183,6 +215,7 @@ def reserve_sync(key: str, timeout: float, *, capacity: int | None = None) -> It
             events.emit(
                 "blocked",
                 reservation_id=ticket.token,
+                blocking_reservation_id=getattr(error, "blocking_reservation_id", None),
                 error=error,
                 duration_ms=(time.monotonic() - started) * 1000,
             )
@@ -213,7 +246,9 @@ def timeout_for(router: Any) -> float:
 def deadline_scope(lease: Lease) -> Iterator[None]:
     """Use only around an await/call, never across an async generator yield."""
     token = request_deadline.set(lease.deadline)
+    lease_token = _current_lease.set(lease)
     try:
         yield
     finally:
+        _current_lease.reset(lease_token)
         request_deadline.reset(token)

@@ -53,6 +53,10 @@ Direct HTTPX `ConnectError`, `ConnectTimeout` and `PoolTimeout` failures release
 reservation: no connection was established or acquired to send that request. They
 do not trigger an automatic retry. Read/write failures and generic SDK connection
 errors remain uncertain because they do not establish whether submission occurred.
+For administrator-managed OpenAI-compatible calls, a local endpoint-policy
+rejection before the request or a fully read non-streaming HTTP 200 response
+releases the slot even if later processing raises. HTTP 5xx keeps the fence and
+has its own reason; a proxy error does not prove the upstream has stopped.
 
 Automatic connection/timeout retries, including SDK retries, are disabled on guarded
 completion paths. Retrying the game, changing the model role, or restarting TaleWeaver
@@ -79,7 +83,10 @@ This prevents a nearly exhausted recall wait from immediately quarantining the
 chat server after dispatch. Successful completion events omit an uncertainty reason.
 
 The queue card records a content-free failure category and the time it became
-uncertain. This is distinct from the admission/start timestamp. Older records
+uncertain. Blocked request diagnostics include the ID of the earlier reservation
+holding the fence, also shown on the queue card. Background memory and NPC journal
+jobs remember that ID and defer repeated submission attempts while it remains
+unresolved. This is distinct from the admission/start timestamp. Older records
 without this metadata remain recoverable but cannot explain their original cause.
 Malformed application output is not evidence that a fully received transport
 response is still generating. A broken response must fail its own validation

@@ -6,6 +6,7 @@ test('uncertain reservations show the cause and failure elapsed time, while old 
   const v = mountSfc('components/admin/InferenceQueue.vue', {}, {
     '@/services/http': { apiFetch: async () => new Response(JSON.stringify({ enabled: true, reservations: [
       { endpoint_id: 'one', token: 'one', started: 100, uncertain_at: 220, status: 'UNCERTAIN', reason: 'request_timeout' },
+      { endpoint_id: 'two', token: 'blocking-request', started: 140, status: 'UNCERTAIN', reason: 'provider_http_5xx' },
       { endpoint_id: 'legacy', token: 'legacy', started: 100, status: 'UNCERTAIN' },
     ] })) },
   })
@@ -15,8 +16,10 @@ test('uncertain reservations show the cause and failure elapsed time, while old 
   assert.match(text, /request deadline expired/i)
   assert.match(text, /120 seconds after admission/)
   assert.match(text, /No cause was recorded/)
+  assert.match(text, /HTTP 5xx.*does not confirm that generation stopped/)
+  assert.match(text, /Reservation ID: blocking-request/)
   assert.doesNotMatch(text, /restart to enable/)
   const clear = v.all().filter(node => node.type === 'button' && v.text(node).trim() === 'Clear stopped request')
-  assert.equal(clear.length, 2)
+  assert.equal(clear.length, 3)
   assert.equal(clear.every(button => button.props.disabled), true)
 })

@@ -8,6 +8,7 @@ const reasons: Record<string, string> = {
   request_timeout: 'The request deadline expired before transport completion was confirmed.',
   incomplete_stream: 'The response stream ended without a completion marker.',
   connection_failure: 'The connection failed before transport completion was confirmed.',
+  provider_http_5xx: 'The server or proxy returned HTTP 5xx. This does not confirm that generation stopped.',
   provider_or_processing_error: 'A provider or response-processing error left completion unconfirmed.',
   completion_unconfirmed: 'Completion was not confirmed.',
 }
@@ -56,6 +57,7 @@ onMounted(load)
     <div v-for="row in reservations" :key="row.token" class="rounded border border-white/10 p-3 space-y-2">
       <p class="text-sm">{{ row.status }} · {{ new Date(row.started * 1000).toLocaleString() }}</p>
       <p class="text-xs break-all text-slate-400">Endpoint fingerprint: {{ row.endpoint_id }}</p>
+      <p class="text-xs break-all text-slate-400">Reservation ID: {{ row.token }}</p>
       <template v-if="row.status === 'UNCERTAIN'">
         <p v-if="row.uncertain_at" class="text-xs text-slate-400">Became uncertain: {{ new Date(row.uncertain_at * 1000).toLocaleString() }} · {{ Math.max(0, Math.round(row.uncertain_at - row.started)) }} seconds after admission.</p>
         <p class="text-xs text-amber-200">{{ reasons[row.reason || ''] || 'No cause was recorded for this reservation by the previous backend process or application version.' }}</p>

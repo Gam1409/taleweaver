@@ -286,7 +286,8 @@ async def _step(claim: Claim) -> bool:
             "chronicle": lambda: _summarize(claim, chronicle=True),
             "summary": lambda: _maybe_summary(enabled, claim, documents),
             "observer": lambda: _maybe_observer(enabled, claim, user, state),
-        }
+        },
+        session_id=claim.session_id,
     )
     if outcome.status == "failed":
         logger.warning("Memory maintenance deferred for %s: %s", claim.session_id, outcome.error)

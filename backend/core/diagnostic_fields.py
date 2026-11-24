@@ -62,6 +62,7 @@ EVENTS = {
     "llm_interaction",
 }
 IDENTIFIERS = {
+    "blocking_reservation_id",
     "step_id",
     "parent_step_id",
     "reservation_id",
@@ -198,6 +199,7 @@ ENUMS["presentation_reason"] = {
     "available",
 }
 ENUMS["inference_reason"] = {
+    "provider_http_5xx",
     "completion_unconfirmed",
     "caller_cancelled",
     "request_timeout",

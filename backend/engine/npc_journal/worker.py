@@ -8,7 +8,7 @@ from backend.core import database
 from backend.core.config import settings
 from backend.core.diagnostic_failures import failure_details, failure_reason
 from backend.core.diagnostic_operations import diagnostic_job
-from backend.core.inference import admission
+from backend.core.inference import admission, background_deferrals
 from backend.core.inference.registry import InferenceQueueError, InferenceUncertainError
 from backend.core.llm_deadlines import role_timeout
 from backend.core.state_rejection_trace import reject
@@ -127,7 +127,12 @@ async def _extract_when_idle(
     except BackgroundDeferredError:
         await _defer(message_id, task)
         return None
-    except (InferenceUncertainError, InferenceQueueError):
+    except InferenceUncertainError as exc:
+        await _defer(message_id, task, delay=queue.RETRY_DELAY)
+        background_deferrals.remember("npc_journal", session.id, exc)
+        _wake_later(session.id, user.id, queue.RETRY_DELAY)
+        return None
+    except InferenceQueueError:
         await _defer(message_id, task, delay=queue.RETRY_DELAY)
         logger.info("NPC journal deferred by inference admission for message %s", message_id)
         return None
@@ -230,6 +235,8 @@ async def _run(session_id: str, user_id: str) -> None:
                 await _schedule_retry(session_id, user_id)
                 return
             success = await process_message(message_id, user_id)
+            if background_deferrals.waiting("npc_journal", session_id):
+                return
             consecutive_failures = 0 if success else consecutive_failures + 1
             if consecutive_failures >= 2:
                 # A failing provider must not consume the backlog on every UI poll.
@@ -250,14 +257,23 @@ def _wake_later(session_id: str, user_id: str, delay: float) -> None:
     if previous:
         previous.cancel()
     _timers[session_id] = asyncio.get_running_loop().call_later(
-        delay, schedule, session_id, user_id
+        delay, _retry_tick, session_id, user_id
     )
+
+
+def _retry_tick(session_id: str, user_id: str) -> None:
+    _timers.pop(session_id, None)
+    schedule(session_id, user_id)
 
 
 def schedule(session_id: str, user_id: str, *, retry: bool = False) -> None:
     if retry:
         _cooldowns.pop(session_id, None)
     if _cooldowns.get(session_id, 0) > time.monotonic():
+        return
+    if not retry and background_deferrals.waiting("npc_journal", session_id):
+        if session_id not in _timers:
+            _wake_later(session_id, user_id, queue.RETRY_DELAY)
         return
     timer = _timers.pop(session_id, None)
     if timer:

@@ -27,11 +27,12 @@ def emit(
         safe["reservation_id"] = reservation_id
     service.emit("inference." + stage, **safe, error=error)
     logger.info(
-        "Inference %s: request=%s call=%s reservation=%s role=%s purpose=%s phase=%s timeout=%s elapsed_ms=%s reason=%s error=%s",
+        "Inference %s: request=%s call=%s reservation=%s blocker=%s role=%s purpose=%s phase=%s timeout=%s elapsed_ms=%s reason=%s error=%s",
         stage,
         safe.get("request_id", "-"),
         safe.get("call_id", "-"),
         reservation_id or "-",
+        safe.get("blocking_reservation_id") or "-",
         safe.get("role", "-"),
         safe.get("purpose", "-"),
         safe.get("phase", "-"),

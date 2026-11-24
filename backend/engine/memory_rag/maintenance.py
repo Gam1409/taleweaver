@@ -8,6 +8,7 @@ from typing import Literal
 
 from backend.core.diagnostic_failures import failure_details
 from backend.core.diagnostic_fields import safe_error
+from backend.core.inference import background_deferrals
 from backend.core.inference.registry import InferenceQueueError, InferenceUncertainError
 from backend.core.state_rejection_trace import reject
 from backend.core.system_diagnostics import service
@@ -45,16 +46,25 @@ class Cycle:
     failures: dict[str, tuple[int, float]] = field(default_factory=dict)
     errors: dict[str, str] = field(default_factory=dict)
 
-    async def run(self, jobs: dict[str, Job]) -> Outcome:
+    async def run(self, jobs: dict[str, Job], *, session_id: str | None = None) -> Outcome:
         order = KINDS[self.cursor :] + KINDS[: self.cursor]
         index_idle = False
+        blocked = False
         for kind in order:
             if self.failures.get(kind, (0, 0))[1] > time.monotonic():
+                continue
+            if session_id is not None and background_deferrals.waiting(
+                f"memory.{kind}", session_id
+            ):
+                blocked = True
                 continue
             self.cursor = (KINDS.index(kind) + 1) % len(KINDS)
             try:
                 worked = await jobs[kind]()
             except Exception as exc:
+                if _defer_uncertain(kind, session_id, exc):
+                    blocked = True
+                    continue
                 _propagate_control_error(exc)
                 self._failed(kind, exc)
                 return Outcome("failed", index_idle, self.errors[kind])
@@ -63,7 +73,13 @@ class Cycle:
             index_idle = index_idle or (kind == "index" and not worked)
             if worked:
                 return Outcome("worked", index_idle, self.notice())
-        return Outcome("waiting" if self.failures else "ready", index_idle, self.notice())
+        notice = self.notice() or (
+            "Waiting for inference queue: a previous request has unconfirmed completion."
+            if blocked
+            else None
+        )
+        status = "waiting" if self.failures or blocked else "ready"
+        return Outcome(status, index_idle, notice)
 
     def _failed(self, kind: str, exc: Exception) -> None:
         service.detail("detail.engine.failed", step=f"memory.{kind}", error=safe_error(exc))
@@ -93,6 +109,15 @@ def _propagate_control_error(exc: Exception) -> None:
         exc, (InferenceQueueError, InferenceUncertainError, BackgroundDeferredError)
     ) or is_sqlite_busy(exc):
         raise exc
+
+
+def _defer_uncertain(kind: str, session_id: str | None, exc: Exception) -> bool:
+    error = exc.__cause__ if isinstance(exc, EmbeddingError) else exc
+    return (
+        session_id is not None
+        and isinstance(error, InferenceUncertainError)
+        and background_deferrals.remember(f"memory.{kind}", session_id, error)
+    )
 
 
 _cycles: OrderedDict[tuple[str, str, int], Cycle] = OrderedDict()

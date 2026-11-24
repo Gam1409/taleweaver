@@ -5,8 +5,13 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from backend.core.inference.registry import InferenceUncertainError
 from backend.engine.memory_rag import worker
 from backend.engine.memory_rag.embeddings import EmbeddingError
+from tests.test_inference_integration import reservations
+from tests.test_inference_reservations import KEY
+
+__all__ = ["reservations"]
 
 
 def install(monkeypatch):
@@ -50,6 +55,28 @@ async def test_failed_embedder_does_not_prevent_chronicle_work(monkeypatch):
         assert await worker._step(claim)
     index.assert_awaited_once()
     summary.assert_awaited_once_with(claim, chronicle=True)
+
+
+async def test_uncertain_embedder_waits_while_chronicle_runs(monkeypatch, reservations):
+    claim = install(monkeypatch)
+    ticket = reservations.enqueue(KEY)
+    assert reservations.try_acquire(ticket)
+    reservations.finish(ticket, certain=False)
+    unavailable = InferenceUncertainError("pending", blocking_reservation_id=ticket.token)
+    index = AsyncMock(side_effect=[unavailable, True])
+    summary = AsyncMock(return_value=True)
+    monkeypatch.setattr(worker, "_index_batch", index)
+    monkeypatch.setattr(worker, "_summarize", summary)
+
+    for _ in range(3):
+        assert await worker._step(claim)
+    index.assert_awaited_once()
+    assert summary.await_count == 3
+
+    reservations.acknowledge_stopped(ticket.record_key, ticket.token)
+    for _ in range(2):
+        assert await worker._step(claim)
+    assert index.await_count == 2
 
 
 async def test_observer_index_advances_while_every_other_phase_has_work(monkeypatch):

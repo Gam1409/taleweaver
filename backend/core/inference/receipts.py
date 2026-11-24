@@ -25,11 +25,11 @@ async def wait_for_response(request: Coroutine, lease: admission.Lease) -> Any:
 def completed(task: asyncio.Task, lease: admission.Lease) -> bool:
     """A transport response is proof; its obsolete text is never returned to the caller."""
     if task.cancelled():
-        return False
+        return lease.certain
     error = task.exception()
     if error is not None:
         lease.reason = admission.failure_reason(error)
-        return admission.rejected(error)
+        return lease.certain or admission.rejected(error)
     return True
 
 
@@ -59,8 +59,11 @@ async def _monitor(task: asyncio.Task, lease: admission.Lease) -> None:
     except (TimeoutError, asyncio.CancelledError):
         lease.reason = "request_timeout"
         task.cancel()
-        _finish(lease, False)
-        task.add_done_callback(lambda done: _late(done, lease))
+        _finish(lease, lease.certain)
+        if lease.certain:
+            task.add_done_callback(lambda done: completed(done, lease))
+        else:
+            task.add_done_callback(lambda done: _late(done, lease))
     except Exception:
         _finish(lease, completed(task, lease))
     else:

@@ -23,6 +23,7 @@ REASONS = {
     "request_timeout",
     "incomplete_stream",
     "connection_failure",
+    "provider_http_5xx",
     "provider_or_processing_error",
 }
 
@@ -33,6 +34,10 @@ background_call: ContextVar[bool] = ContextVar("inference_background", default=F
 
 class InferenceUncertainError(ValueError):
     """The server may still be computing; a retry must not bypass its fence."""
+
+    def __init__(self, message: str, *, blocking_reservation_id: str | None = None) -> None:
+        super().__init__(message)
+        self.blocking_reservation_id = blocking_reservation_id
 
 
 class InferenceQueueError(ValueError):
@@ -130,10 +135,14 @@ class Registry:
         with self.lock:
             records = self._load()
             siblings = self._siblings(records, ticket.key)
-            if any(row["token"] not in self.active for row in siblings.values()):
+            blocker = next(
+                (row["token"] for row in siblings.values() if row["token"] not in self.active), None
+            )
+            if blocker is not None:
                 raise InferenceUncertainError(
                     "The AI server may still be processing a previous request. "
-                    "Ask the administrator to check Inference queue before retrying."
+                    "Ask the administrator to check Inference queue before retrying.",
+                    blocking_reservation_id=blocker,
                 )
             if self._full(ticket, siblings) or (ticket.background and not background_ready):
                 return False
@@ -220,6 +229,12 @@ class Registry:
                 }
                 for key, row in self._load().items()
             ]
+
+    def is_unresolved(self, token: str) -> bool:
+        with self.lock:
+            return token not in self.active and any(
+                row["token"] == token for row in self._load().values()
+            )
 
     def acknowledge_stopped(self, key: str, token: str) -> None:
         with self.lock:

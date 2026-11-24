@@ -8,7 +8,7 @@ import httpx
 import pytest
 
 from backend.core import llm_diagnostics, system_diagnostics
-from backend.core.inference import events, transport
+from backend.core.inference import background_deferrals, events, transport
 from backend.core.inference.registry import InferenceUncertainError
 from backend.core.llm_parallel import ParallelPolicy
 from tests.test_inference_integration import reservations
@@ -100,6 +100,26 @@ async def test_blocked_call_is_identifiable_and_never_logged_as_sent(trace, rese
     ]
     assert len({row["call_id"] for row in data}) == 1
     assert data[2]["error"]["type"] == "InferenceUncertainError"
+    assert data[2]["blocking_reservation_id"] == ticket.token
+
+
+def test_background_deferral_ends_only_when_its_exact_blocker_clears(reservations):
+    ticket = reservations.enqueue(KEY)
+    assert reservations.try_acquire(ticket)
+    reservations.finish(ticket, certain=False)
+    another = reservations.enqueue("another endpoint")
+    assert reservations.try_acquire(another)
+    reservations.finish(another, certain=False)
+
+    with pytest.raises(InferenceUncertainError) as blocked:
+        reservations.try_acquire(reservations.enqueue(KEY))
+
+    assert background_deferrals.remember("memory", "session", blocked.value)
+    assert background_deferrals.waiting("memory", "session")
+    assert not background_deferrals.waiting("npc_journal", "session")
+    reservations.acknowledge_stopped(ticket.record_key, ticket.token)
+    assert not background_deferrals.waiting("memory", "session")
+    assert reservations.is_unresolved(another.token)
 
 
 async def test_stream_chain_survives_separate_consumer_tasks(trace, reservations):
