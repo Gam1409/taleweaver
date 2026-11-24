@@ -99,6 +99,20 @@ def test_empty_answer_is_complete_only_when_every_group_was_classified_unchanged
         assert audit.status in {"unavailable", "incomplete"}
 
 
+@pytest.mark.parametrize("include_pose", [False, True])
+def test_new_pose_requires_a_proposal_but_a_repeated_pose_and_glance_do_not(include_pose):
+    source = catalog("Anna sits on the bench.\nStill seated, Anna glances at the window.")
+    reference = next(iter(source.narration_passages))
+    changes = [{"entity_id": "NPC", "posture": "sitting", "evidence": reference}]
+    result = SharedItemExtraction(
+        coverage={"c0": ["staging"], "c1": ["unchanged"]},
+        staging={"changes": changes if include_pose else [], "props": [], "explicit": []},
+    )
+    _, audit = coverage.inspect(result, source, staging=True)
+    expected = ({"group": "c0", "reason": "missing_proposals", "domains": ["staging"]},)
+    assert audit.issues == (() if include_pose else expected)
+
+
 def test_wire_coverage_has_finite_required_keys_and_rejects_unknown_domains():
     source = catalog("The room remains quiet.")
     schema = reference_schema.build(ItemExtraction, source, complete=True)

@@ -114,10 +114,15 @@ Use only the supplied present character IDs, including the player. Never create 
 character, move between scenes, change presence, ownership, inventory or clothing.
 The supplied current state is authoritative for those facts.
 Report changes, not a full reconstruction. Omission preserves a previous fact.
-Every change requires a current narration reference identifying
-the actor and completed action. Resolve pronouns only when unambiguous. Reject
-intentions, requests, dialogue claims, negations, hypotheticals, memories and dreams.
+For pose and placement, compare with previous_staging. Cite current narration
+identifying the actor and either a completed change or an explicitly shown
+current posture or placement not already established. Resolve pronouns only
+when unambiguous. Reject intentions, requests, dialogue claims, negations,
+hypotheticals, memories and dreams.
 A request or intention to sit is not sitting. Silence does not change a pose.
+“Lina sat on the bench” establishes her pose; “Lina is seated on the bench” can
+establish it if not already known. “Lina is still seated there” adds nothing
+when the same pose and placement are already established.
 Use one change per character at the FINAL instant, not intermediate poses.
 Posture is standing/sitting/lying/kneeling/crouching/on_all_fours; unknown explicitly clears it.
 Placement is a spatial relation to a present character ID or to a scene object.
@@ -165,6 +170,14 @@ When scene_staging is null, leave staging null. When enabled, always return stag
 with changes, props and explicit lists. Null means not confirmed. Empty changes/props
 do not establish an empty explicit list: follow the final-state rules below.
 All following changes/props/explicit fields belong inside staging, never at the root.
+STAGING COVERAGE: tag the group with the source of a supported final staging
+fact that needs a changes, props, or explicit row. A glance, nod, or line of dialogue is not staging.
+A passing gesture, a repeated description of an established pose, or a different
+view of the same event does not need a new staging row or tag. Pick one exact
+source for a continuing explicit state under the final-state rules below; do not
+tag every mention of that state. Retain any other changed domains in the group.
+If a group establishes a supported final staging fact, supply its row rather
+than marking the group unchanged just because the row is missing.
 Use __player__ consistently for the player; the host binds it to the saved actor ID.
 scene_staging.owned_items lists ownership before the item actions; read names from items.
 When scene_staging.command_owned_fields is supplied, those listed pose/placement

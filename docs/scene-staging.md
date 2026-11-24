@@ -19,6 +19,11 @@ claims, hypothetical events and earlier moments are excluded by the extraction
 contract; quotation checks do not prove semantic correctness. Model accuracy still
 needs evaluation on actual stories.
 
+A directly shown current pose or placement can establish a fact for the first
+time even when its transition was not narrated. Repeated descriptions, glances
+and passing gestures do not need another staging coverage tag. Real changes
+still require an evidence-linked proposal.
+
 Supported postures are standing, sitting, lying, kneeling, crouching and on all fours. A placement
 relates a character to another present character or an explicitly mentioned scene
 object. No precise distances, limb coordinates, private feelings or new objects

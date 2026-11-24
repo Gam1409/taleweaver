@@ -126,6 +126,7 @@ async def test_interval_summary_retries_uncovered_sources_only_on_a_later_job(
     assert await run("summary", owner)
     assert len(prompts) == 2
     assert prompts[0] == prompts[1]
+    assert "at most 8 bullets" in prompts[0][0]["content"]
     async with TestSessionLocal() as db:
         saved = await db.scalar(select(MemorySummary))
         assert saved.text == "A complete summary."
@@ -183,6 +184,7 @@ async def test_chronicle_retries_wire_truncation_with_smaller_exact_source_batch
 
     assert await run("chronicle", owner)
     first, second = prompts
+    assert "at most 12 bullets" in first[0]["content"]
     assert sum(len(msg["content"]) for msg in first) <= chronicle.MAX_PROMPT_CHARS
     first_events, second_events = (
         prompt[-1]["content"].split("New past sources:\n", 1)[1] for prompt in prompts

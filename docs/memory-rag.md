@@ -130,7 +130,9 @@ this smaller-batch attempt.
 Interval summaries also require a complete provider stop and reject answers
 larger than the existing 6,000-character storage limit instead of slicing them.
 A failed interval stays eligible for future background work without a second
-request in the same job. Existing saved summaries and raw sources are unchanged.
+request in the same job. Both summary paths ask for short bullets focused on
+durable changes and open commitments, not a retelling. Existing saved summaries
+and raw sources are unchanged.
 
 This is process-local scheduling, not remote inference preemption. A request
 already executing on a single-slot model server may still delay the next turn,

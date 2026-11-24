@@ -126,6 +126,11 @@ async def test_one_shared_request_keeps_removal_placement_and_pose(monkeypatch):
         assert final_payload(events)["status"] == "success", "".join(events)
         assert len(roles.calls) == 3
         assert not any(call[0] == "SceneExtraction" for call in roles.calls)
+        _, (instructions, payload, *_), _ = roles.calls[-1]
+        assert "STAGING COVERAGE:" in instructions
+        assert "compare with previous_staging" in instructions
+        assert "A glance, nod, or line of dialogue is not staging" in instructions
+        assert json.loads(payload)["scene_staging"] is not None
         await db.refresh(state)
         reply = await db.scalar(select(ChatMessage).where(ChatMessage.content == TEXT))
         facts = registry_of(state.entity_states)["snapshots"][reply.id]["visible_facts"]
@@ -242,6 +247,7 @@ async def test_disabled_setting_keeps_original_schema_and_item_request(monkeypat
         assert props.KEY not in state.entity_states
         assert state.entity_states["LINA"]["visual_profile"]["worn"] == []
         assert "staging" not in ItemExtraction.model_json_schema()["properties"]
+        assert "STAGING COVERAGE:" not in roles.calls[-1][1][0]
 
 
 async def test_shared_timeout_does_not_send_a_fallback_staging_request(monkeypatch):
