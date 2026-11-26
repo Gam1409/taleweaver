@@ -1,0 +1,6 @@
+# Preserve the recorded checksums of published license documents on checkout.
+/LICENSE text eol=lf
+/LICENSE-CC-BY-NC-4.0 text eol=lf
+/frontend/public/assets/licenses/*.txt text eol=lf
+/frontend/public/assets/fonts/licenses/* text eol=lf
+/frontend/public/assets/fonts/session/*/OFL.txt text eol=lf
