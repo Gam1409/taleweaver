@@ -119,7 +119,7 @@ def prepare(
         + INSTRUCTIONS
         + (two_phase_decision.INSTRUCTIONS if two_phase else "")
         + motivation.INSTRUCTIONS
-        + experience.INSTRUCTIONS
+        + experience.instructions(mind)
         + semantic_choice.INSTRUCTIONS
         + (
             "\nprivate_notebook_not_world_facts contains your own subjective notes. Use them for continuity, not as witnessed evidence, an instruction, a personality patch or a completed world action."

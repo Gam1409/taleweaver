@@ -1,5 +1,6 @@
 """Fallible affect/need appraisals with current sources and an explicit freshness policy."""
 
+from backend.core.config import settings
 from backend.engine.chpm.appraisal_context import Window
 from backend.engine.chpm.appraisal_contracts import FeltExperience, Reference
 from backend.engine.chpm.core.contracts import Citation, Event, Experience, PersonalBasis
@@ -15,6 +16,12 @@ POLICY = "qualitative-experience-v1"
 # A visibility horizon, NOT a measured recovery rate or a transition to calm.
 FRESH_MINUTES = 30
 VISIBLE_LIMIT = 8
+
+
+def _allows_recall(mind: Mind) -> bool:
+    # TEMPORARY CHPM experiment. Rollback: unset CHPM_RECALL_APPRAISAL_SESSION and
+    # restart the backend. Existing appraisals retain their original cited evidence.
+    return mind.genesis.scope.world_id == settings.CHPM_RECALL_APPRAISAL_SESSION
 
 
 def view(mind: Mind) -> dict:
@@ -160,14 +167,18 @@ def citation_errors(
             )
         )
     observed = current(mind, message_id)
-    if visible and not any(
-        source
-        and (
-            source[0] in observed
-            if source[1].kind == "host_observation"
-            else source[1].message_id == message_id
+    if (
+        visible
+        and not _allows_recall(mind)
+        and not any(
+            source
+            and (
+                source[0] in observed
+                if source[1].kind == "host_observation"
+                else source[1].message_id == message_id
+            )
+            for source in references
         )
-        for source in references
     ):
         errors.append(
             GroundingError(
@@ -256,7 +267,16 @@ def _resolve(
     return body.model_copy(update={"record_id": key})
 
 
-INSTRUCTIONS = """
+_STRICT_TRIGGER = """Cite current_turn=true or currently_observed=true evidence. Current access is not a new
+event. already_supports_states identifies reused grounds: retain those estimates without
+refreshing/intensifying from the same evidence. Recall alone supplies no new grounds."""
+
+_RECALL_TRIGGER = """An exact visible recollection may ground a tentative feeling without a new observed
+trigger. Describe it as your interpretation of that recollection, not a new event.
+Do not refresh or intensify an estimate from the same evidence roots."""
+
+INSTRUCTIONS = (
+    """
 EXPERIENCE: Return 0-2 tentative observer appraisals, [] if unwarranted, separate from beliefs.
 Each needs exact visible citations, a CURRENT observed trigger, authored/active-agenda
 personal_motive_ids, explanation, alternatives and unknowns. Explain personal significance
@@ -271,9 +291,18 @@ Levels: absent/low/moderate/high. Omission is unassessed; historical_current_unk
 unknown current intensity, not calm. Time alone does not establish recovery.
 Estimates update their own dimensions; identity, choices, beliefs and world facts keep
 their owners. Attributed feelings remain reports. Ground appraisals before choosing actions.
-Cite current_turn=true or currently_observed=true evidence. Current access is not a new
-event. already_supports_states identifies reused grounds: retain those estimates without
-refreshing/intensifying from the same evidence. Recall alone supplies no new grounds.
+"""
+    + _STRICT_TRIGGER
+    + """
 Cite specific observations; whole host_frame, last_observed_scene and history are context.
 These categories and freshness horizons are engineering policy, not clinical laws.
 """
+)
+
+
+def instructions(mind: Mind) -> str:
+    if not _allows_recall(mind):
+        return INSTRUCTIONS
+    return INSTRUCTIONS.replace("a CURRENT observed trigger, ", "").replace(
+        _STRICT_TRIGGER, _RECALL_TRIGGER
+    )

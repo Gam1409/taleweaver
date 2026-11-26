@@ -134,6 +134,7 @@ class Settings(BaseSettings):
     # Legacy local providers default to True for self-hosting. Custom OpenAI also
     # requires an explicit environment setting; see docs/provider-network-policy.md.
     ALLOW_PRIVATE_NETWORK_MODELS: bool = True
+    CHPM_RECALL_APPRAISAL_SESSION: str = ""
 
     # setup-root hardening: allow the bootstrap endpoint to be reached from
     # non-loopback addresses. Must be explicitly enabled; defaults to False.

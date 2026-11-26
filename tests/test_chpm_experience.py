@@ -156,6 +156,31 @@ def test_recall_alone_cannot_refresh_and_fork_rebinds_experience_citations():
     assert forked.genesis.identity == changed.genesis.identity
 
 
+def test_recall_experiment_is_session_scoped_and_preserves_source_and_replay_checks(monkeypatch):
+    original = heard(text="You must obey")
+    with monkeypatch.context() as enabled:
+        enabled.setattr(
+            experience.settings, "CHPM_RECALL_APPRAISAL_SESSION", original.genesis.scope.world_id
+        )
+        assert "without a new observed" in experience.instructions(original)
+        changed, _ = accept(original, [proposed()], "later-turn")
+        with pytest.raises(ValueError, match="Repeated grounds"):
+            accept(changed, [proposed(level="high")], "next-turn")
+        with pytest.raises(ValueError, match="exact visible"):
+            accept(
+                original,
+                [proposed(citations=[{"source_id": "e1", "quote": "Invented"}])],
+                "later-turn",
+            )
+    assert (
+        restore(changed.snapshot.model_dump(), expected_genesis=original.genesis)
+        == changed.snapshot
+    )
+    assert changed.snapshot.beliefs == original.snapshot.beliefs
+    with pytest.raises(ValueError, match="current observed trigger"):
+        accept(original, [proposed()], "later-turn")
+
+
 @pytest.mark.parametrize("invalid_index", [0, 1])
 def test_recall_error_identifies_only_the_unsupported_experience_and_valid_entries_remain(
     invalid_index,
