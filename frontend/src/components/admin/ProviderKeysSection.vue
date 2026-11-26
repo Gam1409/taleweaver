@@ -24,6 +24,14 @@ interface ProviderMeta {
 
 const PROVIDERS: ProviderMeta[] = [
   {
+    id: 'memory_embeddings',
+    name: 'Memory Embeddings',
+    icon: 'ra-network',
+    category: 'local',
+    capabilities: ['Embeddings'],
+    description: 'Optional API key for the OpenAI-compatible or Ollama embeddings server in Memory & recall. Separate from chat model keys.'
+  },
+  {
     id: 'custom_openai',
     name: 'OpenAI-Compatible API',
     icon: 'ra-network',

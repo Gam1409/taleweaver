@@ -55,8 +55,8 @@ def _http_failure(status: int) -> str:
         return "The embeddings server is rate-limiting requests. Wait and retry."
     if status in {400, 405, 422}:
         return (
-            "The embeddings server rejected the request. Check the provider selection, API "
-            "endpoint and that the selected model supports embeddings."
+            f"The embeddings server rejected the request (HTTP {status}). "
+            "Check the provider selection, API endpoint and that the selected model supports embeddings."
         )
     return (
         "The embeddings server returned an HTTP error. Check the server logs for model "

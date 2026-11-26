@@ -644,6 +644,7 @@ async def get_settings(
             {p["id"] for p in LLM_PROVIDERS}
             | {p["id"] for p in IMAGE_PROVIDERS}
             | {p["id"] for p in TTS_PROVIDERS}
+            | {"memory_embeddings"}
         )
         for p in all_providers:
             # Check environment first
@@ -830,6 +831,8 @@ async def update_api_key(
 
     if not normalized_api_key:
         raise HTTPException(status_code=400, detail="API key cannot be empty.")
+    if provider_lower == "memory_embeddings" and len(normalized_api_key) > 4096:
+        raise HTTPException(status_code=422, detail="Embedding API key exceeds 4096 characters.")
 
     encrypted_key = encryption_util.encrypt_key(normalized_api_key)
 
@@ -838,8 +841,7 @@ async def update_api_key(
     new_keys[provider_lower] = encrypted_key
     user.encrypted_api_keys = new_keys
 
-    await _broadcast_global_settings(db, user, fields=("encrypted_api_keys",))
-    await db.commit()
+    await _commit_provider_key(db, user, provider_lower)
     return {"status": "success", "message": f"{payload.provider} key saved securely."}
 
 
@@ -875,10 +877,20 @@ async def delete_api_key(
     del new_keys[provider_lower]
     user.encrypted_api_keys = new_keys
 
-    await _broadcast_global_settings(db, user, fields=("encrypted_api_keys",))
-    await db.commit()
+    await _commit_provider_key(db, user, provider_lower)
     logger.info("[Admin] Successfully removed key for %s", provider_lower)
     return {"status": "success", "message": f"{provider} key removed."}
+
+
+async def _commit_provider_key(db: AsyncSession, user: User, provider: str) -> None:
+    await _broadcast_global_settings(db, user, fields=("encrypted_api_keys",))
+    if provider == "memory_embeddings":
+        from backend.api.routes.memory_settings import commit_memory_update
+        from backend.engine.memory_rag.settings import read_settings
+
+        await commit_memory_update(db, enabled=read_settings(user).enabled, changed=True)
+        return
+    await db.commit()
 
 
 @router.post("/llm", response_model=None)

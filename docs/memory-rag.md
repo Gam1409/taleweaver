@@ -17,7 +17,8 @@ inventory, clothing, relationships or the session checkpoint system.
    A chat/completion endpoint alone is insufficient. OpenAI-compatible servers
    must implement `/v1/embeddings`; Ollama must implement `/api/embed`.
 4. Enable memory recall and save. Indexing starts automatically in idle time.
-   The optional API key is encrypted through the existing credentials vault.
+   Set the optional key here or in **Admin → Provider Vault → Memory Embeddings**.
+   Both edit the same encrypted credential, separate from the chat model key.
    Leaving its input empty preserves the stored key.
 
 These are shared administrator settings, like the existing LLM configuration.

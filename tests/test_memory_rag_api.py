@@ -25,6 +25,22 @@ CONFIG = {
 BASE = "/api/adventures/templates/portrait-template/memory-index"
 
 
+async def test_vault_manages_the_existing_embedding_credential(auth_client, monkeypatch):
+    embed = AsyncMock(return_value=[[0.1]])
+    monkeypatch.setattr(memory_settings, "embed_with_settings", embed)
+    await auth_client.put("/api/settings/memory-rag", json={**CONFIG, "api_key": "first"})
+    status = await auth_client.get("/api/settings", params={"include_available_constants": False})
+    assert status.json()["keys"]["memory_embeddings"] == {"masked": "********", "is_env": False}
+    updated = await auth_client.post(
+        "/api/settings/keys", json={"provider": "memory_embeddings", "api_key": "replacement"}
+    )
+    assert updated.status_code == 200
+    await auth_client.post("/api/settings/memory-rag/test", json=CONFIG)
+    assert embed.await_args.kwargs["api_key"] == "replacement"
+    assert (await auth_client.delete("/api/settings/keys/memory_embeddings")).status_code == 200
+    assert not (await auth_client.get("/api/settings/memory-rag")).json()["key_configured"]
+
+
 async def test_settings_save_keeps_secret_and_legacy_llm_save_keeps_memory(auth_client):
     response = await auth_client.put(
         "/api/settings/memory-rag", json={**CONFIG, "api_key": "test-secret"}

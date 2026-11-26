@@ -72,24 +72,33 @@ async def save_memory_settings(
         keys["memory_embeddings"] = encryption_util.encrypt_key(payload.api_key.strip())
     owner.encrypted_api_keys = keys
     await _broadcast_global_settings(db, owner, fields=("llm_settings", "encrypted_api_keys"))
-    rows = await ensure_index_states(db)
     index_changed = any(
         value != after[key] for key, value in before.items() if key != "timeout_seconds"
     )
-    if index_changed or payload.api_key or payload.clear_api_key:
+    result = public_settings(owner)
+    await commit_memory_update(
+        db,
+        enabled=after["enabled"],
+        changed=bool(index_changed or payload.api_key or payload.clear_api_key),
+    )
+    return result
+
+
+async def commit_memory_update(db: AsyncSession, *, enabled: bool, changed: bool) -> None:
+    """Apply index lifecycle effects for memory preferences and credential updates."""
+    rows = await ensure_index_states(db)
+    if changed:
         for row in rows:
             await invalidate(db, row)
-    result = public_settings(owner)
     # Keep source IDs available with expire_on_commit sessions.
     scheduling = [(row.session_id, row.user_id, row.paused) for row in rows]
     await db.commit()
-    if after["enabled"]:
+    if enabled:
         from backend.engine.memory_rag.worker import schedule
 
         for session_id, user_id, paused in scheduling:
             if not paused:
                 schedule(session_id, user_id)
-    return result
 
 
 @router.post("/test")
