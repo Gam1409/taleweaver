@@ -18,6 +18,7 @@ Emotion = Annotated[
     str, StringConstraints(strict=True, strip_whitespace=True, min_length=1, max_length=MAX_EMOTION)
 ]
 ColorChannel = Annotated[StrictInt, Field(ge=0, le=255)]
+Intensity = Annotated[StrictInt, Field(ge=0, le=100)]
 ColorRGB = Annotated[list[ColorChannel], Field(strict=True, min_length=3, max_length=3)]
 MAX_THOUGHT = 160
 MAX_NPCS = 20
@@ -40,10 +41,15 @@ class PreferencesUpdate(BaseModel):
     expected: PortraitPreferences
 
 
+class EmotionAssessment(BaseModel):
+    emotion: Emotion
+    intensity: Intensity
+
+
 class Cue(BaseModel):
     model_config = ConfigDict(extra="forbid")
     emotion: Emotion | None = None
-    intensity: StrictInt | None = Field(default=None, ge=0, le=100)
+    intensity: Intensity | None = None
     color_rgb: ColorRGB | None = None
     thought: str | None = Field(default=None, max_length=MAX_THOUGHT)
 

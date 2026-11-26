@@ -82,7 +82,15 @@ function portraitColor(cue: PortraitCue): { rgb: string; rim?: string } {
 }
 
 export function portraitStyle(cue: PortraitCue | undefined, prefs: PortraitPreferences): Record<string, string> {
-  if (!emotionLabel(cue, prefs) || !prefs.brightness || !cue?.intensity) return {}
+  if (!prefs.emotion_palette || !prefs.brightness || !cue) return {}
+  if (!emotionLabel(cue, prefs)) {
+    if (cue.emotion !== undefined || cue.intensity !== undefined || !thoughtText(cue, prefs)) return {}
+    return {
+      outlineStyle: 'dashed', outlineWidth: '2px', outlineOffset: '-2px',
+      outlineColor: `rgba(203,213,225,${0.35 + 0.65 * prefs.brightness / 100})`,
+    }
+  }
+  if (!cue.intensity) return {}
   const color = portraitColor(cue)
   const power = cue.intensity / 100 * prefs.brightness / 100
   const rim = color.rim || color.rgb

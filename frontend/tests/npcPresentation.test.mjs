@@ -78,6 +78,17 @@ test('thoughts and emotions are independent and thoughts have a hard length limi
   assert.notDeepEqual(portraitStyle(cue, { ...on, character_thoughts: false }), {})
 })
 
+test('a thought-only assessment has a distinct outline without claiming an emotion', () => {
+  const partial = { thought: 'I should check again.' }
+  assert.equal(emotionLabel(partial, on), '')
+  assert.equal(portraitStyle(partial, on).outlineStyle, 'dashed')
+  assert.equal(portraitStyle(partial, on).boxShadow, undefined)
+  assert.deepEqual(portraitStyle(partial, { ...on, brightness: 0 }), {})
+  assert.deepEqual(portraitStyle(partial, { ...on, character_thoughts: false }), {})
+  assert.deepEqual(portraitStyle(undefined, on), {})
+  assert.equal(portraitStyle(cue, on).outlineStyle, undefined)
+})
+
 test('viewed page uses its latest narration and never inherits a stale emotion', () => {
   const assessed = { assistantMessage: { portrait_state: { version: 1, npcs: { RIN: cue } } } }
   assert.deepEqual(pagePortraitCues([assessed]), { RIN: cue })

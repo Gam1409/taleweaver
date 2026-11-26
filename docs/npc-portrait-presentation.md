@@ -40,6 +40,13 @@ Settings belong to the session, use optimistic conflict detection and survive la
 
 ## Palette
 
+With both options enabled, a dashed neutral outline marks a portrait with a
+thought but no assessed feeling. It distinguishes partial data from an
+emotion-colored halo without assigning an emotion. Zero brightness hides both.
+When the palette is enabled, every narrator JSON entry must include `emotion`
+and integer `intensity` (0–100), even alongside a thought. Use `unknown` and 0
+for an unassessed feeling. An invalid pair is rejected independently of the thought.
+
 The narrator's validated RGB channels determine the hue for new assessments, including feelings outside the original vocabulary. The browser builds CSS only from these numeric components. Missing or malformed color uses the original palette for a known legacy label, or a fixed blue-gray theme color for another valid label. This fallback does not reinterpret the feeling or carry an assessment over from an earlier reply. Zero intensity or brightness, disabled palette, and `unknown` continue to show no glow. Previously saved cues without `color_rgb` remain valid; corrupted stored cues still fail validation rather than supplying unsafe style data.
 
 The following table describes the legacy fallback palette:

@@ -72,6 +72,24 @@ def test_disabled_palette_does_not_restore_emotion_from_supported_metadata():
     assert turn.payload(BODY)["npcs"] == {"KEEPER": {"thought": THOUGHT}}
 
 
+@pytest.mark.parametrize("missing", [{"emotion"}, {"intensity"}, {"emotion", "intensity"}])
+def test_palette_requires_both_assessment_fields_even_with_a_thought(missing, monkeypatch):
+    rejection = Mock()
+    monkeypatch.setattr(runtime, "reject", rejection)
+    entry = {k: v for k, v in ENTRY.items() if k not in missing}
+    for enabled in (False, True):
+        turn = PresentationTurn(
+            PortraitPreferences(emotion_palette=enabled, character_thoughts=True),
+            {"KEEPER": "Archivist"},
+        )
+        turn.clean(response([entry]))
+        assert turn.payload(BODY)["npcs"]["KEEPER"] == {"thought": THOUGHT}
+        if not enabled:
+            rejection.assert_not_called()
+    rejection.assert_called_once()
+    assert {err["loc"][0] for err in rejection.call_args.kwargs["validation_errors"]} == missing
+
+
 def test_current_turn_reminder_carries_the_numeric_color_contract():
     turn = PresentationTurn(PortraitPreferences(emotion_palette=True), {"KEEPER": "Archivist"})
     assert "color_rgb" in turn.prompt and "color_rgb" in turn.reminder

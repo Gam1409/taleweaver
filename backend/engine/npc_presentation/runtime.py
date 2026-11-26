@@ -12,6 +12,7 @@ from backend.core.npc_presentation import (
     MAX_NPCS,
     MAX_THOUGHT,
     Cue,
+    EmotionAssessment,
     PortraitPreferences,
     source_hash,
 )
@@ -71,7 +72,11 @@ class PresentationTurn:
             color_contract = (
                 f" Emotion is a concise feeling label, at most {MAX_EMOTION} characters. "
                 "Supply color_rgb as [red,green,blue], exactly three integers 0-255, "
-                "chosen for that feeling; intensity is an integer 0-100. Never output CSS."
+                "chosen for that feeling; intensity is an integer 0-100. Never output CSS. "
+                'Use sibling fields on the NPC entry, e.g. "emotion":"relief","intensity":65,'
+                '"color_rgb":[92,180,142]. Use the actual feeling, strength and color. '
+                "Both emotion and intensity are required for every NPC entry. "
+                'If unassessed, use "emotion":"unknown","intensity":0.'
             )
         if self.preferences.character_thoughts:
             keys.append("thought")
@@ -104,7 +109,9 @@ class PresentationTurn:
                 f"{MAX_EMOTION} characters, in the story language; intensity: integer 0-100, "
                 "supplied by you, not a relationship score; color_rgb: [red,green,blue], exactly "
                 "three integers 0-255 chosen to express that feeling visually, never CSS or "
-                "a color name. Emotion labels are not limited to a predefined category list"
+                "a color name. Emotion and intensity are required for every NPC entry. "
+                'If unassessed use "emotion":"unknown","intensity":0. '
+                "Emotion labels are not limited to a predefined category list"
             )
         if self.preferences.character_thoughts:
             fields.append(
@@ -263,9 +270,10 @@ class PresentationTurn:
         emotion = Cue()
         if self.preferences.emotion_palette:
             try:
-                emotion = Cue.model_validate(
-                    {"emotion": entry.get("emotion"), "intensity": entry.get("intensity")}
+                assessment = EmotionAssessment.model_validate(
+                    {key: entry[key] for key in ("emotion", "intensity") if key in entry}
                 )
+                emotion = Cue(**assessment.model_dump(), color_rgb=_color(entry))
             except ValidationError as exc:
                 reject(
                     "emotion",
@@ -298,18 +306,6 @@ class PresentationTurn:
             thought = None
         else:
             thought = " ".join(thought.split())
-        if emotion.emotion is None or emotion.intensity is None:
-            if emotion.emotion not in (None, "unknown") or emotion.intensity is not None:
-                reject(
-                    "emotion",
-                    "presentation.unconfirmed_emotion",
-                    "The proposed emotion lacks a complete emotion and intensity pair.",
-                    proposal=entry,
-                    preferences=self.preferences,
-                )
-            emotion = Cue()
-        else:
-            emotion.color_rgb = _color(entry)
         emotion.thought = thought
         if emotion.emotion is None and thought is None:
             return None, None
