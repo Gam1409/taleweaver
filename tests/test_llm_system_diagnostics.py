@@ -173,7 +173,8 @@ async def test_real_embedding_and_image_entrypoints_emit_metadata(events, monkey
     from backend.engine.memory_rag import embeddings
     from backend.engine.memory_rag.settings import MemoryRagSettings
 
-    async def embed(*args):
+    async def embed(*args, wait_for_slot):
+        assert wait_for_slot is True
         return [[0.1, 0.2]]
 
     async def image(*args):

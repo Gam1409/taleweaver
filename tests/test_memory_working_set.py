@@ -138,8 +138,11 @@ async def test_retry_timer_wakes_worker_without_a_ui_poll(monkeypatch):
     try:
         await asyncio.wait_for(woke.wait(), 1)
         assert calls == [("retry-session", "owner")]
+        assert "retry-session" not in journal_worker._timers
     finally:
-        journal_worker._timers.pop("retry-session").cancel()
+        timer = journal_worker._timers.pop("retry-session", None)
+        if timer is not None:
+            timer.cancel()
 
 
 def test_empty_recall_preserves_legacy_npc_memory():
