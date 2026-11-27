@@ -136,5 +136,20 @@ def cycle(session_id: str, user_id: str, epoch: int) -> Cycle:
     return _cycles[key]
 
 
+def retry_embeddings(session_id: str, user_id: str, epoch: int) -> None:
+    key = session_id, user_id, epoch
+    previous = _cycles.get(key)
+    if previous is None:
+        return
+    # An in-flight request may still fail with the old credential. Detach its
+    # cycle so that late failure cannot reinstate the embedding backoff.
+    unrelated = ("chronicle", "summary")
+    _cycles[key] = Cycle(
+        cursor=previous.cursor,
+        failures={k: v for k, v in previous.failures.items() if k in unrelated},
+        errors={k: v for k, v in previous.errors.items() if k in unrelated},
+    )
+
+
 def clear() -> None:
     _cycles.clear()

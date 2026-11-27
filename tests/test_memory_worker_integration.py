@@ -65,7 +65,7 @@ async def _assert_recall(owner):
 
 
 async def test_worker_batches_real_index_reclaims_old_epoch_and_recalls_tail_fact(
-    journal_world, monkeypatch, tmp_path
+    journal_world, monkeypatch, tmp_path, auth_client
 ):
     pytest.importorskip("lancedb")
     owner, _ = journal_world
@@ -89,6 +89,17 @@ async def test_worker_batches_real_index_reclaims_old_epoch_and_recalls_tail_fac
     assert len(batch_sizes) == math.ceil(len(documents) / worker.BATCH_SIZE)
     assert max(batch_sizes) == worker.BATCH_SIZE
     assert await store.list_document_hashes(old_scope) == {}
+    await _assert_recall(owner)
+
+    # Rotate through the vault and run maintenance even if a wakeup was already queued.
+    monkeypatch.setattr(worker, "schedule", lambda *_: None)
+    initial_batches = len(batch_sizes)
+    response = await auth_client.post(
+        "/api/settings/keys", json={"provider": "memory_embeddings", "api_key": "replacement"}
+    )
+    assert response.status_code == 200
+    await worker._run("portrait-session", owner)
+    assert len(batch_sizes) == initial_batches
     await _assert_recall(owner)
 
     async with TestSessionLocal() as db:

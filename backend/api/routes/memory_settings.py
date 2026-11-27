@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.core.auth import get_current_admin
 from backend.core.database import get_db
 from backend.core.security import encryption_util
-from backend.engine.memory_rag.control import ensure_index_states, invalidate
+from backend.engine.memory_rag.control import commit_memory_update
 from backend.engine.memory_rag.diagnostics import embedding_test_diagnostic
 from backend.engine.memory_rag.embeddings import embed_with_settings
 from backend.engine.memory_rag.settings import MemoryRagSettings, read_settings
@@ -66,39 +66,27 @@ async def save_memory_settings(
     after = payload.public_config()
     owner.llm_settings = {**(owner.llm_settings or {}), "memory_rag": after}
     keys = dict(owner.encrypted_api_keys or {})
+    previous_key = keys.get("memory_embeddings")
     if payload.clear_api_key:
         keys.pop("memory_embeddings", None)
     if payload.api_key and payload.api_key.strip():
         keys["memory_embeddings"] = encryption_util.encrypt_key(payload.api_key.strip())
     owner.encrypted_api_keys = keys
     await _broadcast_global_settings(db, owner, fields=("llm_settings", "encrypted_api_keys"))
-    index_changed = any(
-        value != after[key] for key, value in before.items() if key != "timeout_seconds"
+    rebuild = any(
+        before[field] != after[field]
+        for field in ("provider", "base_url", "model", "document_prefix", "query_prefix")
     )
     result = public_settings(owner)
     await commit_memory_update(
         db,
-        enabled=after["enabled"],
-        changed=bool(index_changed or payload.api_key or payload.clear_api_key),
+        enabled=payload.enabled,
+        rebuild=rebuild,
+        reconnect=previous_key != keys.get("memory_embeddings"),
+        toggle=before["enabled"] != payload.enabled,
+        timeout_changed=before["timeout_seconds"] != payload.timeout_seconds,
     )
     return result
-
-
-async def commit_memory_update(db: AsyncSession, *, enabled: bool, changed: bool) -> None:
-    """Apply index lifecycle effects for memory preferences and credential updates."""
-    rows = await ensure_index_states(db)
-    if changed:
-        for row in rows:
-            await invalidate(db, row)
-    # Keep source IDs available with expire_on_commit sessions.
-    scheduling = [(row.session_id, row.user_id, row.paused) for row in rows]
-    await db.commit()
-    if enabled:
-        from backend.engine.memory_rag.worker import schedule
-
-        for session_id, user_id, paused in scheduling:
-            if not paused:
-                schedule(session_id, user_id)
 
 
 @router.post("/test")

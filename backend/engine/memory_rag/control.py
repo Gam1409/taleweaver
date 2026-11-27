@@ -73,6 +73,43 @@ async def invalidate(
     await db.refresh(row)
 
 
+async def commit_memory_update(
+    db: AsyncSession,
+    *,
+    enabled: bool,
+    rebuild: bool = False,
+    reconnect: bool = False,
+    toggle: bool = False,
+    timeout_changed: bool = False,
+) -> None:
+    if not (rebuild or toggle or (enabled and (reconnect or timeout_changed))):
+        await db.commit()
+        return
+
+    from backend.engine.memory_rag import maintenance, worker
+
+    wake = []
+    for row in await ensure_index_states(db):
+        if rebuild:
+            await invalidate(db, row)
+        if row.paused:
+            continue
+        pending = row.indexed_revision < row.desired_revision or row.status != "ready"
+        retry = pending or row.last_error or row.lease_until is not None
+        if reconnect or toggle or (timeout_changed and row.lease_token is None):
+            # Settings broadcast already owns the SQLite write transaction.
+            # Revoke stale writers/backoff without changing the LanceDB scope.
+            row.lease_token = None
+            row.lease_until = None
+        if enabled and (rebuild or toggle or retry):
+            wake.append((row.session_id, row.user_id, row.epoch))
+
+    await db.commit()
+    for session_id, user_id, epoch in wake:
+        maintenance.retry_embeddings(session_id, user_id, epoch)
+        worker.schedule(session_id, user_id)
+
+
 def schedule_rows(rows: list[MemoryIndexState], *, enabled: bool) -> None:
     if not enabled:
         return

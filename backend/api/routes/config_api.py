@@ -885,10 +885,10 @@ async def delete_api_key(
 async def _commit_provider_key(db: AsyncSession, user: User, provider: str) -> None:
     await _broadcast_global_settings(db, user, fields=("encrypted_api_keys",))
     if provider == "memory_embeddings":
-        from backend.api.routes.memory_settings import commit_memory_update
+        from backend.engine.memory_rag.control import commit_memory_update
         from backend.engine.memory_rag.settings import read_settings
 
-        await commit_memory_update(db, enabled=read_settings(user).enabled, changed=True)
+        await commit_memory_update(db, enabled=read_settings(user).enabled, reconnect=True)
         return
     await db.commit()
 

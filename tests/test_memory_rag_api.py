@@ -1,12 +1,14 @@
 """Memory configuration and clearing remain independent of canonical game data."""
 
 from copy import deepcopy
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
+import pytest
 from sqlalchemy import select
 
 from backend.api.routes import memory_index, memory_settings
 from backend.core.security import encryption_util
+from backend.engine.memory_rag import worker
 from backend.models.adventure_template import AdventureTemplate
 from backend.models.memory_rag import MemoryIndexState
 from backend.models.session_state import SessionState
@@ -207,8 +209,6 @@ async def test_embedding_change_fences_all_users_but_does_not_unpause_cleared_in
 async def test_timeout_only_change_preserves_index_generation_and_inflight_claim(
     auth_client, portrait_world, monkeypatch
 ):
-    from unittest.mock import Mock
-
     monkeypatch.setattr("backend.engine.memory_rag.worker.schedule", Mock())
     async with TestSessionLocal() as db:
         user = await db.scalar(select(User))
@@ -237,3 +237,120 @@ async def test_timeout_only_change_preserves_index_generation_and_inflight_claim
         assert row.epoch == 2 and row.signature == "existing-vector-space"
         assert row.desired_revision == row.indexed_revision == 5
         assert row.lease_token == "inflight" and row.status == "ready"
+
+
+@pytest.mark.parametrize(
+    "url,method,change",
+    [
+        ("/api/settings/keys", "POST", {"provider": "memory_embeddings", "api_key": "new"}),
+        ("/api/settings/keys/memory_embeddings", "DELETE", None),
+        ("/api/settings/memory-rag", "PUT", {**CONFIG, "clear_api_key": True}),
+        ("/api/settings/memory-rag", "PUT", {**CONFIG, "api_key": "new"}),
+    ],
+)
+async def test_ready_index_stays_idle_on_credential_edit(
+    auth_client, portrait_world, monkeypatch, url, method, change
+):
+    schedule = Mock()
+    monkeypatch.setattr(worker, "schedule", schedule)
+    await auth_client.put("/api/settings/memory-rag", json={**CONFIG, "api_key": "original"})
+    async with TestSessionLocal() as db:
+        row = await db.get(MemoryIndexState, "portrait-session")
+        row.indexed_revision = row.desired_revision
+        row.signature = "existing-space"
+        row.status = "ready"
+        expected = row.epoch, row.desired_revision
+        await db.commit()
+
+    schedule.reset_mock()
+    assert (await auth_client.request(method, url, json=change)).status_code == 200
+    schedule.assert_called_once_with("other-session", "another-owner")
+    async with TestSessionLocal() as db:
+        row = await db.get(MemoryIndexState, "portrait-session")
+        assert (row.epoch, row.indexed_revision) == (row.epoch, row.desired_revision) == expected
+        assert row.signature == "existing-space" and row.status == "ready"
+
+
+async def test_rotation_retries_partial_index_and_fences_stale_batch(
+    auth_client, portrait_world, monkeypatch
+):
+    from backend.engine.memory_rag import maintenance
+
+    schedule = Mock()
+    monkeypatch.setattr(worker, "schedule", schedule)
+    await auth_client.put("/api/settings/memory-rag", json=CONFIG)
+    async with TestSessionLocal() as db:
+        row = await db.get(MemoryIndexState, "portrait-session")
+        other = await db.get(MemoryIndexState, "other-session")
+        other.paused = True
+        row.signature = "partial-space"
+        row.status = "indexing"
+        owner, epoch = row.user_id, row.epoch
+        await db.commit()
+    claim = await worker._claim("portrait-session", owner)
+    cycle = maintenance.cycle("portrait-session", owner, epoch)
+    cycle.failures = {"index": (1, 1e12), "summary": (2, 1e12)}
+    schedule.reset_mock()
+    response = await auth_client.post(
+        "/api/settings/keys", json={"provider": "memory_embeddings", "api_key": "replacement"}
+    )
+    assert response.status_code == 200
+    schedule.assert_called_once_with("portrait-session", owner)
+    assert not await worker._write_batch(claim, "partial-space", [], [])
+    assert maintenance.cycle("portrait-session", owner, epoch).failures == {"summary": (2, 1e12)}
+    fresh = await worker._claim("portrait-session", owner)
+    assert fresh.signature == "partial-space" and fresh.epoch == claim.epoch
+    assert fresh.revision == claim.revision and fresh.token != claim.token
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"provider": "ollama"},
+        {"model": "another-model"},
+        {"base_url": "http://localhost:8002"},
+        {"document_prefix": "passage: "},
+        {"query_prefix": "query: "},
+    ],
+)
+async def test_space_change_rejects_previous_worker(
+    auth_client, portrait_world, monkeypatch, change
+):
+    monkeypatch.setattr(worker, "schedule", Mock())
+    await auth_client.put("/api/settings/memory-rag", json=CONFIG)
+    async with TestSessionLocal() as db:
+        row = await db.get(MemoryIndexState, "portrait-session")
+        owner = row.user_id
+        row.signature = "old-space"
+        await db.commit()
+    claim = await worker._claim("portrait-session", owner)
+    response = await auth_client.put("/api/settings/memory-rag", json={**CONFIG, **change})
+    assert response.status_code == 200
+    assert not await worker._write_batch(claim, "old-space", [], [])
+    fresh = await worker._claim("portrait-session", owner)
+    assert fresh.epoch > claim.epoch and fresh.signature is None
+
+
+async def test_disabling_fences_worker_and_resume_keeps_committed_vectors(
+    auth_client, portrait_world, monkeypatch
+):
+    schedule = Mock()
+    monkeypatch.setattr(worker, "schedule", schedule)
+    await auth_client.put("/api/settings/memory-rag", json=CONFIG)
+    async with TestSessionLocal() as db:
+        row = await db.get(MemoryIndexState, "portrait-session")
+        row.signature = "partial-space"
+        owner = row.user_id
+        await db.commit()
+    claim = await worker._claim("portrait-session", owner)
+    schedule.reset_mock()
+    response = await auth_client.put("/api/settings/memory-rag", json={**CONFIG, "enabled": False})
+    assert response.status_code == 200
+    schedule.assert_not_called()
+    assert not await worker._write_batch(claim, "partial-space", [], [])
+    response = await auth_client.put("/api/settings/memory-rag", json=CONFIG)
+    assert response.status_code == 200
+    schedule.assert_any_call("portrait-session", owner)
+    fresh = await worker._claim("portrait-session", owner)
+    assert fresh.epoch == claim.epoch and fresh.signature == "partial-space"
+    assert fresh.revision == claim.revision

@@ -275,12 +275,13 @@ async def _complete(claim: Claim, documents: list[MemoryDocument]) -> None:
 
 
 async def _step(claim: Claim) -> bool:
+    cycle = maintenance.cycle(claim.session_id, claim.user_id, claim.epoch)
     user, state, documents = await _load(claim)
     if user is None or state is None:
         await _release(claim)
         return False
     enabled = read_settings(user).enabled and not claim.paused
-    outcome = await maintenance.cycle(claim.session_id, claim.user_id, claim.epoch).run(
+    outcome = await cycle.run(
         {
             "index": lambda: _maybe_index(enabled, claim, user, documents),
             "chronicle": lambda: _summarize(claim, chronicle=True),

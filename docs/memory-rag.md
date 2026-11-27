@@ -19,7 +19,11 @@ inventory, clothing, relationships or the session checkpoint system.
 4. Enable memory recall and save. Indexing starts automatically in idle time.
    Set the optional key here or in **Admin → Provider Vault → Memory Embeddings**.
    Both edit the same encrypted credential, separate from the chat model key.
-   Leaving its input empty preserves the stored key.
+   Leaving its input empty preserves the stored key. Rotating or removing the key
+   keeps committed vectors and retries unfinished work when recall is enabled.
+   Disabling and re-enabling recall also preserves the index. Changing provider,
+   URL or model starts a new index generation. If a deployment changes its model
+   behind the same URL and model name, rebuild the index explicitly.
 
 These are shared administrator settings, like the existing LLM configuration.
 An embeddings model may run on a separate server from the narrative models.
