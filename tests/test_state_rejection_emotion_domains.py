@@ -169,25 +169,39 @@ def test_unavailable_or_malformed_presentation_entry_is_traced(rejection, entry)
     assert rejection.call_args.kwargs["proposal"] == entry
 
 
-@pytest.mark.parametrize(
-    "entries",
-    [
-        [],
-        [{"npc_id": "npc", "emotion": "calm", "intensity": 0}],
-        [{"npc_id": "npc", "emotion": "unknown", "intensity": 0}],
-        [{"npc_id": "npc"}],
-    ],
-)
-def test_explicit_no_assessment_or_neutral_presentation_is_not_a_rejection(rejection, entries):
+@pytest.mark.parametrize("emotion", [None, "calm", "unknown"])
+def test_explicit_no_assessment_or_neutral_presentation_is_not_a_rejection(rejection, emotion):
     turn = presentation.PresentationTurn(
         PortraitPreferences(emotion_palette=True), {"npc": "Keeper"}
     )
+    entries = [] if emotion is None else [{"npc_id": "npc", "emotion": emotion, "intensity": 0}]
     text = turn.clean("Story." + _footer(entries))
     turn.clean(text)  # Narrator validation can inspect already stripped prose again.
     diagnostics.report(
         SimpleNamespace(state=SimpleNamespace(session_id="session")), turn, text, completed=True
     )
     rejection.assert_not_called()
+    if emotion is None:
+        assert turn.payload(text) is None
+    else:
+        assert turn.payload(text)["npcs"] == {"npc": {"emotion": emotion, "intensity": 0}}
+
+
+def test_palette_traces_both_missing_fields_for_id_only_entry(rejection):
+    turn = presentation.PresentationTurn(
+        PortraitPreferences(emotion_palette=True), {"npc": "Keeper"}
+    )
+    entry = {"npc_id": "npc"}
+    text = turn.clean("Story." + _footer([entry]))
+    assert turn.payload(text) is None
+    rejection.assert_called_once()
+    assert rejection.call_args.args[:2] == ("emotion", "presentation.invalid_emotion")
+    assert rejection.call_args.kwargs["proposal"] == entry
+    errors = rejection.call_args.kwargs["validation_errors"]
+    assert {(err["loc"], err["type"]) for err in errors} == {
+        (("emotion",), "missing"),
+        (("intensity",), "missing"),
+    }
 
 
 def test_missing_requested_presentation_is_an_unconfirmed_assessment(rejection):
