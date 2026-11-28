@@ -222,17 +222,19 @@ async def apply(
         actor=event.actor,
         destination=decision.destination,
     )
-    await rules.apply(db, state, proposal)
+    await rules.apply(
+        db, state, proposal, defer_moves=not simulation.settings.allow_decided_moves_during_dialogue
+    )
     if proposal.status == "CANCELLED":
         raise HTTPException(409, "The proposed action is no longer permitted.")
+    event.kind = proposal.kind
+    event.destination = proposal.destination
+    event.observed_by_player = proposal.observed_by_player
     if proposal.status == "DEFERRED":
-        event.kind = proposal.kind
-        event.destination = proposal.destination
         event.status = proposal.status
         event.deferrals = proposal.deferrals
         event.retry_after = proposal.retry_after
         event.result = proposal.result
-        event.observed_by_player = proposal.observed_by_player
         simulation.status = "PARTIAL"
         save(state, simulation)
         await db.commit()
@@ -244,8 +246,6 @@ async def apply(
         observations=context["observations"],
     )
     # Retain the concrete committed action so later observations can use it.
-    event.kind = proposal.kind
-    event.destination = proposal.destination
     event.result = proposal.result[:300]
     simulation.private_notes[event.actor].observations = [
         *simulation.private_notes[event.actor].observations,

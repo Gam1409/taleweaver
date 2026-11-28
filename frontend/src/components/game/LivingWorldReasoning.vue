@@ -16,6 +16,7 @@ defineProps<{ busy: boolean; concordiaAvailable: boolean }>()
     <label class="flex gap-2"><input v-model="draft.dialogue_choices_enabled" type="checkbox"> NPC choices in important conversations</label>
     <p class="text-xs text-slate-400">At most one extra Utility request before narration for an unambiguous NPC at a recognized English/Russian conversational branch. Shares the timeline allowance; intentions are never recorded as completed events.</p>
     <template v-if="draft.deliberation_enabled">
+      <label class="flex gap-2"><input v-model="draft.allow_decided_moves_during_dialogue" type="checkbox"> Allow NPC-chosen moves during an active conversation</label>
       <label class="block">Decision engine
         <select v-model="draft.decision_engine" class="mt-1 w-full rounded bg-slate-800 p-2">
           <option value="native">TaleWeaver</option>

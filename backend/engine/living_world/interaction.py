@@ -15,7 +15,9 @@ FOCUS_SECONDS = 300
 MAX_DEFERRALS = 3
 
 
-async def defer_move(db: AsyncSession, state: SessionState, event: Event, origin: str) -> bool:
+async def defer_move(
+    db: AsyncSession, state: SessionState, event: Event, origin: str, *, defer: bool = True
+) -> bool:
     if state.current_scene_id not in {origin, event.destination}:
         return False
     latest = await db.scalar(
@@ -38,8 +40,10 @@ async def defer_move(db: AsyncSession, state: SessionState, event: Event, origin
     threshold = FOCUS_SECONDS if focus.get("open_question") else RECENT_SECONDS
     if age >= threshold:
         return False
-    event.deferrals += 1
     event.observed_by_player = True
+    if not defer:
+        return False
+    event.deferrals += 1
     if event.deferrals >= MAX_DEFERRALS:
         event.status = "CANCELLED"
         event.result = "A background movement was abandoned to let the current scene continue."
