@@ -78,3 +78,16 @@ def test_notebook_private_edits_and_bounded_recall():
     kept = json.loads(prompt)["witnessed_events"]
     assert len(prompt.encode()) < 32000 and 0 < len(kept) < len(history)
     assert kept == history[-len(kept) :]
+
+
+def test_resident_can_compose_then_execute_an_untried_routine():
+    world = Workshop()
+    view = world.view("Lina", 0, "open", PROJECTS)
+    view["compose_skills"] = True
+    routine = {"name": "field study", "steps": ["go:garden", "begin:sketch the beds"]}
+    world.apply("Lina", {"action": "wait", "intention": "", "learn": routine}, view)
+    for choice in ("use:field study", "continue"):
+        world.apply(
+            "Lina", {"action": choice, "intention": ""}, world.view("Lina", 1, "open", PROJECTS)
+        )
+    assert world.chosen_projects["Lina"] == ("garden", "sketch the beds")

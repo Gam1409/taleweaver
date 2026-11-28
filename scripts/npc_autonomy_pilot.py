@@ -111,7 +111,7 @@ class Workshop:
             self.remaining.pop(actor, None)
             self.last_seen[actor] = f"The routine stopped: {action} was unavailable."
             raise ValueError("Routine step unavailable")
-        learned = self.validate_skill(actor, reply["learn"]) if "learn" in reply else None
+        learned = self.validate_skill(actor, reply["learn"], view) if "learn" in reply else None
         if learned and "skills" not in view:
             raise ValueError("Skill writing unavailable")
         if "note" in reply:
@@ -165,7 +165,7 @@ class Workshop:
             and (verb != "go" or subject != view["place"])
         )
 
-    def validate_skill(self, actor, proposal):
+    def validate_skill(self, actor, proposal, view):
         if not isinstance(proposal, dict):
             raise ValueError("Invalid routine")
         name, steps = proposal.get("name"), proposal.get("steps")
@@ -177,12 +177,23 @@ class Workshop:
         if name not in book and len(book) >= 4:
             raise ValueError("Notebook full")
         past = self.experience.get(actor, [])
+        if view.get("compose_skills"):
+            known = set(past) | set(view["choices"])
+            if not all(
+                isinstance(step, str)
+                and not step.startswith("use:")
+                and step != "continue"
+                and (step in known or self.available(step, view))
+                for step in steps
+            ):
+                raise ValueError("Routine contains an unknown primitive")
+            return name, steps.copy()
         if not any(past[i : i + len(steps)] == steps for i in range(len(past))):
             raise ValueError("Routine lacks personal experience")
         return name, steps.copy()
 
 
-def decide(client, args, arm, view, seed):
+def decide(client, args, arm, view, seed, row):
     instruction = SYSTEM[arm]
     if arm == "open":
         instruction += " " + SYSTEM["skills"]
@@ -192,22 +203,32 @@ def decide(client, args, arm, view, seed):
             "text erases it. Up to 12 pages, 64 characters per title and 600 per page. "
             "Notes are your impressions, not world facts."
         )
+    if view.get("compose_skills"):
+        instruction += (
+            " In this trial your skill book also accepts original compositions: name a sequence "
+            "of two to four known primitive actions in any order, even before trying it. "
+            "Every step is checked against the world when performed. Skills are optional."
+        )
     instruction += ' Return one JSON object with "action" and "intention" (at most 300 characters).'
-    response = client.post(
-        "/chat/completions",
-        json={
-            "model": args.model,
-            "messages": bounded_messages(instruction, view, args.input_tokens),
-            "response_format": {"type": "json_object"},
-            "max_tokens": 1024,
-            "temperature": 0.6,
-            "seed": seed,
-            "stream": False,
-        },
-    )
+    payload = {
+        "model": args.model,
+        "messages": bounded_messages(instruction, view, args.input_tokens),
+        "response_format": {"type": "json_object"},
+        "max_tokens": 1024,
+        "temperature": 0.6,
+        "seed": seed,
+        "stream": False,
+    }
+    if view.get("compose_skills"):
+        row["request"] = payload
+    response = client.post("/chat/completions", json=payload)
     response.raise_for_status()
     data = response.json()
+    row["usage"] = data.get("usage", {})
+    row["finish_reason"] = data["choices"][0].get("finish_reason")
     content = data["choices"][0]["message"]["content"]
+    if view.get("compose_skills"):
+        row["response_content"] = content
     if isinstance(content, str):
         lines = content.strip().splitlines()
         if len(lines) >= 3 and lines[0].lower() in {"```", "```json"} and lines[-1] == "```":
@@ -215,7 +236,7 @@ def decide(client, args, arm, view, seed):
     reply = json.loads(content)
     if not isinstance(reply, dict):
         raise ValueError("Expected an object")
-    return reply, data.get("usage", {})
+    return reply
 
 
 def take_turn(client, args, arm, world, seed, tick, index, view):
@@ -223,11 +244,28 @@ def take_turn(client, args, arm, world, seed, tick, index, view):
     row = {"arm": arm, "seed": seed, "tick": tick, "view": view}
     started = time.monotonic()
     try:
-        reply, row["usage"] = decide(client, args, arm, view, seed + len(PROJECTS) * tick + index)
+        reply = decide(client, args, arm, view, seed + len(PROJECTS) * tick + index, row)
         row["selection"] = reply.get("action")
+        if "learn" in reply:
+            row["proposed_skill"] = reply["learn"]
         row["action"] = world.apply(actor, reply, view)
     except (KeyError, IndexError, TypeError, ValueError) as exc:
         row["invalid"] = str(exc)
+    except httpx.HTTPError as exc:
+        row["transport_error"] = type(exc).__name__
+        print(json.dumps(row), flush=True)
+        raise
+    if view.get("compose_skills"):
+        row["after"] = {
+            "intention": world.intentions.get(actor),
+            "skills": world.skills.get(actor, {}),
+            "remaining_steps": world.remaining.get(actor, []),
+            "notebook": world.notebooks.get(actor, {}),
+            "project": world.chosen_projects.get(
+                actor, (view["workplace"], view["personal_project"])
+            ),
+            "progress": world.progress[actor],
+        }
     row.update(seconds=round(time.monotonic() - started, 3), position=world.positions[actor])
     print(json.dumps(row), flush=True)
     return row.get("action", "invalid")
@@ -243,6 +281,8 @@ def trajectory(client, args, arm, seed):
         tick, index = divmod(turn, len(PROJECTS))
         actor = tuple(PROJECTS)[index]
         view = world.view(actor, tick, arm, projects)
+        if getattr(args, "compose_skills", False):
+            view["compose_skills"] = True
         counts[take_turn(client, args, arm, world, seed, tick, index, view)] += 1
     print(
         json.dumps(
@@ -272,6 +312,11 @@ def main():
     )
     parser.add_argument("--repeats", type=int, choices=range(1, 11), default=2)
     parser.add_argument("--swap-projects", action="store_true")
+    parser.add_argument(
+        "--compose-skills",
+        action="store_true",
+        help="Run only the open world, with original skill composition enabled.",
+    )
     args = parser.parse_args()
     if args.ticks is not None:
         args.turns = args.ticks * len(PROJECTS)
@@ -279,7 +324,7 @@ def main():
     headers = {"Authorization": f"Bearer {token}"} if token else {}
     with httpx.Client(base_url=args.base_url.rstrip("/"), headers=headers, timeout=180) as client:
         for seed in range(args.repeats):
-            for arm in ARMS:
+            for arm in ("open",) if args.compose_skills else ARMS:
                 trajectory(client, args, arm, seed)
 
 
