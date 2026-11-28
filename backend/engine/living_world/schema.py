@@ -24,6 +24,7 @@ class Settings(BaseModel):
     live_interval_seconds: int = Field(default=60, ge=20, le=600)
     allow_concurrent_requests: bool = False
     deliberation_enabled: bool = False
+    allow_decided_moves_during_dialogue: bool = False
     decision_engine: Literal["native", "concordia"] = "native"
     auto_schedule: bool = False
     schedule_interval_minutes: int = Field(default=60, ge=15, le=1440)

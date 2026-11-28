@@ -13,6 +13,7 @@ export interface LivingWorldPreferences {
   allow_concurrent_requests?: boolean
   auto_catchup_on_resume: boolean
   deliberation_enabled: boolean
+  allow_decided_moves_during_dialogue?: boolean
   decision_engine: 'native' | 'concordia'
   auto_schedule: boolean
   schedule_interval_minutes: number

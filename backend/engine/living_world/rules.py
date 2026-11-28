@@ -59,7 +59,9 @@ def cancel(event: Event, reason: str, **details: Any) -> None:
     event.result = reason
 
 
-async def move(db: AsyncSession, state: SessionState, event: Event, actor: WorldEntity) -> None:
+async def move(
+    db: AsyncSession, state: SessionState, event: Event, actor: WorldEntity, *, defer: bool = True
+) -> None:
     origin = location(state, actor)
     override = (state.entity_states or {}).get(actor.id, {})
     movable = override.get(
@@ -101,7 +103,7 @@ async def move(db: AsyncSession, state: SessionState, event: Event, actor: World
             source_context=state.entity_states,
         )
         return
-    if await defer_move(db, state, event, origin):
+    if await defer_move(db, state, event, origin, defer=defer):
         return
     # State overrides are the same authority read by normal gameplay and visual snapshots.
     state.entity_states = {
@@ -116,7 +118,9 @@ async def move(db: AsyncSession, state: SessionState, event: Event, actor: World
     event.result = f"{actor.name} moved to {event.destination}."
 
 
-async def apply(db: AsyncSession, state: SessionState, event: Event) -> None:
+async def apply(
+    db: AsyncSession, state: SessionState, event: Event, *, defer_moves: bool = True
+) -> None:
     if event.kind == "WAIT":
         event.result = "Scheduled waiting period elapsed."
         return
@@ -140,7 +144,7 @@ async def apply(db: AsyncSession, state: SessionState, event: Event) -> None:
         )
         return
     if event.kind == "MOVE":
-        await move(db, state, event, actor)
+        await move(db, state, event, actor, defer=defer_moves)
         return
     participant = await npc(db, state, event.participant)
     if (
