@@ -52,3 +52,19 @@ cannot execute the meaningful ones, extend the Living World action resolver
 with a project operation and test save, copy, rewind, privacy and narration.
 If choices remain repetitive despite usable actions, compare a second model on
 the same traces before adding training or another inference stage.
+
+## Long run and private notebook
+
+Set `PILOT_TOKEN` in the process environment for authenticated endpoints.
+Use `--turns 180 --repeats 1 --input-tokens 32000` for 180 individual decisions
+per arm (900 requests total). Responses use JSON mode and a separate 1,024-token
+generation allowance. The endpoint must accommodate both input and output.
+Input includes distinct biographies, firsthand memories, relationships, local
+conditions and the resident's witnessed events. A conservative UTF-8 byte budget
+with room for chat framing trims oldest observations first. The ceiling is not
+a padding target. Provider-reported prompt tokens appear in the trace.
+
+In the open arm, a resident can read, write, revise or erase up to 12 private
+notebook pages. Notes are self-authored and can be mistaken. Only that resident
+gets the pages on subsequent turns; a notebook edit cannot itself change the
+world. The notebook lasts one trajectory, not across repeats or game saves.

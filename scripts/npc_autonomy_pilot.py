@@ -2,11 +2,14 @@
 
 import argparse
 import json
+import os
 import time
 from collections import Counter
 from dataclasses import dataclass, field
 
 import httpx
+
+from scripts.npc_autonomy_context import PROFILES, bounded_messages, surroundings, update_notebook
 
 PLACES = ("studio", "archive", "garden")
 PROJECTS = {
@@ -45,6 +48,8 @@ class Workshop:
     skills: dict[str, dict[str, list[str]]] = field(default_factory=dict)
     remaining: dict[str, list[str]] = field(default_factory=dict)
     chosen_projects: dict[str, tuple[str, str]] = field(default_factory=dict)
+    witnessed: dict[str, list[str]] = field(default_factory=dict)
+    notebooks: dict[str, dict[str, str]] = field(default_factory=dict)
 
     def view(self, actor, tick, arm, projects):
         place = self.positions[actor]
@@ -62,6 +67,9 @@ class Workshop:
         if place == job_site and self.progress[actor] < STEPS_TO_FINISH:
             choices.append("work")
         view = {
+            "background_knowledge": PROFILES[actor],
+            "surroundings": surroundings(place, tick),
+            "witnessed_events": self.witnessed.get(actor, [])[:],
             "resident": actor,
             "minute": tick * 10,
             "place": place,
@@ -83,6 +91,7 @@ class Workshop:
                 choices.append("continue")
         if arm == "open":
             view["open_world"] = True
+            view["private_notebook"] = self.notebooks.get(actor, {}).copy()
         return view
 
     def apply(self, actor, reply, view):
@@ -105,6 +114,10 @@ class Workshop:
         learned = self.validate_skill(actor, reply["learn"]) if "learn" in reply else None
         if learned and "skills" not in view:
             raise ValueError("Skill writing unavailable")
+        if "note" in reply:
+            if "private_notebook" not in view:
+                raise ValueError("Notebook unavailable")
+            self.notebooks[actor] = update_notebook(self.notebooks.get(actor, {}), reply["note"])
         if learned:
             name, routine = learned
             self.skills.setdefault(actor, {})[name] = routine
@@ -121,7 +134,21 @@ class Workshop:
         self.last_seen[actor] = f"You chose {action} at {view['place']}."
         self.intentions[actor] = intention
         self.experience[actor] = [*self.experience.get(actor, []), action][-8:]
+        self.record(actor, action, view)
         return action
+
+    def record(self, actor, action, view):
+        origin = view["place"]
+        for resident, place in self.positions.items():
+            if resident != actor and place == origin and action.startswith("begin:"):
+                note = f"Minute {view['minute']}, {origin}: {actor} started a new activity."
+            elif resident == actor or place == origin:
+                note = f"Minute {view['minute']}, {origin}: {actor} took action {action}."
+            elif place == self.positions[actor] and action.startswith("go:"):
+                note = f"Minute {view['minute']}, {place}: {actor} arrived."
+            else:
+                continue
+            self.witnessed.setdefault(resident, []).append(note)
 
     @staticmethod
     def available(action, view):
@@ -159,16 +186,20 @@ def decide(client, args, arm, view, seed):
     instruction = SYSTEM[arm]
     if arm == "open":
         instruction += " " + SYSTEM["skills"]
+        instruction += (
+            ' Your private notebook is available each turn. Optionally include "note": '
+            '{"title":"page name","text":"your own words"} to write or revise a page; empty '
+            "text erases it. Up to 12 pages, 64 characters per title and 600 per page. "
+            "Notes are your impressions, not world facts."
+        )
     instruction += ' Return one JSON object with "action" and "intention" (at most 300 characters).'
     response = client.post(
         "/chat/completions",
         json={
             "model": args.model,
-            "messages": [
-                {"role": "system", "content": instruction},
-                {"role": "user", "content": json.dumps(view)},
-            ],
-            "max_tokens": 256,
+            "messages": bounded_messages(instruction, view, args.input_tokens),
+            "response_format": {"type": "json_object"},
+            "max_tokens": 1024,
             "temperature": 0.6,
             "seed": seed,
             "stream": False,
@@ -176,7 +207,12 @@ def decide(client, args, arm, view, seed):
     )
     response.raise_for_status()
     data = response.json()
-    reply = json.loads(data["choices"][0]["message"]["content"])
+    content = data["choices"][0]["message"]["content"]
+    if isinstance(content, str):
+        lines = content.strip().splitlines()
+        if len(lines) >= 3 and lines[0].lower() in {"```", "```json"} and lines[-1] == "```":
+            content = "\n".join(lines[1:-1])
+    reply = json.loads(content)
     if not isinstance(reply, dict):
         raise ValueError("Expected an object")
     return reply, data.get("usage", {})
@@ -203,10 +239,11 @@ def trajectory(client, args, arm, seed):
     if args.swap_projects:
         projects["Ren"], projects["Lina"] = projects["Lina"], projects["Ren"]
     counts = Counter()
-    for tick in range(args.ticks):
-        for index, actor in enumerate(PROJECTS):
-            view = world.view(actor, tick, arm, projects)
-            counts[take_turn(client, args, arm, world, seed, tick, index, view)] += 1
+    for turn in range(args.turns):
+        tick, index = divmod(turn, len(PROJECTS))
+        actor = tuple(PROJECTS)[index]
+        view = world.view(actor, tick, arm, projects)
+        counts[take_turn(client, args, arm, world, seed, tick, index, view)] += 1
     print(
         json.dumps(
             {
@@ -227,11 +264,20 @@ def main():
         "--base-url", required=True, help="OpenAI-compatible base URL ending in /v1"
     )
     parser.add_argument("--model", required=True)
-    parser.add_argument("--ticks", type=int, choices=range(1, 13), default=5)
+    horizon = parser.add_mutually_exclusive_group()
+    horizon.add_argument("--ticks", type=int, choices=range(1, 61), metavar="1..60")
+    horizon.add_argument("--turns", type=int, choices=range(1, 181), metavar="1..180", default=15)
+    parser.add_argument(
+        "--input-tokens", type=int, choices=range(2048, 32001), metavar="2048..32000", default=32000
+    )
     parser.add_argument("--repeats", type=int, choices=range(1, 11), default=2)
     parser.add_argument("--swap-projects", action="store_true")
     args = parser.parse_args()
-    with httpx.Client(base_url=args.base_url.rstrip("/"), timeout=180) as client:
+    if args.ticks is not None:
+        args.turns = args.ticks * len(PROJECTS)
+    token = os.environ.get("PILOT_TOKEN")
+    headers = {"Authorization": f"Bearer {token}"} if token else {}
+    with httpx.Client(base_url=args.base_url.rstrip("/"), headers=headers, timeout=180) as client:
         for seed in range(args.repeats):
             for arm in ARMS:
                 trajectory(client, args, arm, seed)
