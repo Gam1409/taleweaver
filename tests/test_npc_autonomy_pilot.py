@@ -91,3 +91,46 @@ def test_resident_can_compose_then_execute_an_untried_routine():
             "Lina", {"action": choice, "intention": ""}, world.view("Lina", 1, "open", PROJECTS)
         )
     assert world.chosen_projects["Lina"] == ("garden", "sketch the beds")
+
+
+def test_public_archive_keeps_local_records_out_of_search(tmp_path):
+    from scripts.npc_autonomy_archive import Archive, build
+
+    source = tmp_path / "world.json"
+    index = tmp_path / "world.sqlite"
+    record = dict(
+        id="LMW-0001",
+        category="archives",
+        title="A map",
+        location="Tokyo",
+        tags=[],
+        entities=[],
+        text="A map was found.",
+        visibility="public",
+        epistemic_status="unverified",
+    )
+    context = dict.fromkeys(
+        ("setting", "catastrophe", "geography", "knowledge_boundary"), "fixture"
+    )
+    source.write_text(
+        json.dumps(
+            {
+                "world_context": context,
+                "record_count": 2,
+                "records": [record, {**record, "id": "LMW-0002", "visibility": "local"}],
+            }
+        ),
+        encoding="utf8",
+    )
+    assert build(source, index) == 2
+    archive = Archive(index)
+    assert archive.lookup("map") == [record]
+    assert archive.lookup("LMW-0002") == []
+    world = Workshop(archive=archive)
+    world.apply(
+        "Lina",
+        {"action": "lookup:map", "intention": "Check the map."},
+        world.view("Lina", 0, "open", PROJECTS),
+    )
+    assert world.view("Lina", 1, "open", PROJECTS)["last_private_lookup"]["records"] == [record]
+    assert world.view("Mo", 1, "open", PROJECTS)["last_private_lookup"] is None
